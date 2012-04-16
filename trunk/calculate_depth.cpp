@@ -23,22 +23,22 @@ void print_all(){
 	printf(	"\t'-' - decrease parameter\n");
 	printf(	"\t'q' [%d]- preFilterCap\n",sgbm.preFilterCap);
 	printf(	"\t'w' [%d]- SADWindowSize\n",sgbm.SADWindowSize);
-	printf(	"\t'e' [%d]- P1\n",sgbm.P1);
+	printf(	"\t'e' [%d]- P1   P2>P1\n",sgbm.P1);
 	printf(	"\t'r' [%d]- P2\n",sgbm.P2);
 	printf(	"\t't' [%d]- minDisparity\n",sgbm.minDisparity);
 	printf(	"\t'y' [%d]- numberOfDisparities\n",sgbm.numberOfDisparities);
-	printf(	"\t'a' [%d]- uniquenessRatio\n",sgbm.uniquenessRatio);
-	printf(	"\t's' [%d]- speckleWindowSize\n",sgbm.speckleWindowSize);
-	printf(	"\t'd' [%d]- speckleRange\n",sgbm.speckleRange);
-	printf(	"\t'f' [%d]- disp12MaxDiff\n",sgbm.disp12MaxDiff);
+	printf(	"\t'a' [%d]- uniquenessRatio   5-15 is usually good\n",sgbm.uniquenessRatio);
+	printf(	"\t's' [%d]- speckleWindowSize   0 disables filtering\n",sgbm.speckleWindowSize);
+	printf(	"\t'd' [%d]- speckleRange   16 or 32 is normall good\n",sgbm.speckleRange);
+	printf(	"\t'f' [%d]- disp12MaxDiff  negative values disables this!\n",sgbm.disp12MaxDiff);
 
-
+	return;
 }
 
 void IncParam(int param){
 	switch(param){
 	case 1:	sgbm.preFilterCap++; break;
-	case 2:sgbm.SADWindowSize++;break;
+	case 2:sgbm.SADWindowSize=sgbm.SADWindowSize+2;sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;break;
 	case 3:sgbm.P1++;break;
 	case 4:sgbm.P2++;break;
 	case 5:sgbm.minDisparity++;break;
@@ -48,21 +48,23 @@ void IncParam(int param){
 	case 9:sgbm.speckleRange++;break;
 	case 10:sgbm.disp12MaxDiff++;break;
 	}
+	return;
 }
 
 void DecParam(int param){
 	switch(param){
-	case 1:	sgbm.preFilterCap--; break;
-	case 2:sgbm.SADWindowSize--;break;
-	case 3:sgbm.P1--;break;
-	case 4:sgbm.P2--;break;
-	case 5:sgbm.minDisparity--;break;
-	case 6:sgbm.numberOfDisparities=sgbm.numberOfDisparities-16;break;
-	case 7:sgbm.uniquenessRatio--;break;
-	case 8:sgbm.speckleWindowSize--;break;
-	case 9:sgbm.speckleRange--;break;
-	case 10:sgbm.disp12MaxDiff--;break;
+	  case 1:(sgbm.preFilterCap>0?sgbm.preFilterCap--:sgbm.preFilterCap=0); break;
+	  case 2:(sgbm.SADWindowSize>1?sgbm.SADWindowSize=sgbm.SADWindowSize-2:sgbm.SADWindowSize=1);sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;break;
+	  case 3:(sgbm.P1>0?sgbm.P1--:sgbm.P1=0);break;
+	  case 4:(sgbm.P2>0?sgbm.P2--:sgbm.P2=0);break;
+	  case 5:(sgbm.minDisparity>0?sgbm.minDisparity--:sgbm.minDisparity=0);break;
+	  case 6:(sgbm.numberOfDisparities>16?sgbm.numberOfDisparities=sgbm.numberOfDisparities-16:sgbm.numberOfDisparities=16);break;
+	  case 7:(sgbm.uniquenessRatio>0?sgbm.uniquenessRatio--:sgbm.uniquenessRatio=0);break;
+	  case 8:(sgbm.speckleWindowSize>0?sgbm.speckleWindowSize--:sgbm.speckleWindowSize=0);break;
+	  case 9:(sgbm.speckleRange>0?sgbm.speckleRange--:sgbm.speckleRange=0);break;
+	  case 10:(sgbm.disp12MaxDiff>-1?sgbm.disp12MaxDiff--:sgbm.disp12MaxDiff=-1);break;
 	}
+	return;
 }
 
 int main()
@@ -142,15 +144,15 @@ int main()
 
 	sgbm.preFilterCap = 63;
 	sgbm.SADWindowSize = 1;
-	sgbm.P1 = 3;
-	sgbm.P2 = 10;
+	sgbm.P1 = 8*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	sgbm.P2 = 32*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = 16;
 	sgbm.uniquenessRatio = 0;
 	sgbm.speckleWindowSize = 100;
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 1;
-	sgbm.fullDP = false;
+	sgbm.fullDP = true;
 	sgbm(image_left_calibrated,image_right_calibrated,*imageDepth);
 	imageDepth->convertTo(*imageDepth, CV_8U);
 	//cvFindStereoCorrespondenceBM(&image_left_calibrated, &image_right_calibrated, imageDepth, BMState);
@@ -161,27 +163,27 @@ int main()
 	int key=0;
 
 	int param=0;
-	while((key = cvWaitKey(10)) != 0x1b)
+	while((key = (cvWaitKey(10) & 255)) !=  0x1b)
 	{
 
 		sgbm(image_left_calibrated,image_right_calibrated,*imageDepth);
 		imageDepth->convertTo(*imageDepth, CV_8U);
 		imshow("depth",*imageDepth);
+		//printf("\n%d",key);
 		switch(key)
 		{
-		case 'q':	case 'Q':	param=1;print_all();		break;
-		case 'w':	case 'W':	param=2;print_all();		break;
-		case 'e':	case 'E':	param=3;print_all();		break;
-		case 'r':	case 'R':	param=4;print_all();		break;
-		case 't':	case 'T':	param=5;print_all();		break;
-		case 'y':	case 'Y':	param=6;print_all();		break;
-		case 'a':	case 'A':	param=7;print_all();		break;
-		case 's':	case 'S':	param=8;print_all();		break;
-		case 'd':	case 'D':	param=9;print_all();		break;
-		case 'f':	case 'F':	param=10;print_all();		break;
-		case '+':	IncParam(param);					break;
-		case '-':	DecParam(param);					break;
-		//case 'c':	case 'C':	cam->Calibration();										break;
+		case 0x71:	param=1;print_all();		break;
+		case 0x77:	param=2;print_all();		break;
+		case 0x65:	param=3;print_all();		break;
+		case 0x72:	param=4;print_all();		break;
+		case 0x74:	param=5;print_all();		break;
+		case 0x79:	param=6;print_all();		break;
+		case 0x61:	param=7;print_all();		break;
+		case 0x73:	param=8;print_all();		break;
+		case 0x64:	param=9;print_all();		break;
+		case 0x66:	param=10;print_all();		break;
+		case 0xAB:	IncParam(param);print_all();	break;
+		case 0xAD:	DecParam(param);print_all();	break;
 		}
 	}
 
