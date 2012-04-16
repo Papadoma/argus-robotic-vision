@@ -67,15 +67,20 @@ void DecParam(int param){
 
 int main()
 {
-	string file_left="cal_left01.ppm";
-	string file_right="cal_right01.ppm";
+  
+	string file_left="/home/papadoma/argussvn/trunk/bumble_calib/cal_left01.ppm";
+	string file_right="/home/papadoma/argussvn/trunk/bumble_calib/cal_right01.ppm";
+	string intrinsics="/home/papadoma/argussvn/trunk/bumble_calib/intrinsics_bumblebee.yml";
+	string extrinsics="/home/papadoma/argussvn/trunk/bumble_calib/extrinsics_bumblebee.yml";
+	
+	
 	Mat image_left = imread(file_left,0);
 	Mat image_right = imread(file_left,0);
 	Mat image_left_calibrated;
 	Mat image_right_calibrated;
 
-	cvNamedWindow("left",CV_WINDOW_AUTOSIZE);
-	cvNamedWindow("right",CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("left",CV_WINDOW_AUTOSIZE);
+	//cvNamedWindow("right",CV_WINDOW_AUTOSIZE);
 
 	cvNamedWindow("left_calibrated",CV_WINDOW_AUTOSIZE);
 	cvNamedWindow("right_calibrated",CV_WINDOW_AUTOSIZE);
@@ -91,7 +96,7 @@ int main()
 	Mat R1, R2, P1, P2, Q;
 	Size imageSize=image_left.size();
 
-	FileStorage fs("intrinsics_bumblebee.yml", CV_STORAGE_READ);
+	FileStorage fs(intrinsics, CV_STORAGE_READ);
 	if( fs.isOpened() )
 	{
 		fs["M1"] >> cameraMatrix[0];
@@ -101,9 +106,9 @@ int main()
 		fs.release();
 	}
 	else
-		cout << "Error: can not save the intrinsic parameters\n";
+		cout << "Error: can not load the intrinsic parameters\n";
 
-	fs.open("extrinsics_bumblebee.yml", CV_STORAGE_READ);
+	fs.open(extrinsics, CV_STORAGE_READ);
 	if( fs.isOpened() )
 	{
 		fs["R"] >> R;
@@ -117,7 +122,7 @@ int main()
 		fs.release();
 	}
 	else
-		cout << "Error: can not save the extrinsics parameters\n";
+		cout << "Error: can not load the extrinsics parameters\n";
 
 
 	initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
@@ -153,22 +158,10 @@ int main()
 
 	imshow("depth",*imageDepth);
 
-
-	/*CvStereoBMState *state = cvCreateStereoBMState();
-	state->preFilterSize=31;
-	state->preFilterCap=31;
-	state->SADWindowSize=15;//255;
-	state->minDisparity=-192;
-	state->numberOfDisparities=192;
-	state->textureThreshold=10;
-	state->uniquenessRatio=15;
-	 */
-	//cvFindStereoCorrespondenceBM(&image_left_calibrated,&image_right_calibrated,disparity,state);
-
 	int key=0;
 
 	int param=0;
-	while((key = cvWaitKey(0)) != 0x1b)
+	while((key = cvWaitKey(10)) != 0x1b)
 	{
 
 		sgbm(image_left_calibrated,image_right_calibrated,*imageDepth);
@@ -192,8 +185,9 @@ int main()
 		}
 	}
 
-	cvDestroyWindow("left");
-	cvDestroyWindow("right");
+	//cvDestroyWindow("left");
+	//cvDestroyWindow("right");
+	cvDestroyWindow("depth");
 	cvDestroyWindow("left_calibrated");
 	cvDestroyWindow("right_calibrated");
 	return 0;
