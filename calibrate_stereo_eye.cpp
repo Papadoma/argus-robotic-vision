@@ -69,6 +69,8 @@ void eye_stereo_calibrate::refresh_frame(){
 		capture_right->grab();
 		capture_left->retrieve(*mat_left);
 		capture_right->retrieve(*mat_right);
+		mat_left->copyTo(*chess_mat_left);
+		mat_right->copyTo(*chess_mat_right);
 	}
 
 }
@@ -104,8 +106,7 @@ void eye_stereo_calibrate::detect_chessboard(){
 	vector<Point2f> left_corners;
 	vector<Point2f> right_corners;
 
-	mat_left->copyTo(*chess_mat_left);
-	mat_right->copyTo(*chess_mat_right);
+
 
 	//CALIB_CB_FAST_CHECK saves a lot of time on images
 	//that don't contain any chessboard corners
@@ -141,7 +142,7 @@ int main(){
 
 	while(1){
 		eye_stereo->refresh_frame();
-		eye_stereo->detect_chessboard();
+		//eye_stereo->detect_chessboard();
 		eye_stereo->refresh_window();
 		eye_stereo->info();
 		key_pressed = cvWaitKey(10) & 255;
