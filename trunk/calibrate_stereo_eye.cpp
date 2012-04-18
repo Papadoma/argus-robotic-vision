@@ -69,6 +69,10 @@ void eye_stereo_calibrate::refresh_frame(){
 		capture_right->grab();
 		capture_left->retrieve(*mat_left);
 		capture_right->retrieve(*mat_right);
+
+		cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
+		cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
+
 		mat_left->copyTo(*chess_mat_left);
 		mat_right->copyTo(*chess_mat_right);
 	}
