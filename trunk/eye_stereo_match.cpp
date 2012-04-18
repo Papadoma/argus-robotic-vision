@@ -1,99 +1,191 @@
-/*
- *  stereo_match.cpp
- *  calibration
- *
- *  Created by Victor  Eruhimov on 1/18/10.
- *  Copyright 2010 Argus Corp. All rights reserved.
- *
- */
-
-#include "opencv2/calib3d/calib3d.hpp"
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/highgui/highgui.hpp"
-#include "opencv2/contrib/contrib.hpp"
-
+#include "cv.h"
+#include "highgui.h"
 #include <stdio.h>
 
+using namespace std;
 using namespace cv;
 
+class eye_stereo_match{
+private:
+	VideoCapture* capture_left;
+	VideoCapture* capture_right;
+	Mat* mat_left;
+	Mat* mat_right;
+	Mat* rect_mat_left;
+	Mat* rect_mat_right;
+	Mat* depth_map;
 
-class eye_depth{
-	CvCapture* capture_left;
-	CvCapture* capture_right;
+	Mat rmap[2][2];
 
-	Mat* frame_left;
-	Mat* frame_right;
+	StereoSGBM sgbm;
 
-	int width = 640;
-	int height = 480;
-	int fps = 15;
+	int width;
+	int height;
+
+	void load_param();
 
 public:
+	eye_stereo_match();
+	~eye_stereo_match();
 
-	int grab_frames();
-	void calculate_depth();
+	void refresh_frame();
+	void refresh_window();
+	void compute_depth();
+
+	void info();
 };
 
 //Constructor
-eye_depth::eye_depth(){
-	frame_left=new Mat(height,width,CV_8UC1);
-	frame_right=new Mat(height,width,CV_8UC1);
-	capture_left = cvCaptureFromCAM( 0 );
-	if ( !capture_left ) {
-		fprintf( stderr, "ERROR: could not initialize camera 0 \n" );
-		getchar();
-		return -1;
-	}
-	capture_right = cvCaptureFromCAM( 1 );
-	if ( !capture_right ) {
-		fprintf( stderr, "ERROR: could not initialize camera 1 \n" );
-		getchar();
-		return -1;
-	}
+eye_stereo_match::eye_stereo_match(){
+	width = 640;
+	height = 480;
 
-	cvSetCaptureProperty( capture_left, CV_CAP_PROP_FRAME_WIDTH, width );
-	cvSetCaptureProperty( capture_left, CV_CAP_PROP_FRAME_HEIGHT, height );
-	cvSetCaptureProperty( capture_left, CV_CAP_PROP_FPS, fps );
 
-	cvSetCaptureProperty( capture_right, CV_CAP_PROP_FRAME_WIDTH, width );
-	cvSetCaptureProperty( capture_right, CV_CAP_PROP_FRAME_HEIGHT, height );
-	cvSetCaptureProperty( capture_right, CV_CAP_PROP_FPS, fps );
+	mat_left=new Mat(height,width,CV_8UC1);
+	mat_right=new Mat(height,width,CV_8UC1);
+	rect_mat_left=new Mat(height,width,CV_8UC1);
+	rect_mat_right=new Mat(height,width,CV_8UC1);
+	depth_map=new Mat(height,width,CV_16UC1);
+
+	capture_left = new VideoCapture(0);
+	capture_right = new VideoCapture(1);
+
+	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
+	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+
+	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
+	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+
+	namedWindow("original_camera_left",CV_WINDOW_AUTOSIZE);
+	namedWindow("original_camera_right",CV_WINDOW_AUTOSIZE);
+	namedWindow("camera_left",CV_WINDOW_AUTOSIZE);
+	namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
+	namedWindow("depth",CV_WINDOW_AUTOSIZE);
+	this->load_param();
+
+	sgbm.preFilterCap = 63;
+    sgbm.SADWindowSize = 3;
+    int cn = 1;
+    sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+    sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+    sgbm.minDisparity = 0;
+    sgbm.numberOfDisparities = 32;
+    sgbm.uniquenessRatio = 10;
+    sgbm.speckleWindowSize = 100;
+    sgbm.speckleRange = 32;
+    sgbm.disp12MaxDiff = 1;
+    sgbm.fullDP = false;
 }
 
 //Destructor
-eye_depth::~eye_depth(){
-    cvReleaseCapture( &capture_right );
-    cvReleaseCapture( &capture_left );
-}
-
-
-
-int eye_depth::grab_frames(){
-
-    cvGrabFrame( capture_left );
-    cvGrabFrame( capture_right );
-
-    frame_left = cvRetrieveFrame( capture_left );
-    frame_right = cvRetrieveFrame( capture_right );
-}
-
-void calculate_depth(){
-
+eye_stereo_match::~eye_stereo_match(){
+	destroyWindow("original_camera_left");
+	destroyWindow("original_camera_right");
+	destroyWindow("camera_left");
+	destroyWindow("camera_right");
+	destroyWindow("depth");
+	delete(capture_left);
+	delete(capture_right);
 
 }
 
-void print_help()
-{
-	printf("\nDemo stereo matching converting L and R images into disparity and point clouds\n");
-	printf("\nUsage: stereo_match <left_image> <right_image> [--algorithm=bm|sgbm|hh|var] [--blocksize=<block_size>]\n"
-			"[--max-disparity=<max_disparity>] [--scale=scale_factor>] [-i <intrinsic_filename>] [-e <extrinsic_filename>]\n"
-			"[--no-display] [-o <disparity_image>] [-p <point_cloud_file>]\n");
+void eye_stereo_match::refresh_frame(){
+	if((capture_left->isOpened())&&(capture_right->isOpened())){
+		capture_left->grab();
+		capture_right->grab();
+		capture_left->retrieve(*mat_left);
+		capture_right->retrieve(*mat_right);
+
+		cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
+		cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
+
+		remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
+		remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+	}
 }
 
+void eye_stereo_match::refresh_window(){
+	imshow( "original_camera_left", *mat_left );
+	imshow( "original_camera_right", *mat_right );
+	imshow( "camera_left", *rect_mat_left );
+	imshow( "camera_right", *rect_mat_right );
+	imshow( "depth", *depth_map );
+}
 
+void eye_stereo_match::load_param(){
 
+	bool flag1=false;
+	bool flag2=false;
 
-int main(int argc, char** argv)
-{
+	string intrinsics="intrinsics.yml";
+	string extrinsics="extrinsics.yml";
 
+	Mat cameraMatrix[2], distCoeffs[2];
+	Mat R, T, E, F;
+	Mat R1, R2, P1, P2, Q;
+	Size imageSize=mat_left->size();
+
+	FileStorage fs(intrinsics, CV_STORAGE_READ);
+	if( fs.isOpened() )
+	{
+		fs["M1"] >> cameraMatrix[0];
+		fs["D1"] >> distCoeffs[0] ;
+		fs["M2"] >> cameraMatrix[1];
+		fs["D2"] >> distCoeffs[1] ;
+		fs.release();
+		flag1=true;
+	}
+	else
+		cout << "Error: can not load the intrinsic parameters\n";
+
+	fs.open(extrinsics, CV_STORAGE_READ);
+	if( fs.isOpened() )
+	{
+		fs["R"] >> R;
+		fs["T"] >> T;
+		fs["R1"] >> R1;
+		fs["R2"] >> R2;
+		fs["P1"] >> P1;
+		fs["P2"] >> P2;
+		fs["Q"] >> Q;
+		fs.release();
+		flag2=true;
+	}
+	else
+		cout << "Error: can not load the extrinsics parameters\n";
+
+	if(flag1&&flag2){
+		initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
+		initUndistortRectifyMap(cameraMatrix[1], distCoeffs[1], R2, P2, imageSize, CV_16SC2, rmap[1][0], rmap[1][1]);
+	}
+
+}
+
+void eye_stereo_match::info(){
+
+	//cout<<capture_left->get(CV_CAP_PROP_POS_FRAMES)<<"\n";
+}
+
+void eye_stereo_match::compute_depth(){
+	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
+	depth_map->convertTo(*depth_map, CV_8U);
+}
+
+int main(){
+
+	int key_pressed=255;
+	eye_stereo_match *eye_stereo = new eye_stereo_match();
+
+	while(1){
+
+		eye_stereo->refresh_frame();
+		eye_stereo->refresh_window();
+		eye_stereo->compute_depth();
+		key_pressed = cvWaitKey(10) & 255;
+		if ( key_pressed == 27 ) break;
+
+	}
+
+	delete(eye_stereo);
+	return 0;
 }

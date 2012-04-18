@@ -16,7 +16,7 @@ private:
 
 	int width;
 	int height;
-	int fps;
+
 	int image_num;
 
 public:
@@ -33,7 +33,7 @@ public:
 eye_stereo_calibrate::eye_stereo_calibrate(){
 	width = 640;
 	height = 480;
-	fps = 15;
+
 	image_num=1;
 
 	mat_left=new Mat(height,width,CV_8UC1);
