@@ -14,18 +14,44 @@ private:
 	Mat* chess_mat_left;
 	Mat* chess_mat_right;
 
+	Size patternsize;
+
+	int saved_data;
+	int numSquares;
+
+	vector<vector<Point2f> > imagePoints[2];
+	vector<vector<Point3f> > objectPoints;
+	vector<Point2f> left_corners;
+	vector<Point2f> right_corners;
+
+	Mat cameraMatrix[2], distCoeffs[2];
+	Mat R, T, E, F;
+
+	int numCornersHor;
+	int numCornersVer;
 	int width;
 	int height;
-
+	float squareSize;
 	int image_num;
 
+	bool flag_pattern_right;
+	bool flag_pattern_left;
+
+	bool calib_left_flag;
+	bool calib_right_flag;
+
 public:
+	int camera_choice;
+
 	eye_stereo_calibrate();
 	~eye_stereo_calibrate();
 	void save_snapshot();
 	void refresh_frame();
 	void refresh_window();
 	void detect_chessboard();
+	void add_calibration_data();
+	void calibrate();
+	void save_data();
 	void info();
 };
 
@@ -33,8 +59,24 @@ public:
 eye_stereo_calibrate::eye_stereo_calibrate(){
 	width = 640;
 	height = 480;
+	squareSize = 25;
 
+	numCornersHor=9;
+	numCornersVer=6;
+
+	saved_data=0;
 	image_num=1;
+	numSquares=6*9;
+
+	camera_choice=0;
+
+	patternsize=Size(numCornersHor,numCornersVer);
+
+	calib_right_flag=false;
+	calib_left_flag=false;
+
+	cameraMatrix[0] = Mat::eye(3, 3, CV_64F);
+	cameraMatrix[1] = Mat::eye(3, 3, CV_64F);
 
 	mat_left=new Mat(height,width,CV_8UC1);
 	mat_right=new Mat(height,width,CV_8UC1);
@@ -70,11 +112,13 @@ void eye_stereo_calibrate::refresh_frame(){
 		capture_left->retrieve(*mat_left);
 		capture_right->retrieve(*mat_right);
 
+		mat_left->copyTo(*chess_mat_left);
+		mat_right->copyTo(*chess_mat_right);
+
 		cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
 		cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
 
-		mat_left->copyTo(*chess_mat_left);
-		mat_right->copyTo(*chess_mat_right);
+
 	}
 
 }
@@ -106,37 +150,176 @@ void eye_stereo_calibrate::save_snapshot(){
 }
 
 void eye_stereo_calibrate::detect_chessboard(){
-	Size patternsize(6,9); //interior number of corners (row,col)
-	vector<Point2f> left_corners;
-	vector<Point2f> right_corners;
-
-
 
 	//CALIB_CB_FAST_CHECK saves a lot of time on images
 	//that don't contain any chessboard corners
-	bool flag_pattern_left = findChessboardCorners(*mat_left, patternsize, left_corners,
-			CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE
+	if(camera_choice==0||camera_choice==2)
+		flag_pattern_left = findChessboardCorners(*mat_left, patternsize, left_corners,
+				CALIB_CB_ADAPTIVE_THRESH/* + CALIB_CB_NORMALIZE_IMAGE
 	/*+ CALIB_CB_FAST_CHECK*/);
 
-	bool flag_pattern_right = findChessboardCorners(*mat_right, patternsize, right_corners,
-			CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE
-	/*+ CALIB_CB_FAST_CHECK*/);
+	if(camera_choice==1||camera_choice==2)
+		flag_pattern_right = findChessboardCorners(*mat_right, patternsize, right_corners,
+				CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE
+		/*+ CALIB_CB_FAST_CHECK*/);
 
 	//printf("left status: %d right status: %d",(int)flag_pattern_left,(int)flag_pattern_right);
-	/*
+
 	if(flag_pattern_left&&flag_pattern_right){
 		cornerSubPix(*mat_left, left_corners, Size(11, 11), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
 		cornerSubPix(*mat_right, right_corners, Size(11, 11), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
 	}
-	 */
-	drawChessboardCorners(*chess_mat_left, patternsize, Mat(left_corners), flag_pattern_left);
-	drawChessboardCorners(*chess_mat_right, patternsize, Mat(right_corners), flag_pattern_right);
+
+	if(camera_choice==0||camera_choice==2)drawChessboardCorners(*chess_mat_left, patternsize, Mat(left_corners), flag_pattern_left);
+	if(camera_choice==1||camera_choice==2)drawChessboardCorners(*chess_mat_right, patternsize, Mat(right_corners), flag_pattern_right);
 
 }
 
 void eye_stereo_calibrate::info(){
 
-	//cout<<capture_left->get(CV_CAP_PROP_POS_FRAMES)<<"\n";
+	cout<<"\nCalibrate Playstation Eye Stereo rig"<<"\n";
+	cout<<"------------------------------------"<<"\n";
+	cout<<"c: 	capture stereo images"<<"\n";
+	cout<<"0:	select left camera"<<"\n";
+	cout<<"1:	select right camera"<<"\n";
+	cout<<"2:	select stereo camera"<<"\n";
+	cout<<"a:	add calibration data"<<"\n";
+	cout<<"s:	start calibration"<<"\n";
+	cout<<"ESC: terminate program"<<"\n\n";
+}
+
+void eye_stereo_calibrate::add_calibration_data(){
+
+	if((flag_pattern_left&&camera_choice==0)||(flag_pattern_right&&camera_choice==1)||(flag_pattern_right&&flag_pattern_left&&camera_choice==2)){
+		if(camera_choice==0||camera_choice==2)imagePoints[0].push_back(left_corners);
+		if(camera_choice==1||camera_choice==2)imagePoints[1].push_back(right_corners);
+
+		vector<Point3f> obj;
+		for( int j = 0; j < patternsize.height; j++ )
+			for( int k = 0; k < patternsize.width; k++ )
+				obj.push_back(Point3f(j*squareSize, k*squareSize, 0));
+
+		objectPoints.push_back(obj);
+
+		saved_data++;
+		cout<<"Added calibration snapshot:"<<saved_data<<"\n";
+	}else{
+		cout<<"Pattern not visible on configuration: "<<camera_choice<<"\n";
+	}
+}
+
+void eye_stereo_calibrate::calibrate(){
+	Size imageSize=mat_left->size();
+	vector<Mat> rvecs;
+	vector<Mat> tvecs;
+	vector<float> reprojErrs;
+	double rms_left;
+	double rms_right;
+	double rms_stereo;
+
+	switch (camera_choice){
+	case 0:
+		cout<<"Calibration for left camera started!\n";
+		rms_left = calibrateCamera(objectPoints, imagePoints[0], imageSize, cameraMatrix[0],
+				distCoeffs[0], rvecs, tvecs,
+				CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
+		cout<<"Calibration for left camera ended! RMS error:" <<rms_left<<"\n";
+		imagePoints[0].clear();
+		objectPoints.clear();
+		this->info();
+		saved_data=0;
+		calib_left_flag=true;
+		break;
+
+	case 1:
+		cout<<"Calibration for right camera started!\n";
+		rms_right = calibrateCamera(objectPoints, imagePoints[1], imageSize, cameraMatrix[1],
+				distCoeffs[1], rvecs, tvecs,
+				CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
+		cout<<"Calibration for right camera ended! RMS error:" <<rms_right<<"\n";
+		imagePoints[1].clear();
+		objectPoints.clear();
+		this->info();
+		saved_data=0;
+		calib_right_flag=true;
+		break;
+
+	case 2:
+		if(calib_right_flag&&calib_left_flag){
+			cout<<"Calibration for stereo started!\n";
+			rms_stereo = stereoCalibrate(objectPoints, imagePoints[0], imagePoints[1],
+					cameraMatrix[0], distCoeffs[0],
+					cameraMatrix[1], distCoeffs[1],
+					imageSize, R, T, E, F,
+					TermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 100, 1e-5),
+					CV_CALIB_FIX_INTRINSIC);
+			cout<<"Calibration for stereo ended! RMS error:" <<rms_stereo<<"\n";
+			imagePoints[0].clear();
+			imagePoints[1].clear();
+			objectPoints.clear();
+			this->info();
+			this->save_data();
+			saved_data=0;
+		}else{
+			cout<<"Calibration for left camera started!\n";
+			rms_left = calibrateCamera(objectPoints, imagePoints[0], imageSize, cameraMatrix[0],
+					distCoeffs[0], rvecs, tvecs,
+					CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
+			cout<<"Calibration for left camera ended! RMS error:" <<rms_left<<"\n";
+			cout<<"Calibration for right camera started!\n";
+			rms_right = calibrateCamera(objectPoints, imagePoints[1], imageSize, cameraMatrix[1],
+					distCoeffs[1], rvecs, tvecs,
+					CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
+			cout<<"Calibration for right camera ended! RMS error:" <<rms_right<<"\n";
+			cout<<"Calibration for stereo started!\n";
+			rms_stereo = stereoCalibrate(objectPoints, imagePoints[0], imagePoints[1],
+					cameraMatrix[0], distCoeffs[0],
+					cameraMatrix[1], distCoeffs[1],
+					imageSize, R, T, E, F,
+					TermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 100, 1e-5),
+					CV_CALIB_FIX_INTRINSIC);
+			cout<<"Calibration for stereo ended! RMS error:" <<rms_stereo<<"\n";
+			imagePoints[0].clear();
+			imagePoints[1].clear();
+			objectPoints.clear();
+			this->info();
+			this->save_data();
+			saved_data=0;
+		}
+	}
+
+
+}
+
+void eye_stereo_calibrate::save_data(){
+	Size imageSize=mat_left->size();
+	FileStorage fs("intrinsics_eye.yml", CV_STORAGE_WRITE);
+	if( fs.isOpened() )
+	{
+		fs << "M1" << cameraMatrix[0] << "D1" << distCoeffs[0] <<
+				"M2" << cameraMatrix[1] << "D2" << distCoeffs[1];
+		fs.release();
+	}
+	else
+		cout << "Error: can not save the intrinsic parameters\n";
+
+	Mat R1, R2, P1, P2, Q;
+	Rect validRoi[2];
+
+	stereoRectify(cameraMatrix[0], distCoeffs[0],
+			cameraMatrix[1], distCoeffs[1],
+			imageSize, R, T, R1, R2, P1, P2, Q,
+			CALIB_ZERO_DISPARITY, 1, imageSize, &validRoi[0], &validRoi[1]);
+
+	fs.open("extrinsics_eye.yml", CV_STORAGE_WRITE);
+	if( fs.isOpened() )
+	{
+		fs << "R" << R << "T" << T << "R1" << R1 << "R2" << R2 << "P1" << P1 << "P2" << P2 << "Q" << Q;
+		fs.release();
+	}
+	else
+		cout << "Error: can not save the extrinsic parameters\n";
+
 }
 
 int main(){
@@ -144,14 +327,21 @@ int main(){
 	int key_pressed=255;
 	eye_stereo_calibrate *eye_stereo = new eye_stereo_calibrate();
 
+	eye_stereo->info();
 	while(1){
 		eye_stereo->refresh_frame();
-		//eye_stereo->detect_chessboard();
+		eye_stereo->detect_chessboard();
 		eye_stereo->refresh_window();
-		eye_stereo->info();
+
 		key_pressed = cvWaitKey(10) & 255;
-		if ( key_pressed == 27 ) break;
-		if ( key_pressed == 99 ) {eye_stereo->save_snapshot();}
+		if ( key_pressed == 27 ) break; //esc
+		if ( key_pressed == 99 ) {eye_stereo->save_snapshot();} //c
+		if ( key_pressed == 48 ) {eye_stereo->camera_choice=0;cout<<"Left camera selected!"<<"\n";} //0
+		if ( key_pressed == 49 ) {eye_stereo->camera_choice=1;cout<<"Right camera selected!"<<"\n";} //1
+		if ( key_pressed == 50 ) {eye_stereo->camera_choice=2;cout<<"Stereo camera selected!"<<"\n";} //2
+		if ( key_pressed == 97 ) {eye_stereo->add_calibration_data();} //a
+		if ( key_pressed == 115 ) {eye_stereo->calibrate();} //s
+
 	}
 
 	delete(eye_stereo);
