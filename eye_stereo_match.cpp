@@ -64,17 +64,17 @@ eye_stereo_match::eye_stereo_match(){
 	this->load_param();
 
 	sgbm.preFilterCap = 63;
-    sgbm.SADWindowSize = 3;
-    int cn = 1;
-    sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
-    sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
-    sgbm.minDisparity = 0;
-    sgbm.numberOfDisparities = 32;
-    sgbm.uniquenessRatio = 10;
-    sgbm.speckleWindowSize = 100;
-    sgbm.speckleRange = 32;
-    sgbm.disp12MaxDiff = 1;
-    sgbm.fullDP = false;
+	sgbm.SADWindowSize = 3;
+	int cn = 1;
+	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	sgbm.minDisparity = 0;
+	sgbm.numberOfDisparities = 32;
+	sgbm.uniquenessRatio = 10;
+	sgbm.speckleWindowSize = 100;
+	sgbm.speckleRange = 32;
+	sgbm.disp12MaxDiff = 1;
+	sgbm.fullDP = false;
 }
 
 //Destructor
@@ -117,12 +117,13 @@ void eye_stereo_match::load_param(){
 	bool flag1=false;
 	bool flag2=false;
 
-	string intrinsics="intrinsics.yml";
-	string extrinsics="extrinsics.yml";
+	string intrinsics="intrinsics_eye.yml";
+	string extrinsics="extrinsics_eye.yml";
 
 	Mat cameraMatrix[2], distCoeffs[2];
 	Mat R, T, E, F;
 	Mat R1, R2, P1, P2, Q;
+	Rect roi1, roi2;
 	Size imageSize=mat_left->size();
 
 	FileStorage fs(intrinsics, CV_STORAGE_READ);
@@ -155,6 +156,9 @@ void eye_stereo_match::load_param(){
 		cout << "Error: can not load the extrinsics parameters\n";
 
 	if(flag1&&flag2){
+
+		stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
+
 		initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
 		initUndistortRectifyMap(cameraMatrix[1], distCoeffs[1], R2, P2, imageSize, CV_16SC2, rmap[1][0], rmap[1][1]);
 	}
@@ -167,8 +171,13 @@ void eye_stereo_match::info(){
 }
 
 void eye_stereo_match::compute_depth(){
+	Mat img1r, img2r;
+	remap(*rect_mat_left, img1r, rmap[0][0], rmap[0][1], INTER_LINEAR);
+	remap(*rect_mat_right, img2r, rmap[1][0], rmap[1][1], INTER_LINEAR);
+	*rect_mat_left=img1r;
+	*rect_mat_right=img2r;
 	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
-	depth_map->convertTo(*depth_map, CV_8U);
+	depth_map->convertTo(*depth_map, CV_8U, 255/(sgbm.numberOfDisparities*16.));
 }
 
 int main(){
