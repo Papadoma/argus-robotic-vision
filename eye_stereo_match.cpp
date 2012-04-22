@@ -47,8 +47,8 @@ eye_stereo_match::eye_stereo_match(){
 	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_16UC1);
 
-	capture_left = new VideoCapture(0);
-	capture_right = new VideoCapture(1);
+	capture_left = new VideoCapture(1);
+	capture_right = new VideoCapture(0);
 
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
@@ -69,12 +69,12 @@ eye_stereo_match::eye_stereo_match(){
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
-	sgbm.numberOfDisparities = 32;
+	sgbm.numberOfDisparities = 64;
 	sgbm.uniquenessRatio = 10;
 	sgbm.speckleWindowSize = 100;
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 1;
-	sgbm.fullDP = false;
+	sgbm.fullDP = true;
 }
 
 //Destructor
@@ -157,7 +157,7 @@ void eye_stereo_match::load_param(){
 
 	if(flag1&&flag2){
 
-		stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
+		//stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
 
 		initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
 		initUndistortRectifyMap(cameraMatrix[1], distCoeffs[1], R2, P2, imageSize, CV_16SC2, rmap[1][0], rmap[1][1]);
@@ -171,11 +171,7 @@ void eye_stereo_match::info(){
 }
 
 void eye_stereo_match::compute_depth(){
-	Mat img1r, img2r;
-	remap(*rect_mat_left, img1r, rmap[0][0], rmap[0][1], INTER_LINEAR);
-	remap(*rect_mat_right, img2r, rmap[1][0], rmap[1][1], INTER_LINEAR);
-	*rect_mat_left=img1r;
-	*rect_mat_right=img2r;
+
 	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
 	depth_map->convertTo(*depth_map, CV_8U, 255/(sgbm.numberOfDisparities*16.));
 }
