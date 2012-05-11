@@ -98,7 +98,9 @@ eye_stereo_calibrate::eye_stereo_calibrate(){
 
 	capture_left = new VideoCapture(1);
 	capture_right = new VideoCapture(0);
-
+	if(!capture_left->isOpened())cout<<"Could not initialize left camera/n";
+	if(!capture_right->isOpened())cout<<"Could not initialize right camera/n";
+	
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
 
