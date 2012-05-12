@@ -1,5 +1,5 @@
- #include "cv.h" 
- #include "highgui.h" 
+ 
+ #include<opencv2/highgui/highgui.hpp>
  #include <stdio.h>  
  // A Simple Camera Capture Framework 
  int main() {
