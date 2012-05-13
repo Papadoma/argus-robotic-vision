@@ -1,5 +1,16 @@
-#include "cv.h"
-#include "highgui.h"
+#include "opencv2/core/core_c.h"
+#include "opencv2/core/core.hpp"
+#include "opencv2/flann/miniflann.hpp"
+#include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/imgproc/imgproc.hpp"
+#include "opencv2/video/video.hpp"
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/objdetect/objdetect.hpp"
+#include "opencv2/calib3d/calib3d.hpp"
+#include "opencv2/ml/ml.hpp"
+#include "opencv2/highgui/highgui_c.h"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/contrib/contrib.hpp"
 #include <stdio.h>
 
 using namespace std;
@@ -47,8 +58,8 @@ eye_stereo_match::eye_stereo_match(){
 	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_16UC1);
 
-	capture_left = new VideoCapture(1);
-	capture_right = new VideoCapture(0);
+	capture_left = new VideoCapture(0);
+	capture_right = new VideoCapture(1);
 
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
