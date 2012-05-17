@@ -60,13 +60,9 @@ eye_stereo_match::eye_stereo_match(){
 	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_16UC1);
 
-<<<<<<< .mine
-	capture_left = new VideoCapture(2);
-	capture_right = new VideoCapture(1);
-=======
-	capture_left = new VideoCapture(0);
-	capture_right = new VideoCapture(1);
->>>>>>> .r38
+	capture_left = new VideoCapture(1);
+	capture_right = new VideoCapture(2);
+
 
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
@@ -82,12 +78,12 @@ eye_stereo_match::eye_stereo_match(){
 	this->load_param();
 
 	sgbm.preFilterCap = 163;
-	sgbm.SADWindowSize = 9;
+	sgbm.SADWindowSize = 5;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
-	sgbm.numberOfDisparities = 128;
+	sgbm.numberOfDisparities = 64;
 	sgbm.uniquenessRatio = 10;
 	sgbm.speckleWindowSize = 300;
 	sgbm.speckleRange = 32;
@@ -99,9 +95,9 @@ eye_stereo_match::eye_stereo_match(){
 	bm.state->roi1 = roi1;
 	bm.state->roi2 = roi2;
 	bm.state->preFilterCap = 31;
-	bm.state->SADWindowSize = 21;
+	bm.state->SADWindowSize = 5;
 	bm.state->minDisparity = 0;
-	bm.state->numberOfDisparities = 128;
+	bm.state->numberOfDisparities = 64;
 	bm.state->textureThreshold = 10;
 	bm.state->uniquenessRatio = 15;
 	bm.state->speckleWindowSize = 100;
