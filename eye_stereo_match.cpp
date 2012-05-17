@@ -144,6 +144,10 @@ void eye_stereo_match::refresh_frame(){
 
 		remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
 		remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+		
+		rect_mat_left=rect_mat_left(roi1);
+		rect_mat_right=rect_mat_right(roi2);
+		
 	}
 }
 
@@ -200,10 +204,13 @@ void eye_stereo_match::load_param(){
 
 	if(flag1&&flag2){
 
-		//stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
+	       	stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
 
+		getOptimalNewCameraMatrix(cameraMatrix[0], distCoeffs[0], imageSize, 1, imageSize, &roi1);
+		getOptimalNewCameraMatrix(cameraMatrix[1], distCoeffs[1], imageSize, 1, imageSize, &roi2);
 		initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
 		initUndistortRectifyMap(cameraMatrix[1], distCoeffs[1], R2, P2, imageSize, CV_16SC2, rmap[1][0], rmap[1][1]);
+		
 	}
 
 }
@@ -219,6 +226,7 @@ void eye_stereo_match::compute_depth(){
 	//var(*rect_mat_left,*rect_mat_right,*depth_map);
 	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
 	depth_map->convertTo(*depth_map, CV_8U, 255/(sgbm.numberOfDisparities*16.));
+	//depth_map->convertTo(*depth_map, CV_8U);
 }
 
 int main(){
