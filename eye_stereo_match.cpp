@@ -28,7 +28,9 @@ private:
 
 	Mat rmap[2][2];
 
+	StereoBM bm;
 	StereoSGBM sgbm;
+	StereoVar var;
 
 	int width;
 	int height;
@@ -58,8 +60,13 @@ eye_stereo_match::eye_stereo_match(){
 	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_16UC1);
 
+<<<<<<< .mine
+	capture_left = new VideoCapture(2);
+	capture_right = new VideoCapture(1);
+=======
 	capture_left = new VideoCapture(0);
 	capture_right = new VideoCapture(1);
+>>>>>>> .r38
 
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
@@ -74,18 +81,47 @@ eye_stereo_match::eye_stereo_match(){
 	namedWindow("depth",CV_WINDOW_AUTOSIZE);
 	this->load_param();
 
-	sgbm.preFilterCap = 63;
-	sgbm.SADWindowSize = 3;
+	sgbm.preFilterCap = 163;
+	sgbm.SADWindowSize = 9;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
-	sgbm.numberOfDisparities = 64;
+	sgbm.numberOfDisparities = 128;
 	sgbm.uniquenessRatio = 10;
-	sgbm.speckleWindowSize = 100;
+	sgbm.speckleWindowSize = 300;
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 1;
-	sgbm.fullDP = true;
+	sgbm.fullDP = false;
+	
+	
+	Rect roi1, roi2;
+	bm.state->roi1 = roi1;
+	bm.state->roi2 = roi2;
+	bm.state->preFilterCap = 31;
+	bm.state->SADWindowSize = 21;
+	bm.state->minDisparity = 0;
+	bm.state->numberOfDisparities = 128;
+	bm.state->textureThreshold = 10;
+	bm.state->uniquenessRatio = 15;
+	bm.state->speckleWindowSize = 100;
+	bm.state->speckleRange = 32;
+	bm.state->disp12MaxDiff = 1;
+	
+	var.levels = 3;									// ignored with USE_AUTO_PARAMS
+	var.pyrScale = 0.5;								// ignored with USE_AUTO_PARAMS
+	var.nIt = 25;
+	var.minDisp = -128;	
+	var.maxDisp = 0;
+	var.poly_n = 3;
+	var.poly_sigma = 0.0;
+	var.fi = 15.0f;
+	var.lambda = 0.03f;
+	var.penalization = var.PENALIZATION_TICHONOV;	// ignored with USE_AUTO_PARAMS
+	var.cycle = var.CYCLE_V;						// ignored with USE_AUTO_PARAMS
+	var.flags = var.USE_SMART_ID | var.USE_AUTO_PARAMS | var.USE_MEDIAN_FILTERING ;
+    
+    
 }
 
 //Destructor
@@ -184,6 +220,8 @@ void eye_stereo_match::info(){
 void eye_stereo_match::compute_depth(){
 
 	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
+	//var(*rect_mat_left,*rect_mat_right,*depth_map);
+	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
 	depth_map->convertTo(*depth_map, CV_8U, 255/(sgbm.numberOfDisparities*16.));
 }
 
@@ -197,6 +235,7 @@ int main(){
 		eye_stereo->refresh_frame();
 		eye_stereo->refresh_window();
 		eye_stereo->compute_depth();
+		//eye_stereo->refresh_window();
 		key_pressed = cvWaitKey(10) & 255;
 		if ( key_pressed == 27 ) break;
 

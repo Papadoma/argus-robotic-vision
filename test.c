@@ -3,7 +3,7 @@
  #include <stdio.h>  
  // A Simple Camera Capture Framework 
  int main() {
-   CvCapture* capture = cvCaptureFromCAM( 0 );
+   CvCapture* capture = cvCaptureFromCAM( 1 );
    if ( !capture ) {
      fprintf( stderr, "ERROR: capture is NULL \n" );
      getchar();
