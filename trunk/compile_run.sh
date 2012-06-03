@@ -10,3 +10,4 @@ g++ eye_stereo_match.cpp `pkg-config opencv --cflags` -o eye_stereo_match.out `p
 #g++ calibrate_stereo_eye.cpp `pkg-config opencv --cflags` -o calibrate_stereo_eye.out `pkg-config opencv --libs`
 #gcc test.c `pkg-config opencv --cflags` -o test.out `pkg-config opencv --libs`
 #g++ -ggdb `pkg-config --cflags opencv` -o `basename calibrate_stereo_eye.cpp .cpp` calibrate_stereo_eye.cpp `pkg-config --libs opencv`
+./eye_stereo_match.out

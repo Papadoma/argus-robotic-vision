@@ -27,6 +27,8 @@ private:
 	Mat* depth_map;
 	Mat* depth_map2;
 
+	Mat* thres_mask;
+
 	Rect roi1, roi2;
 	Mat rmap[2][2];
 
@@ -34,6 +36,7 @@ private:
 	StereoSGBM sgbm;
 	StereoVar var;
 
+	int numberOfDisparities;
 	int width;
 	int height;
 
@@ -43,6 +46,9 @@ public:
 	eye_stereo_match();
 	~eye_stereo_match();
 
+	Mat imHist(Mat, float, float);
+
+	void remove_background();
 	void refresh_frame();
 	void refresh_window();
 	void compute_depth();
@@ -54,17 +60,19 @@ public:
 eye_stereo_match::eye_stereo_match(){
 	width = 640;
 	height = 480;
-
+	numberOfDisparities=48;
 
 	mat_left=new Mat(height,width,CV_16UC3);
 	mat_right=new Mat(height,width,CV_16UC3);
 	rect_mat_left=new Mat(height,width,CV_16UC3);
 	rect_mat_right=new Mat(height,width,CV_16UC3);
-	depth_map=new Mat(height,width,CV_16UC1);
-	depth_map2=new Mat(height,width,CV_16UC1);
+	depth_map=new Mat(height,width,CV_8UC1);
+	depth_map2=new Mat(height,width,CV_8UC1);
 
-	capture_left = new VideoCapture(2);
-	capture_right = new VideoCapture(1);
+	thres_mask=new Mat(height,width,CV_8UC1);
+
+	capture_left = new VideoCapture(1);
+	capture_right = new VideoCapture(0);
 
 
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
@@ -79,17 +87,26 @@ eye_stereo_match::eye_stereo_match(){
 	namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
 	namedWindow("depth",CV_WINDOW_AUTOSIZE);
 	namedWindow("depth2",CV_WINDOW_AUTOSIZE);
+	namedWindow("depth_histogram",CV_WINDOW_AUTOSIZE);
+	namedWindow("thres_mask",CV_WINDOW_AUTOSIZE);
+
+
+
+	cvMoveWindow("depth",0,0);
+	cvMoveWindow("depth_histogram",640,0);
+
+
 	this->load_param();
 
-	sgbm.preFilterCap = 163;
-	sgbm.SADWindowSize = 5;
+	sgbm.preFilterCap = 31;
+	sgbm.SADWindowSize = 9;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
-	sgbm.numberOfDisparities = 64;
+	sgbm.numberOfDisparities = numberOfDisparities;
 	sgbm.uniquenessRatio = 15;
-	sgbm.speckleWindowSize = 10;
+	sgbm.speckleWindowSize = 50;
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 1;
 	sgbm.fullDP = false;
@@ -99,39 +116,23 @@ eye_stereo_match::eye_stereo_match(){
 	bm.state->roi1 = roi1;
 	bm.state->roi2 = roi2;
 	bm.state->preFilterCap = 31;
-	bm.state->SADWindowSize = 5;
+	bm.state->SADWindowSize = 19;
 	bm.state->minDisparity = 0;
-	bm.state->numberOfDisparities = 64;
-	bm.state->textureThreshold = 10;
+	bm.state->numberOfDisparities = numberOfDisparities;
+	bm.state->textureThreshold = 100;
 	bm.state->uniquenessRatio = 15;
 	bm.state->speckleWindowSize = 100;
 	bm.state->speckleRange = 32;
 	bm.state->disp12MaxDiff = 1;
-
-	var.levels = 3;									// ignored with USE_AUTO_PARAMS
-	var.pyrScale = 0.5;								// ignored with USE_AUTO_PARAMS
-	var.nIt = 25;
-	var.minDisp = -128;	
-	var.maxDisp = 0;
-	var.poly_n = 3;
-	var.poly_sigma = 0.0;
-	var.fi = 15.0f;
-	var.lambda = 0.03f;
-	var.penalization = var.PENALIZATION_TICHONOV;	// ignored with USE_AUTO_PARAMS
-	var.cycle = var.CYCLE_V;						// ignored with USE_AUTO_PARAMS
-	var.flags = var.USE_SMART_ID | var.USE_AUTO_PARAMS | var.USE_MEDIAN_FILTERING ;
 
 
 }
 
 //Destructor
 eye_stereo_match::~eye_stereo_match(){
-	destroyWindow("original_camera_left");
-	destroyWindow("original_camera_right");
-	destroyWindow("camera_left");
-	destroyWindow("camera_right");
-	destroyWindow("depth");
-	destroyWindow("depth2");
+
+	destroyAllWindows();
+
 	delete(capture_left);
 	delete(capture_right);
 
@@ -166,6 +167,7 @@ void eye_stereo_match::refresh_window(){
 	imshow( "camera_right", *rect_mat_right );
 	imshow( "depth", *depth_map );
 	imshow( "depth2", *depth_map2 );
+
 }
 
 void eye_stereo_match::load_param(){
@@ -229,18 +231,89 @@ void eye_stereo_match::info(){
 	//cout<<capture_left->get(CV_CAP_PROP_POS_FRAMES)<<"\n";
 }
 
+Mat eye_stereo_match::imHist(Mat hist, float scaleX=1, float scaleY=1){
+	double maxVal=0;
+
+	//Mask out the zero values from histogram
+	Mat mask=Mat::ones(hist.rows,hist.cols,CV_8UC1);
+	mask.at<float>(0,0)=0;
+
+	//Find the 110% of max value
+	minMaxLoc(hist, 0, &maxVal, 0, 0,mask);
+	maxVal=maxVal*1.1;
+
+	int rows = 64; //default height size
+	int cols = hist.rows; //get the width size from the histogram
+
+	Mat histImg = Mat::zeros(rows*scaleX, cols*scaleY, CV_8UC3);
+
+	//for each bin
+
+	for(int i=0;i<cols-1;i++) {
+		float histValue = hist.at<float>(i,0);
+		float nextValue = hist.at<float>(i+1,0);
+		Point pt1 = Point(i*scaleX, rows*scaleY);
+		Point pt2 = Point(i*scaleX+scaleX, rows*scaleY);
+		Point pt3 = Point(i*scaleX+scaleX, (rows-nextValue*rows/maxVal)*scaleY);
+		Point pt4 = Point(i*scaleX, (rows-nextValue*rows/maxVal)*scaleY);
+
+		int numPts = 5;
+		Point pts[] = {pt1, pt2, pt3, pt4, pt1};
+
+		fillConvexPoly(histImg, pts, numPts, Scalar(255,255,255));
+	}
+	return histImg;
+}
+
 void eye_stereo_match::compute_depth(){
 
-	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
+	//sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
 	//var(*rect_mat_left,*rect_mat_right,*depth_map);
-	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
-	depth_map->convertTo(*depth_map, CV_8UC1, 255/(sgbm.numberOfDisparities*16.));
-	Rect mask(64,0,width,height);
+	bm(*rect_mat_left,*rect_mat_right,*depth_map);
+	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
+	Rect mask(numberOfDisparities,0,width,height);
+
 	Mat tmp(*depth_map, roi1 & roi2 & mask);
 	tmp.copyTo(*depth_map2);
 
 
+	Mat tmp2(*depth_map, roi1 & roi2 & mask);
+	tmp2.copyTo(*thres_mask);
+
+	//depth_map2->convertTo(*depth_map2, CV_8U);
+
+	int hbins = 64;
+	int histSize[] = {hbins};
+	// saturation varies from 0 (black-gray-white) to
+	// 255 (pure spectrum color)
+	float sranges[] = { 0, 255 };
+	const float* ranges[] = { sranges };
+	MatND depth_hist;
+	int channels[] = {0};
+	calcHist( depth_map2, 1, channels, Mat(), depth_hist, 1, histSize, ranges,	true, false );
+
 	//depth_map->convertTo(*depth_map, CV_8U);
+
+
+	depth_hist = imHist(depth_hist,4,4);
+
+	imshow( "depth_histogram", depth_hist );
+}
+
+void eye_stereo_match::remove_background(){
+	//depth_map2 442 rows 550 cols
+	int low_thres=128;
+	//Mat mask=Mat::zeros(depth_map2->rows,depth_map2->cols,CV_8UC1);
+
+	 threshold(*depth_map2, *thres_mask, 128, 255, THRESH_TOZERO);
+	//Mat * mask=new Mat(depth_map2->rows,depth_map2->cols,CV_8UC1);
+
+	//mask.convertTo(mask, CV_8UC1);
+
+	//mask.at<int>(0,0)=128;
+	//cout<<mask.at<int>(100,100)<<"\n";
+	imshow( "thres_mask", *thres_mask );
+	//delete(mask);
 }
 
 int main(){
@@ -251,10 +324,11 @@ int main(){
 	while(1){
 
 		eye_stereo->refresh_frame();
-		eye_stereo->refresh_window();
-		eye_stereo->compute_depth();
 		//eye_stereo->refresh_window();
-		key_pressed = cvWaitKey(10) & 255;
+		eye_stereo->compute_depth();
+		eye_stereo->remove_background();
+		eye_stereo->refresh_window();
+		key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
 
 	}
