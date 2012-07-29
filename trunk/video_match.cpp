@@ -62,8 +62,8 @@ eye_stereo_match::eye_stereo_match(){
 	height = 480;
 	numberOfDisparities=48;
 
-	mat_left=new Mat(height,width,CV_16UC3);
-	mat_right=new Mat(height,width,CV_16UC3);
+	//mat_left=new Mat(height,width,CV_16UC3);
+	//mat_right=new Mat(height,width,CV_16UC3);
 	rect_mat_left=new Mat(height,width,CV_16UC3);
 	rect_mat_right=new Mat(height,width,CV_16UC3);
 	depth_map=new Mat(height,width,CV_8UC1);
@@ -71,32 +71,40 @@ eye_stereo_match::eye_stereo_match(){
 
 	thres_mask=new Mat(height,width,CV_8UC1);
 
-	capture_left = new VideoCapture(1);
-	capture_right = new VideoCapture(0);
+	capture_left = new VideoCapture("/media/STORAGE/Videos/left_couple.avi");
+	capture_right = new VideoCapture("/media/STORAGE/Videos/right_couple.avi");
+
+	if (!capture_left)
+	{
+		std::cout << "!!! VideoCapture didn't found the file !!!\n";
+
+	}
 
 
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+	capture_left->set(CV_CAP_PROP_FPS, 30);
 
 	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+	capture_right->set(CV_CAP_PROP_FPS, 30);
 
 	namedWindow("original_camera_left",CV_WINDOW_AUTOSIZE);
 	namedWindow("original_camera_right",CV_WINDOW_AUTOSIZE);
-	namedWindow("camera_left",CV_WINDOW_AUTOSIZE);
-	namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
+	//namedWindow("camera_left",CV_WINDOW_AUTOSIZE);
+	//namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
 	namedWindow("depth",CV_WINDOW_AUTOSIZE);
-	namedWindow("depth2",CV_WINDOW_AUTOSIZE);
-	namedWindow("depth_histogram",CV_WINDOW_AUTOSIZE);
-	namedWindow("thres_mask",CV_WINDOW_AUTOSIZE);
+	//namedWindow("depth2",CV_WINDOW_AUTOSIZE);
+	//namedWindow("depth_histogram",CV_WINDOW_AUTOSIZE);
+	//namedWindow("thres_mask",CV_WINDOW_AUTOSIZE);
 
 
 
-	cvMoveWindow("depth",0,0);
-	cvMoveWindow("depth_histogram",640,0);
+	//cvMoveWindow("depth",0,0);
+	//cvMoveWindow("depth_histogram",640,0);
 
 
-	this->load_param();
+	//this->load_param();
 
 	sgbm.preFilterCap = 31;
 	sgbm.SADWindowSize = 9;
@@ -125,7 +133,7 @@ eye_stereo_match::eye_stereo_match(){
 	bm.state->speckleRange = 32;
 	bm.state->disp12MaxDiff = 1;
 
-
+	cout<<"Initialization complete\n";
 }
 
 //Destructor
@@ -140,13 +148,16 @@ eye_stereo_match::~eye_stereo_match(){
 
 void eye_stereo_match::refresh_frame(){
 	if((capture_left->isOpened())&&(capture_right->isOpened())){
-		capture_left->grab();
-		capture_right->grab();
-		capture_left->retrieve(*mat_left);
-		capture_right->retrieve(*mat_right);
+		//capture_left->grab();
+		//capture_right->grab();
+		//capture_left->retrieve(*mat_left);
+		//capture_right->retrieve(*mat_right);
+		//cout<<mat_left->size.height<<"\n";
+		capture_left->read(*mat_left);
+		capture_right->read(*mat_right);
 
-		cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
-		cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
+		//cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
+		//cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
 
 		//remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
 		//remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
@@ -165,8 +176,8 @@ void eye_stereo_match::refresh_window(){
 	imshow( "original_camera_right", *mat_right );
 	//imshow( "camera_left", *rect_mat_left );
 	//imshow( "camera_right", *rect_mat_right );
-	imshow( "depth", *depth_map );
-	imshow( "depth2", *depth_map2 );
+	//imshow( "depth", *depth_map );
+	//imshow( "depth2", *depth_map2 );
 
 }
 
