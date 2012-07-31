@@ -62,10 +62,10 @@ eye_stereo_match::eye_stereo_match(){
 	height = 480;
 	numberOfDisparities=48;
 
-	mat_left=new Mat(height,width,CV_16UC3);
-	mat_right=new Mat(height,width,CV_16UC3);
-	rect_mat_left=new Mat(height,width,CV_16UC3);
-	rect_mat_right=new Mat(height,width,CV_16UC3);
+	mat_left=new Mat(height,width,CV_8UC1);
+	mat_right=new Mat(height,width,CV_8UC1);
+	rect_mat_left=new Mat(height,width,CV_8UC1);
+	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_8UC1);
 	depth_map2=new Mat(height,width,CV_8UC1);
 
