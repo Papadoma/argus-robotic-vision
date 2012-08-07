@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <cv.h>
 #include <highgui.h>
+#include <cv.hpp>
 
 
 #include "CLEyeMulticam.h"
@@ -153,7 +154,7 @@ eye_stereo_match::eye_stereo_match(){
 	sgbm.fullDP = true;
 
 
-	/*
+	/*da
 	bm.state->roi1 = roi1;
 	bm.state->roi2 = roi2;
 	bm.state->preFilterCap = 31;
@@ -207,8 +208,8 @@ void eye_stereo_match::refresh_frame(){
 }
 
 void eye_stereo_match::refresh_window(){
-	imshow( "original_camera_left", *mat_left );
-	imshow( "original_camera_right", *mat_right );
+	//imshow( "original_camera_left", *mat_left );
+	//imshow( "original_camera_right", *mat_right );
 
 
 	rectangle(*rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
@@ -374,13 +375,20 @@ void eye_stereo_match::smooth_depth_map(){
 	//Add the previous calculated depth values only to zero present values
 	add(*depth_map2, *previous_depth_map, result);
 
+	//depth_map2->copyTo(result);
+	Mat result2(result.size(),CV_8UC1);
+	bilateralFilter(result, result2, 9, 30, 30, BORDER_DEFAULT );
+
 	Mat* jet_result=new Mat(result.size(),CV_8UC3);
 	applyColorMap(result, *jet_result, COLORMAP_JET );
 	imshow( "smoothed", *jet_result);
 
+	applyColorMap(result2, *jet_result, COLORMAP_JET );
+	imshow( "extrasmoothed", *jet_result);
+
 	result.copyTo(*previous_depth_map);
 
-
+	//TODO Remove result matrix, pass depth_map2 directly
 
 	//*depth_map= abs((*depth_map) - (*previous_depth_map));
 	//*previous_depth_map=*depth_map;
