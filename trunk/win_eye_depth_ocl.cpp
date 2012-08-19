@@ -17,12 +17,15 @@
 #include <highgui.h>
 #include <cv.hpp>
 
+//#include <XnOSWin32.h>
+//#include <XnPlatformWin32.h>
 
 #include "CLEyeMulticam.h"
 
 
 using namespace std;
 using namespace cv;
+using namespace ocl;
 
 
 class eye_stereo_match{
@@ -46,9 +49,15 @@ private:
 	Mat* thres_mask;
 
 
+	//OCL
+	oclMat left_ocl;
+	oclMat right_ocl;
+	oclMat disp_ocl;
+
 	Rect roi1, roi2;
 	Mat rmap[2][2];
 
+	StereoBM_GPU gpu_bm;
 	StereoBM bm;
 	StereoSGBM sgbm;
 	StereoVar var;
@@ -100,12 +109,22 @@ eye_stereo_match::eye_stereo_match(){
 	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_8UC1);
 
-
-
 	thres_mask=new Mat(height,width,CV_8UC1);
 
+	printf("Begin creating ocl context...\n");
+	//std::vector<ocl::Info> oclinfo;
+	//int devnums = ocl::getDevice(oclinfo);
+	vector<Info> ocl_info;
+	int devnums=getDevice(ocl_info);
+	printf("End creating ocl context...\n");
 
+	if(devnums<1){
+		std::cout << "no OPENCL device found\n";
+	}
 
+	left_ocl.create(height,width,CV_8UC1);
+	right_ocl.create(height,width,CV_8UC1);
+	disp_ocl.create(height,width,CV_8UC1);
 
 	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_GAIN,true);
 	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_EXPOSURE,true);
@@ -155,6 +174,11 @@ eye_stereo_match::eye_stereo_match(){
 	sgbm.fullDP = true;
 
 
+	//gpu_bm(StereoBM_GPU::BASIC_PRESET, StereoBM_GPU::DEFAULT_NDISP, StereoBM_GPU::DEFAULT_WINSZ);
+	gpu_bm.preset = StereoBM_GPU::BASIC_PRESET;
+	gpu_bm.ndisp = numberOfDisparities;
+	gpu_bm.winSize = 5;
+
 	/*da
 	bm.state->roi1 = roi1;
 	bm.state->roi2 = roi2;
@@ -200,6 +224,10 @@ void eye_stereo_match::refresh_frame(){
 	//mat_right->convertTo(*rect_mat_right,CV_8UC1);
 	remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
 	remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+
+	//left_ocl.upload(*mat_left);
+	//right_ocl.upload(*mat_right);
+
 
 	//keep left rectified image colored for background removal
 	//*rect_mat_left_mask=*rect_mat_left;
@@ -325,7 +353,17 @@ Mat eye_stereo_match::imHist(Mat hist, float scaleX=1, float scaleY=1){
 void eye_stereo_match::compute_depth(){
 	rect_mat_left->convertTo(*rect_mat_left,CV_8UC1);
 	rect_mat_right->convertTo(*rect_mat_right,CV_8UC1);
+
+	//left_ocl=*rect_mat_left;
+	//right_ocl=*rect_mat_right;
+
+	//left_ocl.upload(*rect_mat_left);
+	//right_ocl.upload(*rect_mat_right);
+
 	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
+	//gpu_bm(left_ocl, right_ocl, disp_ocl);
+
+
 	//var(*rect_mat_left,*rect_mat_right,*depth_map);
 	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
 	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
@@ -444,6 +482,8 @@ void eye_stereo_match::remove_background(){
 }
 
 int main(){
+
+	//xn::UserGenerator g_UserGenerator;
 
 	int key_pressed=255;
 	eye_stereo_match *eye_stereo = new eye_stereo_match();
