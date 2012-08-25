@@ -176,7 +176,8 @@ eye_stereo_match::eye_stereo_match(){
 
 	depth_map2=new Mat(clearview_mask->height,clearview_mask->width,CV_8UC1);
 
-	BSMOG=new BackgroundSubtractorMOG2(1000,30,true);
+	BSMOG=new BackgroundSubtractorMOG2(1000,2,true);
+
 }
 
 //Destructor
@@ -196,6 +197,8 @@ void eye_stereo_match::refresh_frame(){
 	cvGetImageRawData(pCapImageRight, &pCapBufferRight);
 	*mat_left=pCapImageLeft;
 	*mat_right=pCapImageRight;
+	//cvtColor(*mat_left,*mat_left,COLOR_RGBA2RGB);
+	//cvtColor(*mat_right,*mat_right,COLOR_RGBA2RGB);
 	//mat_left->convertTo(*rect_mat_left,CV_8UC1);
 	//mat_right->convertTo(*rect_mat_right,CV_8UC1);
 	remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
@@ -401,9 +404,9 @@ void eye_stereo_match::remove_background(){
 	//BSMOG.nmixtures = 3;
 
 	(*BSMOG)(*rect_mat_left,*thres_mask,0.01);
-
+	//imshow( "thres_mask", *thres_mask );
 	thres_mask->convertTo(*thres_mask,CV_8UC1);
-	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
+	threshold(*thres_mask, *thres_mask, 126, 255, THRESH_BINARY); //shadows are 127
 	//depth_map2 442 rows 550 cols
 	//!int low_thres=128;
 	//Mat mask=Mat::zeros(depth_map2->rows,depth_map2->cols,CV_8UC1);
@@ -421,8 +424,21 @@ void eye_stereo_match::remove_background(){
 	tmp.copyTo(*thres_mask);
 	//delete(mask);
 
-
 	imshow( "thres_mask", *thres_mask );
+
+	medianBlur(*thres_mask, *thres_mask, 5);
+
+	imshow( "thres_mask_smoothed", *thres_mask );
+
+
+	dilate(*thres_mask,*thres_mask,Mat(),Point(),20);
+	erode(*thres_mask,*thres_mask,Mat(),Point(),6);
+
+
+	Mat tmp2(*rect_mat_left, *clearview_mask);
+		tmp2.copyTo(*rect_mat_left);
+	bitwise_and(*rect_mat_left, *thres_mask, *thres_mask);
+	imshow( "output_thres", *thres_mask );
 
 	double minVal;
 	double maxVal;
@@ -459,9 +475,9 @@ int main(){
 
 		eye_stereo->refresh_frame();
 
-		eye_stereo->compute_depth();
+		//eye_stereo->compute_depth();
 
-		//eye_stereo->remove_background();
+		eye_stereo->remove_background();
 		eye_stereo->refresh_window();
 		key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;

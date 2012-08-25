@@ -64,36 +64,44 @@ eye_stereo_match::eye_stereo_match(){
 
 	//mat_left=new Mat(height,width,CV_16UC3);
 	//mat_right=new Mat(height,width,CV_16UC3);
-	rect_mat_left=new Mat(height,width,CV_16UC3);
-	rect_mat_right=new Mat(height,width,CV_16UC3);
+	rect_mat_left=new Mat(height,width,CV_8UC3);
+	rect_mat_right=new Mat(height,width,CV_8UC3);
 	depth_map=new Mat(height,width,CV_8UC1);
 	depth_map2=new Mat(height,width,CV_8UC1);
 
 	thres_mask=new Mat(height,width,CV_8UC1);
 
-	capture_left = new VideoCapture("/media/STORAGE/Videos/left_couple.avi");
-	capture_right = new VideoCapture("/media/STORAGE/Videos/right_couple.avi");
+	cout<<"Creating capture instances\n";
+	capture_left = new VideoCapture();
+	capture_right = new VideoCapture();
 
-	if (!capture_left)
+	if (capture_left&&capture_right)
 	{
-		std::cout << "!!! VideoCapture didn't found the file !!!\n";
+		std::cout << "Created capture instances!\n";
 
 	}
 
-
+	cout<<"Setting video parameters\n";
 	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
 	capture_left->set(CV_CAP_PROP_FPS, 30);
-
 	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
 	capture_right->set(CV_CAP_PROP_FPS, 30);
 
-	namedWindow("original_camera_left",CV_WINDOW_AUTOSIZE);
-	namedWindow("original_camera_right",CV_WINDOW_AUTOSIZE);
+	cout<<"Opening video files\n";
+	capture_left->open("D:/Videos/left_couple_fixed.avi");
+	capture_right->open("D:/Videos/left_couple_fixed.avi");
+	if((capture_left->isOpened())&&(capture_right->isOpened())){
+		cout<<"Video files opened!\n";
+	}
+
+
+	//namedWindow("original_camera_left",CV_WINDOW_AUTOSIZE);
+	//namedWindow("original_camera_right",CV_WINDOW_AUTOSIZE);
 	//namedWindow("camera_left",CV_WINDOW_AUTOSIZE);
 	//namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
-	namedWindow("depth",CV_WINDOW_AUTOSIZE);
+	//namedWindow("depth",CV_WINDOW_AUTOSIZE);
 	//namedWindow("depth2",CV_WINDOW_AUTOSIZE);
 	//namedWindow("depth_histogram",CV_WINDOW_AUTOSIZE);
 	//namedWindow("thres_mask",CV_WINDOW_AUTOSIZE);
@@ -153,8 +161,12 @@ void eye_stereo_match::refresh_frame(){
 		//capture_left->retrieve(*mat_left);
 		//capture_right->retrieve(*mat_right);
 		//cout<<mat_left->size.height<<"\n";
-		capture_left->read(*mat_left);
-		capture_right->read(*mat_right);
+		capture_left->grab();
+		capture_right->grab();
+		capture_left->retrieve(*mat_left,3);
+		capture_right->retrieve(*mat_right,3);
+		//capture_left->read(*mat_left);
+		//capture_right->read(*mat_right);
 
 		//cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
 		//cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
@@ -168,6 +180,8 @@ void eye_stereo_match::refresh_frame(){
 		//rectangle(*rect_mat_left, roi1, Scalar(0,255,0), 1, 8);
 		//rectangle(*rect_mat_right, roi2, Scalar(0,255,0), 1, 8);
 
+	}else{
+		cout<<"Could not read frame\n";
 	}
 }
 
