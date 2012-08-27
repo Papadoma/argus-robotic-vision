@@ -20,7 +20,6 @@
 
 #include "CLEyeMulticam.h"
 
-
 using namespace std;
 using namespace cv;
 
@@ -80,6 +79,7 @@ public:
 //Constructor
 eye_stereo_match::eye_stereo_match(){
 
+	module_eye input_module;
 	GUID left_id=CLEyeGetCameraUUID(1);
 	GUID right_id=CLEyeGetCameraUUID(0);
 
