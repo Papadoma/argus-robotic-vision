@@ -79,7 +79,7 @@ public:
 //Constructor
 eye_stereo_match::eye_stereo_match(){
 
-	module_eye input_module;
+//	module_eye input_module;
 	GUID left_id=CLEyeGetCameraUUID(1);
 	GUID right_id=CLEyeGetCameraUUID(0);
 
@@ -475,9 +475,9 @@ int main(){
 
 		eye_stereo->refresh_frame();
 
-		//eye_stereo->compute_depth();
+		eye_stereo->compute_depth();
 
-		eye_stereo->remove_background();
+		//eye_stereo->remove_background();
 		eye_stereo->refresh_window();
 		key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
