@@ -18,6 +18,9 @@ using namespace cv;
 
 class eye_stereo_match{
 private:
+	String filename_left;
+	String filename_right;
+
 	VideoCapture* capture_left;
 	VideoCapture* capture_right;
 	Mat* mat_left;
@@ -25,6 +28,7 @@ private:
 	Mat* rect_mat_left;
 	Mat* rect_mat_right;
 	Mat* depth_map;
+	Mat* previous_depth_map;
 	Mat* depth_map2;
 
 	Mat* thres_mask;
@@ -36,11 +40,14 @@ private:
 	StereoSGBM sgbm;
 	StereoVar var;
 
+	BackgroundSubtractorMOG2* BSMOG;
+
 	int numberOfDisparities;
 	int width;
 	int height;
 
 	void load_param();
+	void smooth_depth_map();
 
 public:
 	eye_stereo_match();
@@ -48,24 +55,28 @@ public:
 
 	Mat imHist(Mat, float, float);
 
-
+	void remove_background();
+	void compute_depth();
 	void refresh_frame();
 	void refresh_window();
-	void compute_depth();
+
 
 	void info();
 };
 
 //Constructor
 eye_stereo_match::eye_stereo_match(){
+	filename_left="C:/Users/papadoma/Videos/youtube3D_left.mpg";
+	filename_right="C:/Users/papadoma/Videos/youtube3D_right.mpg";
+
 	width = 640;
 	height = 480;
 	numberOfDisparities=48;
 
-	//mat_left=new Mat(height,width,CV_16UC3);
-	//mat_right=new Mat(height,width,CV_16UC3);
-	rect_mat_left=new Mat(height,width,CV_8UC3);
-	rect_mat_right=new Mat(height,width,CV_8UC3);
+	mat_left=new Mat(height,width,CV_16UC3);
+	mat_right=new Mat(height,width,CV_16UC3);
+	rect_mat_left=new Mat(height,width,CV_8UC1);
+	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_8UC1);
 	depth_map2=new Mat(height,width,CV_8UC1);
 
@@ -77,23 +88,29 @@ eye_stereo_match::eye_stereo_match(){
 
 	if (capture_left&&capture_right)
 	{
-		std::cout << "Created capture instances!\n";
+		cout << "Created capture instances!\n";
 
+	}else{
+		cout << "Could not create capture instances...\n";
+		exit(1);
 	}
 
-	cout<<"Setting video parameters\n";
-	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
-	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
-	capture_left->set(CV_CAP_PROP_FPS, 30);
-	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
-	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
-	capture_right->set(CV_CAP_PROP_FPS, 30);
+	//	cout<<"Setting video parameters\n";
+	//	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
+	//	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+	//	capture_left->set(CV_CAP_PROP_FPS, 15);
+	//	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
+	//	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+	//	capture_right->set(CV_CAP_PROP_FPS, 15);
 
 	cout<<"Opening video files\n";
-	capture_left->open("D:/Videos/left_couple_fixed.avi");
-	capture_right->open("D:/Videos/left_couple_fixed.avi");
+	capture_left->open(filename_left);
+	capture_right->open(filename_right);
 	if((capture_left->isOpened())&&(capture_right->isOpened())){
 		cout<<"Video files opened!\n";
+	}else{
+		cout<<"Video files could not be opened/not found...\n";
+		exit(1);
 	}
 
 
@@ -106,11 +123,8 @@ eye_stereo_match::eye_stereo_match(){
 	//namedWindow("depth_histogram",CV_WINDOW_AUTOSIZE);
 	//namedWindow("thres_mask",CV_WINDOW_AUTOSIZE);
 
-
-
 	//cvMoveWindow("depth",0,0);
 	//cvMoveWindow("depth_histogram",640,0);
-
 
 	//this->load_param();
 
@@ -156,17 +170,12 @@ eye_stereo_match::~eye_stereo_match(){
 
 void eye_stereo_match::refresh_frame(){
 	if((capture_left->isOpened())&&(capture_right->isOpened())){
-		//capture_left->grab();
-		//capture_right->grab();
-		//capture_left->retrieve(*mat_left);
-		//capture_right->retrieve(*mat_right);
-		//cout<<mat_left->size.height<<"\n";
-		capture_left->grab();
-		capture_right->grab();
-		capture_left->retrieve(*mat_left,3);
-		capture_right->retrieve(*mat_right,3);
-		//capture_left->read(*mat_left);
-		//capture_right->read(*mat_right);
+
+		capture_left->read(*mat_left);
+		capture_right->read(*mat_right);
+
+		cvtColor(*mat_left, *rect_mat_left, CV_RGB2GRAY);
+		cvtColor(*mat_right, *rect_mat_right, CV_RGB2GRAY);
 
 		//cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
 		//cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
@@ -186,11 +195,11 @@ void eye_stereo_match::refresh_frame(){
 }
 
 void eye_stereo_match::refresh_window(){
-	imshow( "original_camera_left", *mat_left );
-	imshow( "original_camera_right", *mat_right );
+	imshow( "original_camera_left", *rect_mat_left );
+	imshow( "original_camera_right", *rect_mat_right );
 	//imshow( "camera_left", *rect_mat_left );
 	//imshow( "camera_right", *rect_mat_right );
-	//imshow( "depth", *depth_map );
+	imshow( "depth", *depth_map );
 	//imshow( "depth2", *depth_map2 );
 
 }
@@ -252,6 +261,123 @@ void eye_stereo_match::load_param(){
 }
 
 
+void eye_stereo_match::compute_depth(){
+
+	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
+	//var(*rect_mat_left,*rect_mat_right,*depth_map);
+	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
+	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
+
+	//Cut-out the extra black space on areas which cannot be computed
+	//Rect mask(numberOfDisparities,0,width,height);
+
+	//Mat tmp2(*depth_map, roi1 & roi2 & mask);
+	//tmp2.copyTo(*thres_mask);
+
+	//Smooth out the depth map
+	//this->smooth_depth_map();
+
+	//depth_map2->convertTo(*depth_map2, CV_8U);
+
+}
+
+void eye_stereo_match::smooth_depth_map(){
+	//*previous_depth_map= abs((*depth_map) - (*previous_depth_map)) ;
+	//bitwise_and(*previous_depth_map, *depth_map, *depth_map);
+	//addWeighted(*depth_map, (double)0.5, *previous_depth_map, (double)0.5, 0, *depth_map);
+
+	//Filter out the zero values of depth map
+	Mat temp(depth_map2->size(),CV_8UC1);
+	depth_map2->copyTo(temp);
+	threshold(temp,temp,0,255,THRESH_BINARY_INV); //Zero values go 255 and everything else goes 0
+
+	//Keep only the calculated values of the last map that correspong to present zero values
+	bitwise_and(*previous_depth_map, temp, *previous_depth_map);
+
+	Mat result(depth_map2->size(),CV_8UC1);
+
+	//Add the previous calculated depth values only to zero present values
+	add(*depth_map2, *previous_depth_map, result);
+
+	//depth_map2->copyTo(result);
+	Mat result2(result.size(),CV_8UC1);
+	bilateralFilter(result, result2, 9, 30, 30, BORDER_DEFAULT );
+
+	Mat* jet_result=new Mat(result.size(),CV_8UC3);
+	applyColorMap(result, *jet_result, COLORMAP_JET );
+	imshow( "smoothed", *jet_result);
+
+	applyColorMap(result2, *jet_result, COLORMAP_JET );
+	imshow( "extrasmoothed", *jet_result);
+
+	result.copyTo(*previous_depth_map);
+
+	//TODO Remove result matrix, pass depth_map2 directly
+
+	//*depth_map= abs((*depth_map) - (*previous_depth_map));
+	//*previous_depth_map=*depth_map;
+}
+
+
+void eye_stereo_match::remove_background(){
+	//BSMOG.bShadowDetection = false;
+	//BSMOG.nmixtures = 3;
+
+	(*BSMOG)(*rect_mat_left,*thres_mask,0.01);
+	//imshow( "thres_mask", *thres_mask );
+	thres_mask->convertTo(*thres_mask,CV_8UC1);
+	threshold(*thres_mask, *thres_mask, 126, 255, THRESH_BINARY); //shadows are 127
+	//depth_map2 442 rows 550 cols
+	//!int low_thres=128;
+	//Mat mask=Mat::zeros(depth_map2->rows,depth_map2->cols,CV_8UC1);
+
+	//!threshold(*depth_map2, *thres_mask, 128, 255, THRESH_TOZERO);
+	//Mat * mask=new Mat(depth_map2->rows,depth_map2->cols,CV_8UC1);
+
+	//mask.convertTo(mask, CV_8UC1);
+
+	//mask.at<int>(0,0)=128;
+	//cout<<mask.at<int>(100,100)<<"\n";
+
+	//Rect mask(numberOfDisparities,0,width,height);
+
+	//delete(mask);
+
+	imshow( "thres_mask", *thres_mask );
+
+	medianBlur(*thres_mask, *thres_mask, 5);
+
+	imshow( "thres_mask_smoothed", *thres_mask );
+
+
+	dilate(*thres_mask,*thres_mask,Mat(),Point(),20);
+	erode(*thres_mask,*thres_mask,Mat(),Point(),6);
+
+
+
+	bitwise_and(*rect_mat_left, *thres_mask, *thres_mask);
+	imshow( "output_thres", *thres_mask );
+
+	double minVal;
+	double maxVal;
+	//*depth_map2 = (*depth_map2)|(*thres_mask);
+	Mat tmp;
+	depth_map2->copyTo(tmp);
+	bitwise_and(*depth_map2, *thres_mask, tmp);
+	//tmp.copyTo(*depth_map2);
+	minMaxLoc(tmp,0,&maxVal,0,0,Mat());
+
+	tmp=~tmp;
+	threshold(tmp, tmp, 254, 255, THRESH_TOZERO_INV);
+	minMaxLoc(tmp,0,&minVal,0,0,Mat());
+	minVal=255-minVal;
+
+	//imshow( "thres_mask", tmp );
+	//threshold(tmp, tmp, 0, 255, THRESH_TOZERO_INV);
+	threshold(*depth_map2, *depth_map2, ((int)maxVal)+1, 255, THRESH_TOZERO_INV);
+	threshold(*depth_map2, *depth_map2, ((int)minVal), 255, THRESH_TOZERO);
+}
+
 int main(){
 
 	int key_pressed=255;
@@ -260,10 +386,10 @@ int main(){
 	while(1){
 
 		eye_stereo->refresh_frame();
-		//eye_stereo->refresh_window();
-		//eye_stereo->compute_depth();
+		eye_stereo->compute_depth();
 
 		eye_stereo->refresh_window();
+
 		key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
 
