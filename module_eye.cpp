@@ -51,6 +51,8 @@ module_eye::module_eye(){
 }
 
 module_eye::~module_eye(){
+	CLEyeCameraStop(capture_left);
+	CLEyeCameraStop(capture_right);
 	CLEyeDestroyCamera(capture_left);
 	CLEyeDestroyCamera(capture_right);
 }
