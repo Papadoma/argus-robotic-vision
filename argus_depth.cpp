@@ -1,38 +1,17 @@
-#include "opencv2/core/core_c.h"
-#include "opencv2/core/core.hpp"
-#include "opencv2/flann/miniflann.hpp"
-#include "opencv2/imgproc/imgproc_c.h"
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/video/video.hpp"
-#include "opencv2/features2d/features2d.hpp"
-#include "opencv2/objdetect/objdetect.hpp"
-#include "opencv2/calib3d/calib3d.hpp"
-#include "opencv2/ml/ml.hpp"
-#include "opencv2/highgui/highgui_c.h"
-#include "opencv2/highgui/highgui.hpp"
-#include "opencv2/contrib/contrib.hpp"
-#include "opencv2/ocl/ocl.hpp"
 #include <stdio.h>
-#include <cv.h>
-#include <highgui.h>
-#include <cv.hpp>
-
-
+#include <opencv.hpp>
 #include "CLEyeMulticam.h"
+
+#include "module_eye.hpp"
+#include "module_file.hpp"
 
 using namespace std;
 using namespace cv;
 
-
 class eye_stereo_match{
 private:
-	CLEyeCameraInstance capture_left;
-	CLEyeCameraInstance capture_right;
-	PBYTE pCapBufferLeft;
-	PBYTE pCapBufferRight;
-	IplImage *pCapImageLeft;
-	IplImage *pCapImageRight;
-
+	module_eye input_module;
+	//module_file input_module;
 
 	Mat* mat_left;
 	Mat* mat_right;
@@ -79,63 +58,17 @@ public:
 //Constructor
 eye_stereo_match::eye_stereo_match(){
 
-//	module_eye input_module;
-	GUID left_id=CLEyeGetCameraUUID(1);
-	GUID right_id=CLEyeGetCameraUUID(0);
+	Size framesize = input_module.getSize();
+	height=framesize.height;
+	width=framesize.width;
 
-	capture_left = CLEyeCreateCamera(left_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)60);
-	capture_right = CLEyeCreateCamera(right_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)60);
-
-	CLEyeCameraGetFrameDimensions(capture_left, width, height);
-
-	pCapBufferLeft=NULL;
-	pCapBufferRight=NULL;
-
-	pCapImageLeft = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 1);
-	pCapImageRight = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 1);
-
-	mat_left=new Mat(height,width,CV_8UC1);
-	mat_right=new Mat(height,width,CV_8UC1);
+	mat_left=new Mat(height,width,CV_8UC3);
+	mat_right=new Mat(height,width,CV_8UC3);
 	rect_mat_left=new Mat(height,width,CV_8UC1);
 	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_8UC1);
 
-
-
 	thres_mask=new Mat(height,width,CV_8UC1);
-
-
-
-
-	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_GAIN,true);
-	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_EXPOSURE,true);
-	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_WHITEBALANCE,true);
-
-	CLEyeSetCameraParameter(capture_right,CLEYE_AUTO_GAIN,true);
-	CLEyeSetCameraParameter(capture_right,CLEYE_AUTO_EXPOSURE,true);
-	CLEyeSetCameraParameter(capture_right,CLEYE_AUTO_WHITEBALANCE,true);
-
-	if(CLEyeCameraStart(capture_left)){
-		cout<<"Left Camera initiated recording\n";
-	}else{
-		cout<<"Left Camera failed\n";
-	}
-	if(CLEyeCameraStart(capture_right)){
-		cout<<"Right Camera initiated recording\n";
-	}else{
-		cout<<"Right Camera failed\n";
-	}
-
-	//namedWindow("original_camera_left",CV_WINDOW_AUTOSIZE);
-	//namedWindow("original_camera_right",CV_WINDOW_AUTOSIZE);
-	//namedWindow("camera_left",CV_WINDOW_AUTOSIZE);
-	//namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
-	//namedWindow("depth",CV_WINDOW_AUTOSIZE);
-	//namedWindow("depth2",CV_WINDOW_AUTOSIZE);
-	//namedWindow("depth_histogram",CV_WINDOW_AUTOSIZE);
-	//namedWindow("thres_mask",CV_WINDOW_AUTOSIZE);
-	//cvMoveWindow("depth",0,0);
-	//cvMoveWindow("depth_histogram",640,0);
 
 	this->load_param();
 
@@ -154,8 +87,7 @@ eye_stereo_match::eye_stereo_match(){
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = true;
 
-
-	/*da
+	/*
 	bm.state->roi1 = roi1;
 	bm.state->roi2 = roi2;
 	bm.state->preFilterCap = 31;
@@ -168,6 +100,7 @@ eye_stereo_match::eye_stereo_match(){
 	bm.state->speckleRange = 32;
 	bm.state->disp12MaxDiff = 1;
 	 */
+
 	clearview_mask=new Rect(numberOfDisparities,0,width,height);
 	*clearview_mask = roi1 & roi2 & (*clearview_mask);
 
@@ -184,25 +117,23 @@ eye_stereo_match::eye_stereo_match(){
 eye_stereo_match::~eye_stereo_match(){
 
 	destroyAllWindows();
-	CLEyeCameraStop(capture_left);
-	CLEyeCameraStop(capture_right);
+
 }
 
 void eye_stereo_match::refresh_frame(){
 
-	CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 100);
-	CLEyeCameraGetFrame(capture_right,	pCapBufferRight, 100);
 
-	cvGetImageRawData(pCapImageLeft, &pCapBufferLeft);
-	cvGetImageRawData(pCapImageRight, &pCapBufferRight);
-	*mat_left=pCapImageLeft;
-	*mat_right=pCapImageRight;
+
+	input_module.getFrame(mat_left,mat_right);
+	cvtColor(*mat_left,*rect_mat_left,CV_RGB2GRAY);
+	cvtColor(*mat_right,*rect_mat_right,CV_RGB2GRAY);
+
 	//cvtColor(*mat_left,*mat_left,COLOR_RGBA2RGB);
 	//cvtColor(*mat_right,*mat_right,COLOR_RGBA2RGB);
 	//mat_left->convertTo(*rect_mat_left,CV_8UC1);
 	//mat_right->convertTo(*rect_mat_right,CV_8UC1);
-	remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
-	remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+	remap(*rect_mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
+	remap(*rect_mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
 
 	//keep left rectified image colored for background removal
 	//*rect_mat_left_mask=*rect_mat_left;
@@ -214,7 +145,6 @@ void eye_stereo_match::refresh_frame(){
 void eye_stereo_match::refresh_window(){
 	//imshow( "original_camera_left", *mat_left );
 	//imshow( "original_camera_right", *mat_right );
-
 
 	rectangle(*rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
 	rectangle(*rect_mat_right, *clearview_mask, Scalar(255,255,255), 1, 8);
@@ -436,7 +366,7 @@ void eye_stereo_match::remove_background(){
 
 
 	Mat tmp2(*rect_mat_left, *clearview_mask);
-		tmp2.copyTo(*rect_mat_left);
+	tmp2.copyTo(*rect_mat_left);
 	bitwise_and(*rect_mat_left, *thres_mask, *thres_mask);
 	imshow( "output_thres", *thres_mask );
 
@@ -474,11 +404,10 @@ int main(){
 	while(1){
 
 		eye_stereo->refresh_frame();
-
-		eye_stereo->compute_depth();
-
+		//eye_stereo->compute_depth();
 		//eye_stereo->remove_background();
 		eye_stereo->refresh_window();
+
 		key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
 
