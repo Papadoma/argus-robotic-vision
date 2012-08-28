@@ -14,6 +14,9 @@ private:
 	IplImage *pCapImageLeft;
 	IplImage *pCapImageRight;
 
+//	Mat* temp_mat_left;
+//	Mat* temp_mat_right;
+
 	int width;
 	int height;
 

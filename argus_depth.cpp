@@ -9,8 +9,8 @@ using namespace cv;
 
 class argus_depth{
 private:
-	//module_eye input_module;
-	module_file input_module;
+	module_eye input_module;
+	//module_file input_module;
 
 	Mat* mat_left;
 	Mat* mat_right;
@@ -29,6 +29,7 @@ private:
 	StereoBM bm;
 	StereoSGBM sgbm;
 	StereoVar var;
+
 	BackgroundSubtractorMOG2* BSMOG;
 
 	Rect* clearview_mask;
@@ -61,8 +62,8 @@ argus_depth::argus_depth(){
 	height=framesize.height;
 	width=framesize.width;
 
-	mat_left=new Mat(height,width,CV_8UC3);
-	mat_right=new Mat(height,width,CV_8UC3);
+	mat_left=new Mat(height,width,CV_8UC1);
+	mat_right=new Mat(height,width,CV_8UC1);
 	rect_mat_left=new Mat(height,width,CV_8UC1);
 	rect_mat_right=new Mat(height,width,CV_8UC1);
 	depth_map=new Mat(height,width,CV_8UC1);
@@ -115,8 +116,19 @@ argus_depth::argus_depth(){
 //Destructor
 argus_depth::~argus_depth(){
 
-	destroyAllWindows();
+	delete(mat_left);
+	delete(mat_right);
+	delete(rect_mat_left);
+	delete(rect_mat_right);
+	delete(depth_map);
+	delete(previous_depth_map);
+	delete(depth_map2);
 
+	delete(thres_mask);
+	delete(BSMOG);
+
+	destroyAllWindows();
+	//	input_module.~module_eye();
 }
 
 void argus_depth::refresh_frame(){
@@ -124,15 +136,11 @@ void argus_depth::refresh_frame(){
 
 
 	input_module.getFrame(mat_left,mat_right);
-	cvtColor(*mat_left,*rect_mat_left,CV_RGB2GRAY);
-	cvtColor(*mat_right,*rect_mat_right,CV_RGB2GRAY);
+	//	cvtColor(*mat_left,*rect_mat_left,CV_RGB2GRAY);
+	//	cvtColor(*mat_right,*rect_mat_right,CV_RGB2GRAY);
 
-	//cvtColor(*mat_left,*mat_left,COLOR_RGBA2RGB);
-	//cvtColor(*mat_right,*mat_right,COLOR_RGBA2RGB);
-	//mat_left->convertTo(*rect_mat_left,CV_8UC1);
-	//mat_right->convertTo(*rect_mat_right,CV_8UC1);
-	remap(*rect_mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
-	remap(*rect_mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+	remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
+	remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
 
 	//keep left rectified image colored for background removal
 	//*rect_mat_left_mask=*rect_mat_left;
@@ -142,8 +150,8 @@ void argus_depth::refresh_frame(){
 }
 
 void argus_depth::refresh_window(){
-	//imshow( "original_camera_left", *mat_left );
-	//imshow( "original_camera_right", *mat_right );
+	imshow( "original_camera_left", *mat_left );
+	imshow( "original_camera_right", *mat_right );
 
 	rectangle(*rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
 	rectangle(*rect_mat_right, *clearview_mask, Scalar(255,255,255), 1, 8);
@@ -152,9 +160,11 @@ void argus_depth::refresh_window(){
 	imshow( "camera_right", *rect_mat_right );
 	//imshow( "depth", *depth_map );
 
-	Mat* jet_depth_map2=new Mat(height,width,CV_8UC3);
-	applyColorMap(*depth_map2, *jet_depth_map2, COLORMAP_JET );
-	imshow( "depth2", *jet_depth_map2 );
+	Mat jet_depth_map2(height,width,CV_8UC3);
+	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
+	imshow( "depth2", jet_depth_map2 );
+
+
 	//imshow( "depth2", *depth_map2 );
 }
 
@@ -171,7 +181,7 @@ void argus_depth::load_param(){
 	Mat R, T, E, F;
 	Mat R1, R2, P1, P2, Q;
 
-	Size imageSize=mat_left->size();
+	Size imageSize(width,height);
 
 	FileStorage fs(intrinsics, CV_STORAGE_READ);
 	if( fs.isOpened() )
@@ -255,8 +265,8 @@ Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
 }
 
 void argus_depth::compute_depth(){
-	rect_mat_left->convertTo(*rect_mat_left,CV_8UC1);
-	rect_mat_right->convertTo(*rect_mat_right,CV_8UC1);
+	//rect_mat_left->convertTo(*rect_mat_left,CV_8UC1);
+	//rect_mat_right->convertTo(*rect_mat_right,CV_8UC1);
 	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
 	//var(*rect_mat_left,*rect_mat_right,*depth_map);
 	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
@@ -312,12 +322,13 @@ void argus_depth::smooth_depth_map(){
 	Mat result2(result.size(),CV_8UC1);
 	bilateralFilter(result, result2, 9, 30, 30, BORDER_DEFAULT );
 
-	Mat* jet_result=new Mat(result.size(),CV_8UC3);
-	applyColorMap(result, *jet_result, COLORMAP_JET );
-	imshow( "smoothed", *jet_result);
+	Mat jet_result(result.size(),CV_8UC3);
+	applyColorMap(result, jet_result, COLORMAP_JET );
+	imshow( "smoothed", jet_result);
 
-	applyColorMap(result2, *jet_result, COLORMAP_JET );
-	imshow( "extrasmoothed", *jet_result);
+	applyColorMap(result2, jet_result, COLORMAP_JET );
+	imshow( "extrasmoothed", jet_result);
+
 
 	result.copyTo(*previous_depth_map);
 
@@ -334,8 +345,8 @@ void argus_depth::remove_background(){
 
 	(*BSMOG)(*rect_mat_left,*thres_mask,0.01);
 	//imshow( "thres_mask", *thres_mask );
-	thres_mask->convertTo(*thres_mask,CV_8UC1);
-	threshold(*thres_mask, *thres_mask, 126, 255, THRESH_BINARY); //shadows are 127
+	//thres_mask->convertTo(*thres_mask,CV_8UC1);
+	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
 	//depth_map2 442 rows 550 cols
 	//!int low_thres=128;
 	//Mat mask=Mat::zeros(depth_map2->rows,depth_map2->cols,CV_8UC1);
@@ -369,23 +380,23 @@ void argus_depth::remove_background(){
 	bitwise_and(*rect_mat_left, *thres_mask, *thres_mask);
 	imshow( "output_thres", *thres_mask );
 
-	double minVal;
-	double maxVal;
-	//*depth_map2 = (*depth_map2)|(*thres_mask);
-	depth_map2->copyTo(tmp);
-	bitwise_and(*depth_map2, *thres_mask, tmp);
-	//tmp.copyTo(*depth_map2);
-	minMaxLoc(tmp,0,&maxVal,0,0,Mat());
-
-	tmp=~tmp;
-	threshold(tmp, tmp, 254, 255, THRESH_TOZERO_INV);
-	minMaxLoc(tmp,0,&minVal,0,0,Mat());
-	minVal=255-minVal;
-
-	//imshow( "thres_mask", tmp );
-	//threshold(tmp, tmp, 0, 255, THRESH_TOZERO_INV);
-	threshold(*depth_map2, *depth_map2, ((int)maxVal)+1, 255, THRESH_TOZERO_INV);
-	threshold(*depth_map2, *depth_map2, ((int)minVal), 255, THRESH_TOZERO);
+	//	double minVal;
+	//	double maxVal;
+	//	//*depth_map2 = (*depth_map2)|(*thres_mask);
+	//	depth_map2->copyTo(tmp);
+	//	bitwise_and(*depth_map2, *thres_mask, tmp);
+	//	//tmp.copyTo(*depth_map2);
+	//	minMaxLoc(tmp,0,&maxVal,0,0,Mat());
+	//
+	//	tmp=~tmp;
+	//	threshold(tmp, tmp, 254, 255, THRESH_TOZERO_INV);
+	//	minMaxLoc(tmp,0,&minVal,0,0,Mat());
+	//	minVal=255-minVal;
+	//
+	//	//imshow( "thres_mask", tmp );
+	//	//threshold(tmp, tmp, 0, 255, THRESH_TOZERO_INV);
+	//	threshold(*depth_map2, *depth_map2, ((int)maxVal)+1, 255, THRESH_TOZERO_INV);
+	//	threshold(*depth_map2, *depth_map2, ((int)minVal), 255, THRESH_TOZERO);
 }
 
 int main(){
@@ -393,17 +404,11 @@ int main(){
 	int key_pressed=255;
 	argus_depth *eye_stereo = new argus_depth();
 
-	int numCams = CLEyeGetCameraCount();
-	if(numCams == 0)
-	{
-		printf("No PS3Eye cameras detected\n");
-		return -1;
-	}
-	printf("Found %d cameras\n", numCams);
+
 	while(1){
 
 		eye_stereo->refresh_frame();
-		//eye_stereo->compute_depth();
+		eye_stereo->compute_depth();
 		//eye_stereo->remove_background();
 		eye_stereo->refresh_window();
 
