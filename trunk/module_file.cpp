@@ -48,7 +48,9 @@ Size module_file::getSize(){
 
 void module_file::getFrame(Mat* mat_left,Mat* mat_right){
 	if((capture_left->isOpened())&&(capture_right->isOpened())){
-		capture_left->read(*mat_left);
-		capture_right->read(*mat_right);
+		capture_left->grab();
+		capture_right->grab();
+		capture_left->retrieve(*mat_left,3);
+		capture_right->retrieve(*mat_right,3);
 	}
 }

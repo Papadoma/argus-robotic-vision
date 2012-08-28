@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <opencv.hpp>
-#include "CLEyeMulticam.h"
 
 #include "module_eye.hpp"
 #include "module_file.hpp"
@@ -8,10 +7,10 @@
 using namespace std;
 using namespace cv;
 
-class eye_stereo_match{
+class argus_depth{
 private:
-	module_eye input_module;
-	//module_file input_module;
+	//module_eye input_module;
+	module_file input_module;
 
 	Mat* mat_left;
 	Mat* mat_right;
@@ -42,8 +41,8 @@ private:
 	void smooth_depth_map();
 
 public:
-	eye_stereo_match();
-	~eye_stereo_match();
+	argus_depth();
+	~argus_depth();
 
 	Mat imHist(Mat, float, float);
 
@@ -56,7 +55,7 @@ public:
 };
 
 //Constructor
-eye_stereo_match::eye_stereo_match(){
+argus_depth::argus_depth(){
 
 	Size framesize = input_module.getSize();
 	height=framesize.height;
@@ -114,13 +113,13 @@ eye_stereo_match::eye_stereo_match(){
 }
 
 //Destructor
-eye_stereo_match::~eye_stereo_match(){
+argus_depth::~argus_depth(){
 
 	destroyAllWindows();
 
 }
 
-void eye_stereo_match::refresh_frame(){
+void argus_depth::refresh_frame(){
 
 
 
@@ -142,7 +141,7 @@ void eye_stereo_match::refresh_frame(){
 	//cvtColor( *rect_mat_right, *rect_mat_right, CV_RGB2GRAY );
 }
 
-void eye_stereo_match::refresh_window(){
+void argus_depth::refresh_window(){
 	//imshow( "original_camera_left", *mat_left );
 	//imshow( "original_camera_right", *mat_right );
 
@@ -160,7 +159,7 @@ void eye_stereo_match::refresh_window(){
 }
 
 
-void eye_stereo_match::load_param(){
+void argus_depth::load_param(){
 
 	bool flag1=false;
 	bool flag2=false;
@@ -216,12 +215,12 @@ void eye_stereo_match::load_param(){
 
 }
 
-void eye_stereo_match::info(){
+void argus_depth::info(){
 
 	//cout<<capture_left->get(CV_CAP_PROP_POS_FRAMES)<<"\n";
 }
 
-Mat eye_stereo_match::imHist(Mat hist, float scaleX=1, float scaleY=1){
+Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
 	double maxVal=0;
 
 	//Mask out the zero values from histogram
@@ -255,7 +254,7 @@ Mat eye_stereo_match::imHist(Mat hist, float scaleX=1, float scaleY=1){
 	return histImg;
 }
 
-void eye_stereo_match::compute_depth(){
+void argus_depth::compute_depth(){
 	rect_mat_left->convertTo(*rect_mat_left,CV_8UC1);
 	rect_mat_right->convertTo(*rect_mat_right,CV_8UC1);
 	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
@@ -291,7 +290,7 @@ void eye_stereo_match::compute_depth(){
 
 }
 
-void eye_stereo_match::smooth_depth_map(){
+void argus_depth::smooth_depth_map(){
 	//*previous_depth_map= abs((*depth_map) - (*previous_depth_map)) ;
 	//bitwise_and(*previous_depth_map, *depth_map, *depth_map);
 	//addWeighted(*depth_map, (double)0.5, *previous_depth_map, (double)0.5, 0, *depth_map);
@@ -329,7 +328,7 @@ void eye_stereo_match::smooth_depth_map(){
 }
 
 
-void eye_stereo_match::remove_background(){
+void argus_depth::remove_background(){
 	//BSMOG.bShadowDetection = false;
 	//BSMOG.nmixtures = 3;
 
@@ -392,7 +391,7 @@ void eye_stereo_match::remove_background(){
 int main(){
 
 	int key_pressed=255;
-	eye_stereo_match *eye_stereo = new eye_stereo_match();
+	argus_depth *eye_stereo = new argus_depth();
 
 	int numCams = CLEyeGetCameraCount();
 	if(numCams == 0)

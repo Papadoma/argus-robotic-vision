@@ -1,22 +1,13 @@
-#include "opencv2/core/core_c.h"
-#include "opencv2/core/core.hpp"
-#include "opencv2/flann/miniflann.hpp"
-#include "opencv2/imgproc/imgproc_c.h"
-#include "opencv2/imgproc/imgproc.hpp"
-#include "opencv2/video/video.hpp"
-#include "opencv2/features2d/features2d.hpp"
-#include "opencv2/objdetect/objdetect.hpp"
-#include "opencv2/calib3d/calib3d.hpp"
-#include "opencv2/ml/ml.hpp"
-#include "opencv2/highgui/highgui_c.h"
-#include "opencv2/highgui/highgui.hpp"
-#include "opencv2/contrib/contrib.hpp"
 #include <stdio.h>
+#include <opencv.hpp>
+
+#include "module_eye.hpp"
+#include "module_file.hpp"
 
 using namespace std;
 using namespace cv;
 
-class eye_stereo_match{
+class stereo_save_file{
 private:
 	VideoCapture* capture_left;
 	VideoCapture* capture_right;
@@ -43,8 +34,8 @@ private:
 	void load_param();
 
 public:
-	eye_stereo_match();
-	~eye_stereo_match();
+	stereo_save_file();
+	~stereo_save_file();
 
 	Mat imHist(Mat, float, float);
 
@@ -57,7 +48,7 @@ public:
 };
 
 //Constructor
-eye_stereo_match::eye_stereo_match(){
+stereo_save_file::stereo_save_file(){
 	width = 640;
 	height = 480;
 	numberOfDisparities=48;
@@ -129,7 +120,7 @@ eye_stereo_match::eye_stereo_match(){
 }
 
 //Destructor
-eye_stereo_match::~eye_stereo_match(){
+stereo_save_file::~stereo_save_file(){
 
 	destroyAllWindows();
 
@@ -138,7 +129,7 @@ eye_stereo_match::~eye_stereo_match(){
 
 }
 
-void eye_stereo_match::refresh_frame(){
+void stereo_save_file::refresh_frame(){
 	if((capture_left->isOpened())&&(capture_right->isOpened())){
 		capture_left->grab();
 		capture_right->grab();
@@ -160,7 +151,7 @@ void eye_stereo_match::refresh_frame(){
 	}
 }
 
-void eye_stereo_match::refresh_window(){
+void stereo_save_file::refresh_window(){
 	imshow( "original_camera_left", *mat_left );
 	imshow( "original_camera_right", *mat_right );
 	//imshow( "camera_left", *rect_mat_left );
@@ -170,7 +161,7 @@ void eye_stereo_match::refresh_window(){
 
 }
 
-void eye_stereo_match::load_param(){
+void stereo_save_file::load_param(){
 
 	bool flag1=false;
 	bool flag2=false;
@@ -230,7 +221,7 @@ void eye_stereo_match::load_param(){
 int main(){
 
 	int key_pressed=255;
-	eye_stereo_match *eye_stereo = new eye_stereo_match();
+	stereo_save_file *eye_stereo = new stereo_save_file();
 
 	while(1){
 
