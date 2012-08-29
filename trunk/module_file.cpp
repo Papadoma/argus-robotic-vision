@@ -9,8 +9,8 @@ using namespace cv;
 module_file::module_file(){
 //	filename_left="C:/Users/papadoma/Videos/youtube3D_left.mpg";
 //	filename_right="C:/Users/papadoma/Videos/youtube3D_right.mpg";
-	filename_left="D:/Dropbox/youtube3D_left.mpg";
-	filename_right="D:/Dropbox/youtube3D_right.mpg";
+	filename_left="D:/Dropbox/Videos/MMA_left.mpg";
+	filename_right="D:/Dropbox/Videos/MMA_right.mpg";
 
 	cout<<"Creating capture instances\n";
 	capture_left = new VideoCapture();

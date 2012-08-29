@@ -9,8 +9,8 @@ using namespace cv;
 
 class argus_depth{
 private:
-	module_eye input_module;
-	//module_file input_module;
+	//module_eye input_module;
+	module_file input_module;
 
 	Mat* mat_left;
 	Mat* mat_right;
@@ -109,7 +109,7 @@ argus_depth::argus_depth(){
 
 	depth_map2=new Mat(clearview_mask->height,clearview_mask->width,CV_8UC1);
 
-	BSMOG=new BackgroundSubtractorMOG2(1000,2,true);
+	BSMOG=new BackgroundSubtractorMOG2(60,20,true);
 
 }
 
@@ -150,19 +150,27 @@ void argus_depth::refresh_frame(){
 }
 
 void argus_depth::refresh_window(){
-	imshow( "original_camera_left", *mat_left );
-	imshow( "original_camera_right", *mat_right );
+//	imshow( "original_camera_left", *mat_left );
+//	imshow( "original_camera_right", *mat_right );
 
 	rectangle(*rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
 	rectangle(*rect_mat_right, *clearview_mask, Scalar(255,255,255), 1, 8);
 
-	imshow( "camera_left", *rect_mat_left );
-	imshow( "camera_right", *rect_mat_right );
+	Mat imgResult(height,2*width,CV_8UC1); // Your final imageasd
+	Mat roiImgResult_Left = imgResult(Rect(0,0,rect_mat_left->cols,rect_mat_left->rows));
+	Mat roiImgResult_Right = imgResult(Rect(rect_mat_right->cols,0,rect_mat_right->cols,rect_mat_right->rows));
+	Mat roiImg1 = (*rect_mat_left)(Rect(0,0,rect_mat_left->cols,rect_mat_left->rows));
+	Mat roiImg2 = (*rect_mat_right)(Rect(0,0,rect_mat_right->cols,rect_mat_right->rows));
+	roiImg1.copyTo(roiImgResult_Left);
+	roiImg2.copyTo(roiImgResult_Right);
+
+	imshow( "camera", imgResult );
+
 	//imshow( "depth", *depth_map );
 
-	Mat jet_depth_map2(height,width,CV_8UC3);
-	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
-	imshow( "depth2", jet_depth_map2 );
+//	Mat jet_depth_map2(height,width,CV_8UC3);
+//	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
+//	imshow( "depth2", jet_depth_map2 );
 
 
 	//imshow( "depth2", *depth_map2 );
@@ -343,7 +351,7 @@ void argus_depth::remove_background(){
 	//BSMOG.bShadowDetection = false;
 	//BSMOG.nmixtures = 3;
 
-	(*BSMOG)(*rect_mat_left,*thres_mask,0.01);
+	(*BSMOG)(*rect_mat_left,*thres_mask,0.0001);
 	//imshow( "thres_mask", *thres_mask );
 	//thres_mask->convertTo(*thres_mask,CV_8UC1);
 	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
@@ -371,13 +379,13 @@ void argus_depth::remove_background(){
 	imshow( "thres_mask_smoothed", *thres_mask );
 
 
-	dilate(*thres_mask,*thres_mask,Mat(),Point(),20);
-	erode(*thres_mask,*thres_mask,Mat(),Point(),6);
+	dilate(*thres_mask,*thres_mask,Mat(),Point(),30);
+	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
 
 
 	Mat tmp2(*rect_mat_left, *clearview_mask);
-	tmp2.copyTo(*rect_mat_left);
-	bitwise_and(*rect_mat_left, *thres_mask, *thres_mask);
+	//tmp2.copyTo(*rect_mat_left);
+	bitwise_and(tmp2, *thres_mask, *thres_mask);
 	imshow( "output_thres", *thres_mask );
 
 	//	double minVal;
@@ -408,8 +416,8 @@ int main(){
 	while(1){
 
 		eye_stereo->refresh_frame();
-		eye_stereo->compute_depth();
-		//eye_stereo->remove_background();
+		//eye_stereo->compute_depth();
+		eye_stereo->remove_background();
 		eye_stereo->refresh_window();
 
 		key_pressed = cvWaitKey(1) & 255;
