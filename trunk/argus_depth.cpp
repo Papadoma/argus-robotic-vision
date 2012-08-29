@@ -22,6 +22,7 @@ private:
 
 	Mat* thres_mask;
 
+	Mat* prev_rect_mat_left;
 
 	Rect roi1, roi2;
 	Mat rmap[2][2];
@@ -70,6 +71,8 @@ argus_depth::argus_depth(){
 
 	thres_mask=new Mat(height,width,CV_8UC1);
 
+	prev_rect_mat_left=new Mat(height,width,CV_8UC1);
+
 	this->load_param();
 
 	numberOfDisparities=48;
@@ -109,7 +112,7 @@ argus_depth::argus_depth(){
 
 	depth_map2=new Mat(clearview_mask->height,clearview_mask->width,CV_8UC1);
 
-	BSMOG=new BackgroundSubtractorMOG2(60,20,true);
+	BSMOG=new BackgroundSubtractorMOG2(500,100,true);
 
 }
 
@@ -127,6 +130,8 @@ argus_depth::~argus_depth(){
 	delete(thres_mask);
 	delete(BSMOG);
 
+	delete(prev_rect_mat_left);
+
 	destroyAllWindows();
 	//	input_module.~module_eye();
 }
@@ -136,6 +141,10 @@ void argus_depth::refresh_frame(){
 
 
 	input_module.getFrame(mat_left,mat_right);
+	// GaussianBlur(*mat_left, *mat_left, Size (7,7),0,0,0);
+	// GaussianBlur(*mat_right, *mat_right, Size (7,7),0,0,0);
+	//	medianBlur(*mat_left, *mat_left,7);
+	//	medianBlur(*mat_right, *mat_right,7);
 	//	cvtColor(*mat_left,*rect_mat_left,CV_RGB2GRAY);
 	//	cvtColor(*mat_right,*rect_mat_right,CV_RGB2GRAY);
 
@@ -150,8 +159,8 @@ void argus_depth::refresh_frame(){
 }
 
 void argus_depth::refresh_window(){
-//	imshow( "original_camera_left", *mat_left );
-//	imshow( "original_camera_right", *mat_right );
+	//	imshow( "original_camera_left", *mat_left );
+	//	imshow( "original_camera_right", *mat_right );
 
 	rectangle(*rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
 	rectangle(*rect_mat_right, *clearview_mask, Scalar(255,255,255), 1, 8);
@@ -288,7 +297,7 @@ void argus_depth::compute_depth(){
 	//tmp2.copyTo(*thres_mask);
 
 	//Smooth out the depth map
-	this->smooth_depth_map();
+	//this->smooth_depth_map();
 
 	//depth_map2->convertTo(*depth_map2, CV_8U);
 
@@ -348,45 +357,45 @@ void argus_depth::smooth_depth_map(){
 
 
 void argus_depth::remove_background(){
-	//BSMOG.bShadowDetection = false;
-	//BSMOG.nmixtures = 3;
 
-	(*BSMOG)(*rect_mat_left,*thres_mask,0.0001);
-	//imshow( "thres_mask", *thres_mask );
-	//thres_mask->convertTo(*thres_mask,CV_8UC1);
+	(*BSMOG)(*rect_mat_left,*thres_mask,0.00005);
 	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
-	//depth_map2 442 rows 550 cols
-	//!int low_thres=128;
-	//Mat mask=Mat::zeros(depth_map2->rows,depth_map2->cols,CV_8UC1);
+	//	Mat tmp(*thres_mask, *clearview_mask);
+	//	tmp.copyTo(*thres_mask);
+	imshow( "MOG based mask", *thres_mask );
 
-	//!threshold(*depth_map2, *thres_mask, 128, 255, THRESH_TOZERO);
-	//Mat * mask=new Mat(depth_map2->rows,depth_map2->cols,CV_8UC1);
+	Mat temp(height,width,CV_8UC1);
+	rect_mat_left->copyTo(temp);
+	temp=temp-(*prev_rect_mat_left);
+	//bitwise_xor(*prev_rect_mat_left, temp,temp);
+	threshold(temp, temp, 20, 255, THRESH_BINARY);
+	imshow("Frame difference based mask", temp);
+	rect_mat_left->copyTo(*prev_rect_mat_left);
 
-	//mask.convertTo(mask, CV_8UC1);
+	bitwise_or(*thres_mask, temp, *thres_mask);
 
-	//mask.at<int>(0,0)=128;
-	//cout<<mask.at<int>(100,100)<<"\n";
 
-	//Rect mask(numberOfDisparities,0,width,height);
-	Mat tmp(*thres_mask, *clearview_mask);
-	tmp.copyTo(*thres_mask);
-	//delete(mask);
-
-	imshow( "thres_mask", *thres_mask );
-
+	//erode(*thres_mask,*thres_mask,Mat(),Point(),2);
 	medianBlur(*thres_mask, *thres_mask, 5);
+	//GaussianBlur(*thres_mask, *thres_mask, Size (15,15),0,0,0);
+	//dilate(*thres_mask,*thres_mask,Mat(),Point(),10);
+	//erode(*thres_mask,*thres_mask,Mat(),Point(),12);
+	imshow( "Fused and smoothed", *thres_mask );
 
-	imshow( "thres_mask_smoothed", *thres_mask );
+
+
 
 
 	dilate(*thres_mask,*thres_mask,Mat(),Point(),30);
 	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
 
-
-	Mat tmp2(*rect_mat_left, *clearview_mask);
+	//	Mat tmp2(*rect_mat_left, *clearview_mask);
+	Mat tmp2(*rect_mat_left);
 	//tmp2.copyTo(*rect_mat_left);
 	bitwise_and(tmp2, *thres_mask, *thres_mask);
 	imshow( "output_thres", *thres_mask );
+
+
 
 	//	double minVal;
 	//	double maxVal;
@@ -406,6 +415,7 @@ void argus_depth::remove_background(){
 	//	threshold(*depth_map2, *depth_map2, ((int)maxVal)+1, 255, THRESH_TOZERO_INV);
 	//	threshold(*depth_map2, *depth_map2, ((int)minVal), 255, THRESH_TOZERO);
 }
+
 
 int main(){
 

@@ -14,11 +14,12 @@ private:
 	IplImage *pCapImageLeft;
 	IplImage *pCapImageRight;
 
-//	Mat* temp_mat_left;
-//	Mat* temp_mat_right;
+	//	Mat* temp_mat_left;
+	//	Mat* temp_mat_right;
 
-	int width;
-	int height;
+	int width;	//Frame width
+	int height; //Frame height
+	bool EoF; 	//End of file flag
 
 public:
 	module_eye();
