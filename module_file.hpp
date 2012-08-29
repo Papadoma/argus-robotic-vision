@@ -15,6 +15,7 @@ private:
 
 	int width;
 	int height;
+	bool EoF;
 
 public:
 	module_file();
