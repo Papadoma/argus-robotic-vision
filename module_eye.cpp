@@ -15,8 +15,8 @@ module_eye::module_eye(){
 	GUID left_id=CLEyeGetCameraUUID(1);
 	GUID right_id=CLEyeGetCameraUUID(0);
 
-	capture_left = CLEyeCreateCamera(left_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)60);
-	capture_right = CLEyeCreateCamera(right_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)60);
+	capture_left = CLEyeCreateCamera(left_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)75);
+	capture_right = CLEyeCreateCamera(right_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)75);
 
 	CLEyeCameraGetFrameDimensions(capture_left, width, height);
 

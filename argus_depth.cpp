@@ -362,38 +362,78 @@ void argus_depth::remove_background(){
 	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
 	//	Mat tmp(*thres_mask, *clearview_mask);
 	//	tmp.copyTo(*thres_mask);
-	imshow( "MOG based mask", *thres_mask );
+	//imshow( "MOG based mask", *thres_mask );
 
 	Mat temp(height,width,CV_8UC1);
 	rect_mat_left->copyTo(temp);
 	temp=temp-(*prev_rect_mat_left);
 	//bitwise_xor(*prev_rect_mat_left, temp,temp);
 	threshold(temp, temp, 20, 255, THRESH_BINARY);
-	imshow("Frame difference based mask", temp);
+	//medianBlur(temp,temp, 5);
+	//imshow("Frame difference based mask", temp);
 	rect_mat_left->copyTo(*prev_rect_mat_left);
 
 	bitwise_or(*thres_mask, temp, *thres_mask);
+	//imshow( "Fused", *thres_mask );
 
 
-	//erode(*thres_mask,*thres_mask,Mat(),Point(),2);
 	medianBlur(*thres_mask, *thres_mask, 5);
+	//erode(*thres_mask,*thres_mask,1);
 	//GaussianBlur(*thres_mask, *thres_mask, Size (15,15),0,0,0);
 	//dilate(*thres_mask,*thres_mask,Mat(),Point(),10);
 	//erode(*thres_mask,*thres_mask,Mat(),Point(),12);
 	imshow( "Fused and smoothed", *thres_mask );
 
+	Mat img_8uc3(height,width,CV_8UC3);
+	thres_mask->copyTo(img_8uc3);
+	vector<vector<Point> > contours;
+	vector<Vec4i> hierarchy;
+	//int Nc = findContours(*thres_mask, *storage, *first_contour, sizeof(CvContour), CV_RETR_LIST);
+	dilate(*thres_mask,*thres_mask,Mat(),Point(),25);
+	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
+
+	findContours( *thres_mask, contours, hierarchy,CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE );
+
+	cvtColor( *thres_mask, img_8uc3, CV_GRAY2BGR );
+	drawContours( img_8uc3, contours, -1, CV_RGB(250,0,0), 1, 8, hierarchy,1 );
+//	for(int idx = 0 ; idx >= 0; idx = hierarchy[idx][0] )
+//	{
+//		//Scalar color( rand()&255, rand()&255, rand()&255 );
+//		//drawContours( img_8uc3, contours, idx, CV_RGB(250,0,0), CV_FILLED, 8, hierarchy );
+//	}
+
+	//	int n=0;
+	//printf( "Total Contours Detected: %d\n", Nc );
+	//	CvScalar red = CV_RGB(250,0,0);
+	//	CvScalar blue = CV_RGB(0,0,250);
+
+	//	for( CvSeq* c=first_contour; c!=NULL; c=c->h_next ){
+	//		cvCvtColor( thres_mask, &img_8uc3, CV_GRAY2BGR );
+	//		cvDrawContours(&img_8uc3,c,red,blue,1,2,8);
+	////		printf( "Contour #%dn", n );
+	////		printf( " %d elements:\n", c->total );
+	////		for( int i=0; itotal; ++i ){
+	////			CvPoint* p = CV_GET_SEQ_ELEM( CvPoint, c, i );
+	////			printf(" (%d,%d)\n", p->x, p->y );
+	////		}
+	////		cvWaitKey();
+	////		n++;
+	//	}
+	//bitwise_or(img_8uc3, *thres_mask, img_8uc3);
+	imshow( "Contours 2", img_8uc3 );
 
 
 
 
 	dilate(*thres_mask,*thres_mask,Mat(),Point(),30);
 	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
+	//imshow( "Fused, smoothed and inflated", *thres_mask );
 
-	//	Mat tmp2(*rect_mat_left, *clearview_mask);
-	Mat tmp2(*rect_mat_left);
-	//tmp2.copyTo(*rect_mat_left);
-	bitwise_and(tmp2, *thres_mask, *thres_mask);
-	imshow( "output_thres", *thres_mask );
+	//	//	Mat tmp2(*rect_mat_left, *clearview_mask);
+	//	Mat tmp2(*rect_mat_left);
+	//	//tmp2.copyTo(*rect_mat_left);
+	//	bitwise_and(tmp2, *thres_mask, *thres_mask);
+	//	imshow( "output_thres", *thres_mask );
 
 
 
