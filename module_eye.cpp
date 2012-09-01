@@ -15,16 +15,16 @@ module_eye::module_eye(){
 	GUID left_id=CLEyeGetCameraUUID(1);
 	GUID right_id=CLEyeGetCameraUUID(0);
 
-	capture_left = CLEyeCreateCamera(left_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)75);
-	capture_right = CLEyeCreateCamera(right_id, CLEYE_MONO_RAW , CLEYE_VGA, (float)75);
+	capture_left = CLEyeCreateCamera(left_id, CLEYE_COLOR_RAW , CLEYE_VGA, (float)60);
+	capture_right = CLEyeCreateCamera(right_id, CLEYE_COLOR_RAW , CLEYE_VGA, (float)60);
 
 	CLEyeCameraGetFrameDimensions(capture_left, width, height);
 
 	pCapBufferLeft=NULL;
 	pCapBufferRight=NULL;
 
-	pCapImageLeft = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 1);
-	pCapImageRight = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 1);
+	pCapImageLeft = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 4);
+	pCapImageRight = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 4);
 
 	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_GAIN,true);
 	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_EXPOSURE,true);
@@ -69,8 +69,12 @@ void module_eye::getFrame(Mat* mat_left,Mat* mat_right){
 
 	cvGetImageRawData(pCapImageLeft, &pCapBufferLeft);
 	cvGetImageRawData(pCapImageRight, &pCapBufferRight);
-	*mat_left=pCapImageLeft;
-	*mat_right=pCapImageRight;
+
+	//*mat_left=pCapImageLeft;
+	//*mat_right=pCapImageRight;
+
+	cvtColor((Mat)pCapImageLeft,*mat_left,COLOR_RGBA2RGB);
+	cvtColor((Mat)pCapImageRight,*mat_right,COLOR_RGBA2RGB);
 
 	//	cvtColor(*temp_mat_left,*temp_mat_left,COLOR_RGBA2RGB);
 	//	cvtColor(*temp_mat_right,*temp_mat_right,COLOR_RGBA2RGB);
