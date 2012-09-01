@@ -9,13 +9,15 @@ using namespace cv;
 
 class argus_depth{
 private:
-	//module_eye input_module;
-	module_file input_module;
+	module_eye input_module;
+	//module_file input_module;
 
 	Mat* mat_left;
 	Mat* mat_right;
 	Mat* rect_mat_left;
 	Mat* rect_mat_right;
+	Mat* BW_rect_mat_left;
+	Mat* BW_rect_mat_right;
 	Mat* depth_map;
 	Mat* previous_depth_map;
 	Mat* depth_map2;
@@ -47,11 +49,13 @@ public:
 	~argus_depth();
 
 	Mat imHist(Mat, float, float);
+	int fps;
 
 	void remove_background();
 	void refresh_frame();
 	void refresh_window();
 	void compute_depth();
+	void detect_human();
 
 	void info();
 };
@@ -63,10 +67,13 @@ argus_depth::argus_depth(){
 	height=framesize.height;
 	width=framesize.width;
 
-	mat_left=new Mat(height,width,CV_8UC1);
-	mat_right=new Mat(height,width,CV_8UC1);
-	rect_mat_left=new Mat(height,width,CV_8UC1);
-	rect_mat_right=new Mat(height,width,CV_8UC1);
+	mat_left=new Mat(height,width,CV_8UC3);
+	mat_right=new Mat(height,width,CV_8UC3);
+	BW_rect_mat_left=new Mat(height,width,CV_8UC1);
+	BW_rect_mat_right=new Mat(height,width,CV_8UC1);
+	rect_mat_left=new Mat(height,width,CV_8UC3);
+	rect_mat_right=new Mat(height,width,CV_8UC3);
+
 	depth_map=new Mat(height,width,CV_8UC1);
 
 	thres_mask=new Mat(height,width,CV_8UC1);
@@ -123,6 +130,8 @@ argus_depth::~argus_depth(){
 	delete(mat_right);
 	delete(rect_mat_left);
 	delete(rect_mat_right);
+	delete(BW_rect_mat_left);
+	delete(BW_rect_mat_right);
 	delete(depth_map);
 	delete(previous_depth_map);
 	delete(depth_map2);
@@ -137,35 +146,23 @@ argus_depth::~argus_depth(){
 }
 
 void argus_depth::refresh_frame(){
-
-
-
 	input_module.getFrame(mat_left,mat_right);
-	// GaussianBlur(*mat_left, *mat_left, Size (7,7),0,0,0);
-	// GaussianBlur(*mat_right, *mat_right, Size (7,7),0,0,0);
-	//	medianBlur(*mat_left, *mat_left,7);
-	//	medianBlur(*mat_right, *mat_right,7);
-	//	cvtColor(*mat_left,*rect_mat_left,CV_RGB2GRAY);
-	//	cvtColor(*mat_right,*rect_mat_right,CV_RGB2GRAY);
 
 	remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
 	remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
 
-	//keep left rectified image colored for background removal
-	//*rect_mat_left_mask=*rect_mat_left;
-
-	//cvtColor( *rect_mat_left, *rect_mat_left, CV_RGB2GRAY );
-	//cvtColor( *rect_mat_right, *rect_mat_right, CV_RGB2GRAY );
+	cvtColor(*rect_mat_left,*BW_rect_mat_left,CV_RGB2GRAY);
+	cvtColor(*rect_mat_right,*BW_rect_mat_right,CV_RGB2GRAY);
 }
 
 void argus_depth::refresh_window(){
-	//	imshow( "original_camera_left", *mat_left );
+	//		imshow( "original_camera_left", *mat_left );
 	//	imshow( "original_camera_right", *mat_right );
 
 	rectangle(*rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
 	rectangle(*rect_mat_right, *clearview_mask, Scalar(255,255,255), 1, 8);
 
-	Mat imgResult(height,2*width,CV_8UC1); // Your final imageasd
+	Mat imgResult(height,2*width,CV_8UC3); // Your final imageasd
 	Mat roiImgResult_Left = imgResult(Rect(0,0,rect_mat_left->cols,rect_mat_left->rows));
 	Mat roiImgResult_Right = imgResult(Rect(rect_mat_right->cols,0,rect_mat_right->cols,rect_mat_right->rows));
 	Mat roiImg1 = (*rect_mat_left)(Rect(0,0,rect_mat_left->cols,rect_mat_left->rows));
@@ -173,13 +170,11 @@ void argus_depth::refresh_window(){
 	roiImg1.copyTo(roiImgResult_Left);
 	roiImg2.copyTo(roiImgResult_Right);
 
-	imshow( "camera", imgResult );
-
 	//imshow( "depth", *depth_map );
 
-//	Mat jet_depth_map2(height,width,CV_8UC3);
-//	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
-//	imshow( "depth2", jet_depth_map2 );
+	//	Mat jet_depth_map2(height,width,CV_8UC3);
+	//	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
+	//	imshow( "depth2", jet_depth_map2 );
 
 
 	//imshow( "depth2", *depth_map2 );
@@ -282,9 +277,7 @@ Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
 }
 
 void argus_depth::compute_depth(){
-	//rect_mat_left->convertTo(*rect_mat_left,CV_8UC1);
-	//rect_mat_right->convertTo(*rect_mat_right,CV_8UC1);
-	sgbm(*rect_mat_left,*rect_mat_right,*depth_map);
+	sgbm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
 	//var(*rect_mat_left,*rect_mat_right,*depth_map);
 	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
 	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
@@ -301,20 +294,18 @@ void argus_depth::compute_depth(){
 
 	//depth_map2->convertTo(*depth_map2, CV_8U);
 
-	int hbins = 64;
-	int histSize[] = {hbins};
-	// saturation varies from 0 (black-gray-white) to
-	// 255 (pure spectrum color)
-	float sranges[] = { 0, 255 };
-	const float* ranges[] = { sranges };
-	MatND depth_hist;
-	int channels[] = {0};
-	calcHist( depth_map2, 1, channels, Mat(), depth_hist, 1, histSize, ranges,	true, false );
-	//depth_map->convertTo(*depth_map, CV_8U);
-	depth_hist = imHist(depth_hist,4,4);
-	imshow( "depth_histogram", depth_hist );
-
-
+	//	int hbins = 64;
+	//	int histSize[] = {hbins};
+	//	// saturation varies from 0 (black-gray-white) to
+	//	// 255 (pure spectrum color)
+	//	float sranges[] = { 0, 255 };
+	//	const float* ranges[] = { sranges };
+	//	MatND depth_hist;
+	//	int channels[] = {0};
+	//	calcHist( depth_map2, 1, channels, Mat(), depth_hist, 1, histSize, ranges,	true, false );
+	//	//depth_map->convertTo(*depth_map, CV_8U);
+	//	depth_hist = imHist(depth_hist,4,4);
+	//	imshow( "depth_histogram", depth_hist );
 }
 
 void argus_depth::smooth_depth_map(){
@@ -357,50 +348,53 @@ void argus_depth::smooth_depth_map(){
 
 
 void argus_depth::remove_background(){
-
-	(*BSMOG)(*rect_mat_left,*thres_mask,0.00005);
+	(*BSMOG)(*BW_rect_mat_left,*thres_mask,0.0005);
 	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
-	//	Mat tmp(*thres_mask, *clearview_mask);
-	//	tmp.copyTo(*thres_mask);
-	//imshow( "MOG based mask", *thres_mask );
+	//	imshow( "MOG based mask", *thres_mask );
 
 	Mat temp(height,width,CV_8UC1);
-	rect_mat_left->copyTo(temp);
-	temp=temp-(*prev_rect_mat_left);
+	BW_rect_mat_left->copyTo(temp);
+	temp=abs(temp-(*prev_rect_mat_left));
 	//bitwise_xor(*prev_rect_mat_left, temp,temp);
 	threshold(temp, temp, 20, 255, THRESH_BINARY);
 	//medianBlur(temp,temp, 5);
-	//imshow("Frame difference based mask", temp);
-	rect_mat_left->copyTo(*prev_rect_mat_left);
+	//	imshow("Frame difference based mask", temp);
+	BW_rect_mat_left->copyTo(*prev_rect_mat_left);
 
 	bitwise_or(*thres_mask, temp, *thres_mask);
 	//imshow( "Fused", *thres_mask );
 
+	Mat skin_image(height,width,CV_8UC1);
+	Mat rect_mat_left_YCrCb(height,width,CV_8UC3);
+	cvtColor(*rect_mat_left, rect_mat_left_YCrCb, CV_BGR2YCrCb);
+	Scalar yccMin(0, 131, 80);
+	Scalar yccMax(255, 185, 135);
+	inRange(rect_mat_left_YCrCb, yccMin, yccMax, skin_image);
+	imshow("Skin",skin_image);
 
 	medianBlur(*thres_mask, *thres_mask, 5);
-	//erode(*thres_mask,*thres_mask,1);
-	//GaussianBlur(*thres_mask, *thres_mask, Size (15,15),0,0,0);
-	//dilate(*thres_mask,*thres_mask,Mat(),Point(),10);
-	//erode(*thres_mask,*thres_mask,Mat(),Point(),12);
 	imshow( "Fused and smoothed", *thres_mask );
 
 	Mat img_8uc3(height,width,CV_8UC3);
 	thres_mask->copyTo(img_8uc3);
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
-	//int Nc = findContours(*thres_mask, *storage, *first_contour, sizeof(CvContour), CV_RETR_LIST);
+
 	dilate(*thres_mask,*thres_mask,Mat(),Point(),25);
 	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
+
+	//	Mat tmp(*thres_mask, *clearview_mask);
+	//	tmp.copyTo(*thres_mask);
 
 	findContours( *thres_mask, contours, hierarchy,CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE );
 
 	cvtColor( *thres_mask, img_8uc3, CV_GRAY2BGR );
 	drawContours( img_8uc3, contours, -1, CV_RGB(250,0,0), 1, 8, hierarchy,1 );
-//	for(int idx = 0 ; idx >= 0; idx = hierarchy[idx][0] )
-//	{
-//		//Scalar color( rand()&255, rand()&255, rand()&255 );
-//		//drawContours( img_8uc3, contours, idx, CV_RGB(250,0,0), CV_FILLED, 8, hierarchy );
-//	}
+	//	for(int idx = 0 ; idx >= 0; idx = hierarchy[idx][0] )
+	//	{
+	//		//Scalar color( rand()&255, rand()&255, rand()&255 );
+	//		//drawContours( img_8uc3, contours, idx, CV_RGB(250,0,0), CV_FILLED, 8, hierarchy );
+	//	}
 
 	//	int n=0;
 	//printf( "Total Contours Detected: %d\n", Nc );
@@ -421,9 +415,6 @@ void argus_depth::remove_background(){
 	//	}
 	//bitwise_or(img_8uc3, *thres_mask, img_8uc3);
 	imshow( "Contours 2", img_8uc3 );
-
-
-
 
 	dilate(*thres_mask,*thres_mask,Mat(),Point(),30);
 	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
@@ -456,6 +447,44 @@ void argus_depth::remove_background(){
 	//	threshold(*depth_map2, *depth_map2, ((int)minVal), 255, THRESH_TOZERO);
 }
 
+void argus_depth::detect_human(){
+
+	HOGDescriptor hog;
+	hog.setSVMDetector(HOGDescriptor::getDefaultPeopleDetector());
+	namedWindow("people detector", 1);
+
+
+	vector<Rect> found, found_filtered;
+	double t = (double)getTickCount();
+	hog.detectMultiScale(*rect_mat_left, found, 0, Size(8,8), Size(32,32), 1.05, 2);
+	t = (double)getTickCount() - t;
+	printf("tdetection time = %gms\n", t*1000./cv::getTickFrequency());
+	size_t i, j;
+	for( i = 0; i < found.size(); i++ )
+	{
+		Rect r = found[i];
+		for( j = 0; j < found.size(); j++ )
+			if( j != i && (r & found[j]) == r)
+				break;
+		if( j == found.size() )
+			found_filtered.push_back(r);
+	}
+	for( i = 0; i < found_filtered.size(); i++ )
+	{
+		Rect r = found_filtered[i];
+		// the HOG detector returns slightly larger rectangles than the real objects.
+		// so we slightly shrink the rectangles to get a nicer output.
+		r.x += cvRound(r.width*0.1);
+		r.width = cvRound(r.width*0.8);
+		r.y += cvRound(r.height*0.07);
+		r.height = cvRound(r.height*0.8);
+		rectangle(*rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 3);
+	}
+	imshow("people detector", *rect_mat_left);
+
+
+
+}
 
 int main(){
 
@@ -464,10 +493,13 @@ int main(){
 
 
 	while(1){
-
+		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
 		//eye_stereo->compute_depth();
-		eye_stereo->remove_background();
+		//eye_stereo->detect_human();
+		//eye_stereo->remove_background();
+		t = (double)getTickCount() - t;
+		eye_stereo->fps= 1/(t/cv::getTickFrequency());
 		eye_stereo->refresh_window();
 
 		key_pressed = cvWaitKey(1) & 255;
