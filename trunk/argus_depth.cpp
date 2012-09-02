@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <opencv.hpp>
+#include "opencv2/ocl/ocl.hpp"
 
 #include "module_eye.hpp"
 #include "module_file.hpp"
 
 using namespace std;
 using namespace cv;
+using namespace ocl;
 
 class argus_depth{
 private:
@@ -25,6 +27,8 @@ private:
 	Mat* thres_mask;
 
 	Mat* prev_rect_mat_left;
+
+
 
 	Rect roi1, roi2;
 	Mat rmap[2][2];
@@ -80,12 +84,25 @@ argus_depth::argus_depth(){
 
 	prev_rect_mat_left=new Mat(height,width,CV_8UC1);
 
+
+	printf("Begin creating ocl context...\n");
+	//std::vector<ocl::Info> oclinfo;
+	//int devnums = ocl::getDevice(oclinfo);
+	vector<Info> ocl_info;
+	int devnums=getDevice(ocl_info);
+	printf("End creating ocl context...\n");
+
+	if(devnums<1){
+		std::cout << "no OPENCL device found\n";
+	}
+
+
 	this->load_param();
 
 	numberOfDisparities=48;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 5;
+	sgbm.SADWindowSize = 3;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -153,6 +170,12 @@ void argus_depth::refresh_frame(){
 
 	cvtColor(*rect_mat_left,*BW_rect_mat_left,CV_RGB2GRAY);
 	cvtColor(*rect_mat_right,*BW_rect_mat_right,CV_RGB2GRAY);
+
+	//oclMat left_ocl(height,width,CV_8UC3);
+
+//	left_ocl.upload(*rect_mat_left);
+
+	//oclMat* disp_ocl;
 }
 
 void argus_depth::refresh_window(){
@@ -173,9 +196,9 @@ void argus_depth::refresh_window(){
 	imshow( "Camera", imgResult );
 	//imshow( "depth", *depth_map );
 
-	//	Mat jet_depth_map2(height,width,CV_8UC3);
-	//	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
-	//	imshow( "depth2", jet_depth_map2 );
+	Mat jet_depth_map2(height,width,CV_8UC3);
+	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
+	imshow( "depth2", jet_depth_map2 );
 
 
 	//imshow( "depth2", *depth_map2 );
@@ -497,12 +520,12 @@ int main(){
 	while(1){
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
-		//eye_stereo->compute_depth();
-		eye_stereo->detect_human();
+		eye_stereo->compute_depth();
+		//eye_stereo->detect_human();
 		//eye_stereo->remove_background();
 		t = (double)getTickCount() - t;
 		eye_stereo->fps= 1/(t/cv::getTickFrequency());
-		//eye_stereo->refresh_window();
+		eye_stereo->refresh_window();
 
 		key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
