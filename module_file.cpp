@@ -53,10 +53,10 @@ void module_file::getFrame(Mat* mat_left,Mat* mat_right){
 		if(!capture_right->grab())EoF=true;
 
 		if(EoF==false){
-			capture_left->retrieve(*mat_left,1);
-			capture_right->retrieve(*mat_right,1);
-			cvtColor(*mat_left,*mat_left,CV_RGB2GRAY);
-			cvtColor(*mat_right,*mat_right,CV_RGB2GRAY);
+			capture_left->retrieve(*mat_left,3);
+			capture_right->retrieve(*mat_right,3);
+			//cvtColor(*mat_left,*mat_left,CV_RGB2GRAY);
+			//cvtColor(*mat_right,*mat_right,CV_RGB2GRAY);
 		}
 	}
 }

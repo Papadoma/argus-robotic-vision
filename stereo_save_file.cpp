@@ -46,8 +46,8 @@ stereo_save_file::stereo_save_file(){
 	mat_left=new Mat(height,width,CV_8UC3);
 	mat_right=new Mat(height,width,CV_8UC3);
 
-	video_left.open("left.mpg",CV_FOURCC('P','I','M','1'),30,framesize,false);
-	video_right.open("right.mpg",CV_FOURCC('P','I','M','1'),30,framesize,false);
+	video_left.open("left.mpg",CV_FOURCC('P','I','M','1'),30,framesize,true);
+	video_right.open("right.mpg",CV_FOURCC('P','I','M','1'),30,framesize,true);
 
 	flag_recording=false;
 
@@ -71,7 +71,7 @@ void stereo_save_file::refresh_frame(){
 
 void stereo_save_file::refresh_window(){
 
-	Mat imgResult(height,2*width,CV_8UC1); // Your final image
+	Mat imgResult(height,2*width,CV_8UC3); // Your final image
 	Mat roiImgResult_Left = imgResult(Rect(0,0,width,height));
 	Mat roiImgResult_Right = imgResult(Rect(width,0,width,height));
 	Mat roiImg1 = (*mat_left)(Rect(0,0,width,height));
@@ -79,7 +79,7 @@ void stereo_save_file::refresh_window(){
 	roiImg1.copyTo(roiImgResult_Left);
 	roiImg2.copyTo(roiImgResult_Right);
 
-	cvtColor(imgResult,imgResult,COLOR_GRAY2RGB);
+
 	if(flag_recording){
 		putText(imgResult, "RECORDING", Point(10,30), FONT_HERSHEY_SIMPLEX, 1, Scalar (0,0,255),2);
 	}else{
