@@ -170,6 +170,7 @@ void argus_depth::refresh_window(){
 	roiImg1.copyTo(roiImgResult_Left);
 	roiImg2.copyTo(roiImgResult_Right);
 
+	imshow( "Camera", imgResult );
 	//imshow( "depth", *depth_map );
 
 	//	Mat jet_depth_map2(height,width,CV_8UC3);
@@ -456,7 +457,8 @@ void argus_depth::detect_human(){
 
 	vector<Rect> found, found_filtered;
 	double t = (double)getTickCount();
-	hog.detectMultiScale(*rect_mat_left, found, 0, Size(8,8), Size(32,32), 1.05, 2);
+	hog.detectMultiScale(*rect_mat_left, found, 0, Size(64,64), Size(64,64), 1.05, 1);
+
 	t = (double)getTickCount() - t;
 	printf("tdetection time = %gms\n", t*1000./cv::getTickFrequency());
 	size_t i, j;
@@ -496,11 +498,11 @@ int main(){
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
 		//eye_stereo->compute_depth();
-		//eye_stereo->detect_human();
+		eye_stereo->detect_human();
 		//eye_stereo->remove_background();
 		t = (double)getTickCount() - t;
 		eye_stereo->fps= 1/(t/cv::getTickFrequency());
-		eye_stereo->refresh_window();
+		//eye_stereo->refresh_window();
 
 		key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
