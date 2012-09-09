@@ -7,12 +7,12 @@
 
 using namespace std;
 using namespace cv;
-using namespace ocl;
+//using namespace ocl;
 
 class argus_depth{
 private:
-	module_eye input_module;
-	//module_file input_module;
+	//module_eye input_module;
+	module_file input_module;
 
 	Mat* mat_left;
 	Mat* mat_right;
@@ -28,7 +28,9 @@ private:
 
 	Mat* prev_rect_mat_left;
 
-
+	ocl::oclMat* left_ocl;
+	ocl::oclMat* right_ocl;
+	ocl::oclMat* depth_ocl;
 
 	Rect roi1, roi2;
 	Mat rmap[2][2];
@@ -36,6 +38,7 @@ private:
 	StereoBM bm;
 	StereoSGBM sgbm;
 	StereoVar var;
+	ocl::StereoBM_GPU gpu_bm;
 
 	BackgroundSubtractorMOG2* BSMOG;
 
@@ -84,25 +87,28 @@ argus_depth::argus_depth(){
 
 	prev_rect_mat_left=new Mat(height,width,CV_8UC1);
 
+	left_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	right_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	depth_ocl=new ocl::oclMat(height,width,CV_8UC1);
 
-	printf("Begin creating ocl context...\n");
-	//std::vector<ocl::Info> oclinfo;
-	//int devnums = ocl::getDevice(oclinfo);
-	vector<Info> ocl_info;
-	int devnums=getDevice(ocl_info);
-	printf("End creating ocl context...\n");
-
-	if(devnums<1){
-		std::cout << "no OPENCL device found\n";
-	}
+	//	printf("Begin creating ocl context...\n");
+	//	//std::vector<ocl::Info> oclinfo;
+	//	//int devnums = ocl::getDevice(oclinfo);
+	//	vector<Info> ocl_info;
+	//	int devnums=getDevice(ocl_info);
+	//	printf("End creating ocl context...\n");
+	//
+	//	if(devnums<1){
+	//		std::cout << "no OPENCL device found\n";
+	//	}
 
 
 	this->load_param();
 
-	numberOfDisparities=48;
+	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 3;
+	sgbm.SADWindowSize = 7;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -114,19 +120,36 @@ argus_depth::argus_depth(){
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = true;
 
-	/*
-	bm.state->roi1 = roi1;
-	bm.state->roi2 = roi2;
-	bm.state->preFilterCap = 31;
-	bm.state->SADWindowSize = 19;
-	bm.state->minDisparity = 0;
-	bm.state->numberOfDisparities = numberOfDisparities;
-	bm.state->textureThreshold = 100;
-	bm.state->uniquenessRatio = 15;
-	bm.state->speckleWindowSize = 100;
-	bm.state->speckleRange = 32;
-	bm.state->disp12MaxDiff = 1;
-	 */
+	gpu_bm.preset = ocl::StereoBM_GPU::PREFILTER_XSOBEL ;
+	gpu_bm.ndisp = numberOfDisparities;
+	gpu_bm.winSize = 19;
+	//gpu_bm.avergeTexThreshold=0.01;
+
+//	bm.state->roi1 = roi1;
+//	bm.state->roi2 = roi2;
+//	bm.state->preFilterCap = 31;
+//	bm.state->SADWindowSize = 19;
+//	bm.state->minDisparity = 0;
+//	bm.state->numberOfDisparities = numberOfDisparities;
+//	bm.state->textureThreshold = 100;
+//	bm.state->uniquenessRatio = 15;
+//	bm.state->speckleWindowSize = 100;
+//	bm.state->speckleRange = 32;
+//	bm.state->disp12MaxDiff = 1;
+
+//	var.levels = 3;                                 // ignored with USE_AUTO_PARAMS
+//	var.pyrScale = 0.5;                             // ignored with USE_AUTO_PARAMS
+//	var.nIt = 25;
+//	var.minDisp = -numberOfDisparities;
+//	var.maxDisp = 0;
+//	var.poly_n = 3;
+//	var.poly_sigma = 0.0;
+//	var.fi = 15.0f;
+//	var.lambda = 0.03f;
+//	//var.penalization = var.PENALIZATION_TICHONOV;   // ignored with USE_AUTO_PARAMS
+//	//var.cycle = var.CYCLE_V;                        // ignored with USE_AUTO_PARAMS
+//	//var.flags = var.USE_SMART_ID | var.USE_AUTO_PARAMS | var.USE_INITIAL_DISPARITY | var.USE_MEDIAN_FILTERING ;
+
 
 	clearview_mask=new Rect(numberOfDisparities,0,width,height);
 	*clearview_mask = roi1 & roi2 & (*clearview_mask);
@@ -171,9 +194,13 @@ void argus_depth::refresh_frame(){
 	cvtColor(*rect_mat_left,*BW_rect_mat_left,CV_RGB2GRAY);
 	cvtColor(*rect_mat_right,*BW_rect_mat_right,CV_RGB2GRAY);
 
+	left_ocl->upload(*BW_rect_mat_left);
+	right_ocl->upload(*BW_rect_mat_right);
+
+
 	//oclMat left_ocl(height,width,CV_8UC3);
 
-//	left_ocl.upload(*rect_mat_left);
+	//	left_ocl.upload(*rect_mat_left);
 
 	//oclMat* disp_ocl;
 }
@@ -301,10 +328,23 @@ Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
 }
 
 void argus_depth::compute_depth(){
-	sgbm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
+	//sgbm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
+	//bm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
+	//var(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
+	gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
+	//medianFilter(*depth_ocl, *depth_ocl, 5);
+	//dilate(*depth_ocl,*depth_ocl,Mat(),Point(),25);
+	//medianFilter(*depth_ocl, *depth_ocl, 5);
+	depth_ocl->download(*depth_map);
+
+	//	Mat test(height,width,CV_8UC1);
+	//	right_ocl->download(test);
+	//	imshow("test",test);
+
 	//var(*rect_mat_left,*rect_mat_right,*depth_map);
 	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
-	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
+	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities));
+	//depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
 
 	//Cut-out the extra black space on areas which cannot be computed
 	//Rect mask(numberOfDisparities,0,width,height);
@@ -372,9 +412,10 @@ void argus_depth::smooth_depth_map(){
 
 
 void argus_depth::remove_background(){
-	(*BSMOG)(*BW_rect_mat_left,*thres_mask,0.0005);
+	(*BSMOG)(*BW_rect_mat_left,*thres_mask,0.00005);
+
 	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
-	//	imshow( "MOG based mask", *thres_mask );
+	imshow( "MOG based mask", *thres_mask );
 
 	Mat temp(height,width,CV_8UC1);
 	BW_rect_mat_left->copyTo(temp);
@@ -512,16 +553,18 @@ void argus_depth::detect_human(){
 }
 
 int main(){
-
 	int key_pressed=255;
-	argus_depth *eye_stereo = new argus_depth();
 
+	vector<ocl::Info> info;
+	CV_Assert(ocl::getDevice(info));
+
+	argus_depth *eye_stereo = new argus_depth();
 
 	while(1){
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
-		eye_stereo->compute_depth();
-		//eye_stereo->detect_human();
+		//eye_stereo->compute_depth();
+		eye_stereo->detect_human();
 		//eye_stereo->remove_background();
 		t = (double)getTickCount() - t;
 		eye_stereo->fps= 1/(t/cv::getTickFrequency());
