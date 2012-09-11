@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <opencv.hpp>
-#include "opencv2/ocl/ocl.hpp"
+//#include "opencv2/ocl/ocl.hpp"
 
 #include "module_eye.hpp"
 #include "module_file.hpp"
@@ -28,9 +28,9 @@ private:
 
 	Mat* prev_rect_mat_left;
 
-	ocl::oclMat* left_ocl;
-	ocl::oclMat* right_ocl;
-	ocl::oclMat* depth_ocl;
+	//ocl::oclMat* left_ocl;
+	//ocl::oclMat* right_ocl;
+	//ocl::oclMat* depth_ocl;
 
 	Rect roi1, roi2;
 	Mat rmap[2][2];
@@ -38,7 +38,7 @@ private:
 	StereoBM bm;
 	StereoSGBM sgbm;
 	StereoVar var;
-	ocl::StereoBM_GPU gpu_bm;
+	//ocl::StereoBM_GPU gpu_bm;
 
 	BackgroundSubtractorMOG2* BSMOG;
 
@@ -87,9 +87,9 @@ argus_depth::argus_depth(){
 
 	prev_rect_mat_left=new Mat(height,width,CV_8UC1);
 
-	left_ocl=new ocl::oclMat(height,width,CV_8UC1);
-	right_ocl=new ocl::oclMat(height,width,CV_8UC1);
-	depth_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	//left_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	//right_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	//depth_ocl=new ocl::oclMat(height,width,CV_8UC1);
 
 	//	printf("Begin creating ocl context...\n");
 	//	//std::vector<ocl::Info> oclinfo;
@@ -120,9 +120,9 @@ argus_depth::argus_depth(){
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = true;
 
-	gpu_bm.preset = ocl::StereoBM_GPU::PREFILTER_XSOBEL ;
-	gpu_bm.ndisp = numberOfDisparities;
-	gpu_bm.winSize = 19;
+	//gpu_bm.preset = ocl::StereoBM_GPU::PREFILTER_XSOBEL ;
+	//gpu_bm.ndisp = numberOfDisparities;
+	//gpu_bm.winSize = 19;
 	//gpu_bm.avergeTexThreshold=0.01;
 
 //	bm.state->roi1 = roi1;
@@ -194,8 +194,8 @@ void argus_depth::refresh_frame(){
 	cvtColor(*rect_mat_left,*BW_rect_mat_left,CV_RGB2GRAY);
 	cvtColor(*rect_mat_right,*BW_rect_mat_right,CV_RGB2GRAY);
 
-	left_ocl->upload(*BW_rect_mat_left);
-	right_ocl->upload(*BW_rect_mat_right);
+	//left_ocl->upload(*BW_rect_mat_left);
+	//right_ocl->upload(*BW_rect_mat_right);
 
 
 	//oclMat left_ocl(height,width,CV_8UC3);
@@ -328,14 +328,14 @@ Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
 }
 
 void argus_depth::compute_depth(){
-	//sgbm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
+	sgbm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
 	//bm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
 	//var(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
-	gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
+	//gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
 	//medianFilter(*depth_ocl, *depth_ocl, 5);
 	//dilate(*depth_ocl,*depth_ocl,Mat(),Point(),25);
 	//medianFilter(*depth_ocl, *depth_ocl, 5);
-	depth_ocl->download(*depth_map);
+	//depth_ocl->download(*depth_map);
 
 	//	Mat test(height,width,CV_8UC1);
 	//	right_ocl->download(test);
@@ -521,7 +521,7 @@ void argus_depth::detect_human(){
 
 	vector<Rect> found, found_filtered;
 	double t = (double)getTickCount();
-	hog.detectMultiScale(*rect_mat_left, found, 0, Size(64,64), Size(64,64), 1.05, 1);
+	hog.detectMultiScale(*BW_rect_mat_left, found, 2, Size(8,8), Size(32,32), 1.1, 0,true);
 
 	t = (double)getTickCount() - t;
 	printf("tdetection time = %gms\n", t*1000./cv::getTickFrequency());
@@ -555,8 +555,8 @@ void argus_depth::detect_human(){
 int main(){
 	int key_pressed=255;
 
-	vector<ocl::Info> info;
-	CV_Assert(ocl::getDevice(info));
+	//vector<ocl::Info> info;
+	//CV_Assert(ocl::getDevice(info));
 
 	argus_depth *eye_stereo = new argus_depth();
 
