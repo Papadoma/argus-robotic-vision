@@ -32,14 +32,16 @@ private:
 	ocl::oclMat* right_ocl;
 	ocl::oclMat* depth_ocl;
 
+	Rect human_anchor;
 	Rect roi1, roi2;
 	Mat rmap[2][2];
 
 	StereoBM bm;
 	StereoSGBM sgbm;
 	StereoVar var;
-	ocl::StereoBM_GPU gpu_bm;
-	ocl::HOGDescriptor hog_gpu;
+
+	//ocl::HOGDescriptor hog;
+	HOGDescriptor hog;
 
 	BackgroundSubtractorMOG2* BSMOG;
 
@@ -48,6 +50,7 @@ private:
 	int numberOfDisparities;
 	int width;
 	int height;
+	int frame_counter;
 
 	void load_param();
 	void smooth_depth_map();
@@ -70,6 +73,9 @@ public:
 
 //Constructor
 argus_depth::argus_depth(){
+	frame_counter=0;
+	//hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
+	hog.setSVMDetector(HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
 
 	Size framesize = input_module.getSize();
 	height=framesize.height;
@@ -109,7 +115,7 @@ argus_depth::argus_depth(){
 	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 7;
+	sgbm.SADWindowSize = 3;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -121,12 +127,8 @@ argus_depth::argus_depth(){
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = true;
 
-	gpu_bm.preset = ocl::StereoBM_GPU::PREFILTER_XSOBEL ;//BASIC_PRESET or PREFILTER_XSOBEL
-	gpu_bm.ndisp = numberOfDisparities;
-	gpu_bm.winSize = 5;
-	gpu_bm.avergeTexThreshold=0.01;
 
-	hog_gpu.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
+
 
 	clearview_mask=new Rect(numberOfDisparities,0,width,height);
 	*clearview_mask = roi1 & roi2 & (*clearview_mask);
@@ -171,8 +173,9 @@ void argus_depth::refresh_frame(){
 	cvtColor(*rect_mat_left,*BW_rect_mat_left,CV_RGB2GRAY);
 	cvtColor(*rect_mat_right,*BW_rect_mat_right,CV_RGB2GRAY);
 
-//	equalizeHist(*BW_rect_mat_left,*BW_rect_mat_left);
-//	equalizeHist(*BW_rect_mat_right,*BW_rect_mat_right);
+	frame_counter++;
+	//	equalizeHist(*BW_rect_mat_left,*BW_rect_mat_left);
+	//	equalizeHist(*BW_rect_mat_right,*BW_rect_mat_right);
 
 	//left_ocl->upload(*BW_rect_mat_left);
 	//right_ocl->upload(*BW_rect_mat_right);
@@ -308,14 +311,14 @@ Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
 }
 
 void argus_depth::compute_depth(){
-	//sgbm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
+	sgbm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
 	//bm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
 	//var(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
-	gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
+	//gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
 	//medianFilter(*depth_ocl, *depth_ocl, 5);
 	//dilate(*depth_ocl,*depth_ocl,Mat(),Point(),25);
 	//medianFilter(*depth_ocl, *depth_ocl, 5);
-	depth_ocl->download(*depth_map);
+	//depth_ocl->download(*depth_map);
 
 	//	Mat test(height,width,CV_8UC1);
 	//	right_ocl->download(test);
@@ -323,8 +326,8 @@ void argus_depth::compute_depth(){
 
 	//var(*rect_mat_left,*rect_mat_right,*depth_map);
 	//bm(*rect_mat_left,*rect_mat_right,*depth_map);
-	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities));
-	//depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
+	//depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities));
+	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
 
 	//Cut-out the extra black space on areas which cannot be computed
 	//Rect mask(numberOfDisparities,0,width,height);
@@ -354,16 +357,16 @@ void argus_depth::compute_depth(){
 
 void argus_depth::compute_depth_gpu(){
 
-	ocl::bilateralFilter(*left_ocl,*left_ocl,3,30,30,BORDER_REPLICATE    );
-	ocl::bilateralFilter(*right_ocl,*right_ocl,3,30,30,BORDER_REPLICATE    );
-	gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
-	//ocl::equalizeHist(*depth_ocl,*depth_ocl);
-	depth_ocl->download(*depth_map);
-	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities));
-	//(*depth_map,*depth_map);
-
-	Mat tmp(*depth_map, *clearview_mask);
-	tmp.copyTo(*depth_map2);
+	//	ocl::bilateralFilter(*left_ocl,*left_ocl,3,30,30,BORDER_REPLICATE    );
+	//	ocl::bilateralFilter(*right_ocl,*right_ocl,3,30,30,BORDER_REPLICATE    );
+	//	gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
+	//	//ocl::equalizeHist(*depth_ocl,*depth_ocl);
+	//	depth_ocl->download(*depth_map);
+	//	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities));
+	//	//(*depth_map,*depth_map);
+	//
+	//	Mat tmp(*depth_map, *clearview_mask);
+	//	tmp.copyTo(*depth_map2);
 }
 
 void argus_depth::smooth_depth_map(){
@@ -507,9 +510,8 @@ void argus_depth::remove_background(){
 }
 
 void argus_depth::detect_human(){
-	//ocl::HOGDescriptor hog_gpu;
-	//hog_gpu.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
 
+	hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());
 	ocl::oclMat img_ocl;
 	img_ocl.upload(*BW_rect_mat_left);
 
@@ -517,7 +519,7 @@ void argus_depth::detect_human(){
 	vector<Rect> found, found_filtered;
 
 	double t = (double)getTickCount();
-	hog_gpu.detectMultiScale(img_ocl, found, 0, Size(8,8), Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
+	hog.detectMultiScale(img_ocl, found, 0, Size(8,8), Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
 	t = (double)getTickCount() - t;
 
 	stringstream ss;//create a stringstream
@@ -535,25 +537,80 @@ void argus_depth::detect_human(){
 		if( j == found.size() )
 			found_filtered.push_back(r);
 	}
+
+	int found_area[found_filtered.size()];
 	for( i = 0; i < found_filtered.size(); i++ )
 	{
-		Rect r = found_filtered[i];
-		// the HOG detector returns slightly larger rectangles than the real objects.
-		// so we slightly shrink the rectangles to get a nicer output.
-		r.x += cvRound(r.width*0.1);
-		r.width = cvRound(r.width*0.8);
-		r.y += cvRound(r.height*0.07);
-		r.height = cvRound(r.height*0.8);
-		rectangle(*rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 3);
+		//found_filtered[i].x += cvRound(r.width*0.1);
+		//found_filtered[i].width = cvRound(r.width*0.8);
+		found_filtered[i].y += cvRound(found_filtered[i].height*0.05);
+		//found_filtered[i].height = cvRound(found_filtered[i].height*1.05);
+		found_area[i] = found_filtered[i].area();
 	}
 
 
-	//		setNumThreads(4);
-	//	printf("Threads = %d\n",getNumThreads());
-	//	printf("Detects = %d\n",found2.size());
+	vector<Rect> found_person;
+	if(found_filtered.size()>1){
+		int max = found_area[0];
+		int pos = 0;
+		for( i = 1; i < found_filtered.size(); i++ ){
+			if (found_area[i]>max){
+				max = found_area[i];
+				pos = i;
+			}
+		}
 
-	imshow("people detector", *rect_mat_left);
 
+		Point p1(found_filtered[pos].x+found_filtered[pos].width/2,found_filtered[pos].y+found_filtered[pos].height/2);
+		for( i = 0; i < found_filtered.size(); i++ ){
+			Point p2(found_filtered[i].x+found_filtered[i].width/2,found_filtered[i].y+found_filtered[i].height/2);
+			int distance = sqrt((p1.x-p2.x)*(p1.x-p2.x)+(p1.y-p2.y)*(p1.y-p2.y));
+			if(distance<found_filtered[pos].width/2 && distance<found_filtered[pos].height/2){
+				found_person.push_back(found_filtered[i]);
+			}
+		}
+
+	}else if(found_filtered.size()==1){
+		found_person.push_back(found_filtered[0]);
+	}
+
+	for( i = 0; i < found_filtered.size(); i++ )
+	{
+		// the HOG detector returns slightly larger rectangles than the real objects.
+		// so we slightly shrink the rectangles to get a nicer output.
+		Rect r = found_filtered[i];
+
+		rectangle(*rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
+		rectangle(*rect_mat_right, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
+	}
+	//	if(!found_filtered.empty()){
+	//		stringstream ss2;//create a stringstream
+	//		ss2 << found_area[pos];//add number to the stream
+	//		putText(*rect_mat_left, ss2.str(), found_filtered[pos].br(), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 1, 8, false );
+	//	}
+	//	for( i = 0; i < found_person.size(); i++ ){
+	//		rectangle(*rect_mat_left, found_person[i].tl(), found_person[i].br(), cv::Scalar(255,0,0), 1);
+	//	}
+	vector<Point> points_person;
+	for( i = 0; i < found_person.size(); i++ ){
+		rectangle(*rect_mat_left, found_person[i].tl(), found_person[i].br(), cv::Scalar(0,255,255), 2);
+		Point p1=found_person[i].tl();
+		Point p2(found_person[i].x+found_person[i].width,found_person[i].y);
+		Point p3=found_person[i].br();
+		Point p4(found_person[i].x,found_person[i].y+found_person[i].height);
+		points_person.push_back(p1);
+		points_person.push_back(p2);
+		points_person.push_back(p3);
+		points_person.push_back(p4);
+	}
+	if(points_person.size()>1){
+		Rect final = boundingRect(points_person);
+		rectangle(*rect_mat_left, final.tl(), final.br(), cv::Scalar(0,0,255), 3);
+		//if(final.area()>human_anchor.area())human_anchor=final;
+		if(final.area()>0.7*human_anchor.area())human_anchor=final;
+
+	}
+	rectangle(*rect_mat_left, human_anchor.tl(), human_anchor.br(), cv::Scalar(255,0,255), 1);
 }
 
 int main(){
@@ -561,6 +618,12 @@ int main(){
 
 	vector<ocl::Info> info;
 	CV_Assert(ocl::getDevice(info));
+	int devnums =ocl::getDevice(info);
+
+
+	if(devnums<1){
+		std::cout << "no OPENCL device found\n";
+	}
 
 	argus_depth *eye_stereo = new argus_depth();
 
@@ -569,6 +632,7 @@ int main(){
 		eye_stereo->refresh_frame();
 		//eye_stereo->compute_depth();
 		//eye_stereo->compute_depth_gpu();
+
 		eye_stereo->detect_human();
 		//eye_stereo->remove_background();
 		t = (double)getTickCount() - t;
