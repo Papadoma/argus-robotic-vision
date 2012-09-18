@@ -212,12 +212,12 @@ void argus_depth::refresh_window(){
 	imshow( "Camera", imgResult );
 	//imshow( "depth", *depth_map );
 
-//	Mat jet_depth_map2(height,width,CV_8UC3);
-//	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
-//	imshow( "depth2", jet_depth_map2 );
+	Mat jet_depth_map2(height,width,CV_8UC3);
+	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
+	imshow( "depth2", jet_depth_map2 );
 
 
-	imshow( "depth2", *depth_map2 );
+	//imshow( "depth2", *depth_map2 );
 }
 
 
@@ -330,7 +330,8 @@ void argus_depth::compute_depth(){
 	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
 
 	*depth_map=(*depth_map)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
-	bilateralFilter(*depth_map, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
+	depth_map->copyTo(*depth_map2);
+	//bilateralFilter(*depth_map, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
 
 
 	//Mat tmp2(*depth_map, roi1 & roi2 & mask);
@@ -615,17 +616,42 @@ void argus_depth::detect_human(){
 }
 
 void argus_depth::clustering(){
-Mat dataset((depth_map2->rows)*(depth_map2->cols),6,CV_8UC1);
-
-for(int i=0;i<depth_map2->rows;i++){
-	for(int j=0;j<depth_map2->cols;j++){
-		dataset.at<int>(j+i*(depth_map2->cols),0)=200;//i*255/depth_map2->rows;
-		dataset.at<int>(j+i*(depth_map2->cols),3)=255;//j*255/depth_map2->cols;
-		//dataset.at<int>(i*(depth_map2->cols)+j,2)=200;//depth_map2->at<int>(j,i);
-		//cout<<"cols "<<depth_map2->cols<<" "<<i<<" "<<j<<"\n";
+	//Mat dataset((depth_map2->rows)*(depth_map2->cols),3,CV_8UC1);
+	Mat intensity_data=(*BW_rect_mat_left)(human_anchor);
+	Mat data=depth_map2->reshape(1,1);
+	Mat dataset(1,data.cols,CV_8UC1);
+	data.row(0).copyTo(dataset.row(0));
+	equalizeHist(intensity_data,intensity_data);
+	//Mat dataset2=dataset.reshape(1,depth_map2->rows);
+	for(int y=0;y<depth_map2->rows-1;y++){
+		for(int x=0;x<depth_map2->cols;x++){
+			//dataset.at<int>(0,x+y*(depth_map2->cols),0)=x;
+			//dataset.at<int>(1,x+y*(depth_map2->cols),0)=intensity_data.at<int>(y,x,0);//person_left->at<int>(y,x,0);
+			//dataset.at<int>(1,x+y*(depth_map2->cols),0)=y;
+			//dataset.at<int>(3,x+y*(depth_map2->cols),0)=y;
+		}
 	}
-}
-imshow("test",dataset.t());
+	dataset.convertTo(dataset,CV_32F);
+	dataset=dataset.t();
+	//cout<<"data "<<dataset.cols<<" "<<dataset.rows<<"\n";
+	Mat labels,centers;
+	//Mat centers(2,3,CV_8UC1);
+	TermCriteria criteria;
+	criteria.type=CV_TERMCRIT_ITER;
+	criteria.maxCount=5;
+	kmeans(dataset, 5, labels, criteria, 2, KMEANS_RANDOM_CENTERS);
+	labels=labels.t();
+	labels.convertTo(labels,CV_8UC1);
+	//cout<<"data "<<data.cols<<" "<<data.rows<<" lables "<<labels.cols<<" "<<labels.rows<<"\n";
+	labels=labels*255/5;
+	//imshow("test",labels.reshape(1,depth_map2->rows));
+
+	Mat jet_depth_map2(height,width,CV_8UC3);
+	applyColorMap(labels.reshape(1,depth_map2->rows), jet_depth_map2, COLORMAP_JET );
+	imshow( "test", jet_depth_map2 );
+	imshow("left person",intensity_data);
+	//imshow("test2",dataset2);
+	//	imshow("test2",dataset);
 }
 
 int main(){
