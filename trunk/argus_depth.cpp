@@ -617,39 +617,46 @@ void argus_depth::detect_human(){
 
 void argus_depth::clustering(){
 	//Mat dataset((depth_map2->rows)*(depth_map2->cols),3,CV_8UC1);
-	Mat intensity_data=(*BW_rect_mat_left)(human_anchor);
+	//Mat intensity_data=(*BW_rect_mat_left)(human_anchor);
 	Mat data=depth_map2->reshape(1,1);
 	Mat dataset(1,data.cols,CV_8UC1);
 	data.row(0).copyTo(dataset.row(0));
-	equalizeHist(intensity_data,intensity_data);
+	//equalizeHist(intensity_data,intensity_data);
 	//Mat dataset2=dataset.reshape(1,depth_map2->rows);
-	for(int y=0;y<depth_map2->rows-1;y++){
-		for(int x=0;x<depth_map2->cols;x++){
-			//dataset.at<int>(0,x+y*(depth_map2->cols),0)=x;
-			//dataset.at<int>(1,x+y*(depth_map2->cols),0)=intensity_data.at<int>(y,x,0);//person_left->at<int>(y,x,0);
-			//dataset.at<int>(1,x+y*(depth_map2->cols),0)=y;
-			//dataset.at<int>(3,x+y*(depth_map2->cols),0)=y;
-		}
-	}
+
+
 	dataset.convertTo(dataset,CV_32F);
 	dataset=dataset.t();
-	//cout<<"data "<<dataset.cols<<" "<<dataset.rows<<"\n";
-	Mat labels,centers;
-	//Mat centers(2,3,CV_8UC1);
+
+	Mat labels(dataset.rows,1,CV_32F),centers;
+
 	TermCriteria criteria;
 	criteria.type=CV_TERMCRIT_ITER;
 	criteria.maxCount=5;
-	kmeans(dataset, 5, labels, criteria, 2, KMEANS_RANDOM_CENTERS);
+	//cout<<dataset.rows<<"\n";
+	double *max_p;
+	minMaxLoc(dataset, 0, max_p);
+	for(int i=0;i<dataset.rows;i++){
+		//cout<<dataset.rows<<"\n";//
+		labels.at<int>(i,0)=(float)0;
+		//if(dataset.at<int>(i,0)==0) labels.at<int>(i,0)=(float)0;
+		//if(dataset.at<int>(i,0)>(float)0)labels.at<int>(i,0)=(float)1;
+		//if(dataset.at<int>(i,0)==(float)(*max_p))labels.at<int>(i,0)=(float)2;
+	}
+
+	cout<<labels.at<int>(0,0)<<" ";
+	kmeans(dataset, 3, labels, criteria, 1, KMEANS_USE_INITIAL_LABELS   );
+	cout<<labels.at<int>(0,0)<<"\n";//
 	labels=labels.t();
 	labels.convertTo(labels,CV_8UC1);
 	//cout<<"data "<<data.cols<<" "<<data.rows<<" lables "<<labels.cols<<" "<<labels.rows<<"\n";
-	labels=labels*255/5;
+	labels=labels*255/3;
 	//imshow("test",labels.reshape(1,depth_map2->rows));
 
 	Mat jet_depth_map2(height,width,CV_8UC3);
 	applyColorMap(labels.reshape(1,depth_map2->rows), jet_depth_map2, COLORMAP_JET );
 	imshow( "test", jet_depth_map2 );
-	imshow("left person",intensity_data);
+	//imshow("left person",intensity_data);
 	//imshow("test2",dataset2);
 	//	imshow("test2",dataset);
 }
