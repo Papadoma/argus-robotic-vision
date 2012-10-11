@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <opencv.hpp>
 #include "opencv2/ocl/ocl.hpp"
+#include <skeltrack.h>
+
 
 #include "module_eye.hpp"
 #include "module_file.hpp"
@@ -20,6 +22,7 @@ private:
 	Mat* rect_mat_right;
 	Mat* BW_rect_mat_left;
 	Mat* BW_rect_mat_right;
+
 	Mat* depth_map;
 	Mat* previous_depth_map;
 	Mat* depth_map2;
@@ -216,7 +219,7 @@ void argus_depth::refresh_window(){
 	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
 	imshow( "depth2", jet_depth_map2 );
 
-
+	//imshow("person",person_left);
 	//imshow( "depth2", *depth_map2 );
 }
 
@@ -613,6 +616,10 @@ void argus_depth::detect_human(){
 	}
 	human_anchor=(*clearview_mask) & human_anchor;
 	rectangle(*rect_mat_left, human_anchor.tl(), human_anchor.br(), cv::Scalar(255,0,255), 1);
+
+	//	person_left = (*BW_rect_mat_left)(human_anchor).clone();
+	//	person_right = (*BW_rect_mat_right)(human_anchor).clone();
+
 }
 
 void argus_depth::clustering(){
@@ -628,34 +635,75 @@ void argus_depth::clustering(){
 	dataset.convertTo(dataset,CV_32F);
 	dataset=dataset.t();
 
-	Mat labels(dataset.rows,1,CV_32F),centers;
+	Mat labels,centers;
 
 	TermCriteria criteria;
 	criteria.type=CV_TERMCRIT_ITER;
 	criteria.maxCount=5;
-	//cout<<dataset.rows<<"\n";
-	double *max_p;
-	minMaxLoc(dataset, 0, max_p);
+
+	kmeans(dataset, 3, labels, criteria, 2, KMEANS_PP_CENTERS    );
+
+	//Find out which label shows noise
+	int noise_label, labelA, labelB;
+	float sum_teamA=0, sum_teamB=0;
 	for(int i=0;i<dataset.rows;i++){
-		//cout<<dataset.rows<<"\n";//
-		labels.at<int>(i,0)=(float)0;
-		//if(dataset.at<int>(i,0)==0) labels.at<int>(i,0)=(float)0;
-		//if(dataset.at<int>(i,0)>(float)0)labels.at<int>(i,0)=(float)1;
-		//if(dataset.at<int>(i,0)==(float)(*max_p))labels.at<int>(i,0)=(float)2;
+		if(dataset.at<int>(i,0)==(float)0){
+			noise_label=(int)labels.at<int>(i,0);
+			labelA=(noise_label+1)%3;
+			labelB=(noise_label+2)%3;
+			break;
+		};
 	}
 
-	cout<<labels.at<int>(0,0)<<" ";
-	kmeans(dataset, 3, labels, criteria, 1, KMEANS_USE_INITIAL_LABELS   );
-	cout<<labels.at<int>(0,0)<<"\n";//
+	//Calculate the sum of depth for the other teams
+	for(int i=0;i<dataset.rows;i++){
+		if(labels.at<int>(i,0)==(float)labelA){
+			sum_teamA+=dataset.at<int>(i,0);
+		}else if(labels.at<int>(i,0)==(float)labelB){
+			sum_teamB+=dataset.at<int>(i,0);
+		};
+	}
+
+	//Decide which team should be background and which foreground
+	if(sum_teamA>sum_teamB){
+		for(int i=0;i<dataset.rows;i++){
+			if(labels.at<int>(i,0)==(float)labelA){
+				labels.at<int>(i,0)=(float)2;
+			}else if(labels.at<int>(i,0)==(float)labelB){
+				labels.at<int>(i,0)=(float)1;
+			}else{
+				labels.at<int>(i,0)=(float)0;
+			};
+		}
+	}else{
+		for(int i=0;i<dataset.rows;i++){
+			if(labels.at<int>(i,0)==(float)labelA){
+				labels.at<int>(i,0)=(float)1;
+			}else if(labels.at<int>(i,0)==(float)labelB){
+				labels.at<int>(i,0)=(float)2;
+			}else{
+				labels.at<int>(i,0)=(float)0;
+			};
+		}
+	}
+
 	labels=labels.t();
 	labels.convertTo(labels,CV_8UC1);
+	labels=labels/2;
+	labels=labels*255;
+labels=labels.reshape(1,depth_map2->rows);
+
+	bitwise_and(*depth_map2,labels,*depth_map2);
+imshow("filtered",*depth_map2);
 	//cout<<"data "<<data.cols<<" "<<data.rows<<" lables "<<labels.cols<<" "<<labels.rows<<"\n";
-	labels=labels*255/3;
+
 	//imshow("test",labels.reshape(1,depth_map2->rows));
 
 	Mat jet_depth_map2(height,width,CV_8UC3);
-	applyColorMap(labels.reshape(1,depth_map2->rows), jet_depth_map2, COLORMAP_JET );
+	applyColorMap(labels, jet_depth_map2, COLORMAP_JET );
 	imshow( "test", jet_depth_map2 );
+
+
 	//imshow("left person",intensity_data);
 	//imshow("test2",dataset2);
 	//	imshow("test2",dataset);
@@ -674,7 +722,7 @@ int main(){
 	}
 
 	argus_depth *eye_stereo = new argus_depth();
-
+	bool loop=false;
 	while(1){
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
@@ -687,7 +735,11 @@ int main(){
 		eye_stereo->fps= 1/(t/cv::getTickFrequency());
 		eye_stereo->refresh_window();
 		eye_stereo->clustering();
-		key_pressed = cvWaitKey(1) & 255;
+		//key_pressed = cvWaitKey(1) & 255;
+		do{
+			key_pressed = cvWaitKey(1) & 255;
+			if ( key_pressed == 32 )loop=!loop;
+		}while (loop);
 		if ( key_pressed == 27 ) break;
 
 	}
