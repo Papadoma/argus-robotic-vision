@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <opencv.hpp>
 #include "opencv2/ocl/ocl.hpp"
-#include <skeltrack.h>
+//#include <skeltrack.h>
 
 
 #include "module_eye.hpp"
@@ -75,7 +75,7 @@ public:
 	void compute_depth();
 	void detect_human();
 	void compute_depth_gpu();
-	void info();
+	void take_snapshot();
 };
 
 //Constructor
@@ -124,7 +124,7 @@ argus_depth::argus_depth(){
 	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 5;
+	sgbm.SADWindowSize = 3;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -280,10 +280,6 @@ void argus_depth::load_param(){
 
 }
 
-void argus_depth::info(){
-
-	//cout<<capture_left->get(CV_CAP_PROP_POS_FRAMES)<<"\n";
-}
 
 Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
 	double maxVal=0;
@@ -622,6 +618,11 @@ void argus_depth::detect_human(){
 
 }
 
+void argus_depth::take_snapshot(){
+	imwrite("depth.png", *depth_map2);
+	imwrite("person.png", *person_left);
+}
+
 void argus_depth::clustering(){
 	//Mat dataset((depth_map2->rows)*(depth_map2->cols),3,CV_8UC1);
 	//Mat intensity_data=(*BW_rect_mat_left)(human_anchor);
@@ -691,17 +692,70 @@ void argus_depth::clustering(){
 	labels.convertTo(labels,CV_8UC1);
 	labels=labels/2;
 	labels=labels*255;
-labels=labels.reshape(1,depth_map2->rows);
+	labels=labels.reshape(1,depth_map2->rows);
 
-	bitwise_and(*depth_map2,labels,*depth_map2);
-imshow("filtered",*depth_map2);
-	//cout<<"data "<<data.cols<<" "<<data.rows<<" lables "<<labels.cols<<" "<<labels.rows<<"\n";
+	//imshow("Unfiltered foreground mask",labels);
 
-	//imshow("test",labels.reshape(1,depth_map2->rows));
+
+	//bilateralFilter(labels, labels2, 9, 30, 30, BORDER_DEFAULT );
+	//labels2.copyTo(labels);
+	//medianBlur(labels, labels, 5);
+
+	vector<vector<Point> > contours;
+	vector<Vec4i> hierarchy;
+
+	Mat biggest_blob;
+	labels.copyTo(biggest_blob);
+
+	findContours( biggest_blob, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
+
+	//Find biggest contour
+	vector<Point> max_contour = contours[0];
+	int max_contour_pos = 0;
+	for(int i=0;i<(int)contours.size();i++){
+
+		if(contours[i].size()>max_contour.size()){
+			max_contour=contours[i];
+			max_contour_pos=i;
+		}
+	}
+
+
+	drawContours( biggest_blob, contours, max_contour_pos, Scalar(255), CV_FILLED, 8 ); //Fill biggest blob
+	threshold(biggest_blob,biggest_blob,254,255,THRESH_BINARY); //This clears any contour leftovers caused by findContours
+	bitwise_and(biggest_blob,labels,labels); 					//Keep the internal detail of the biggest blob
+	//imshow("Filtered foreground mask",labels);
+
+	bitwise_and(*depth_map2,labels,*depth_map2);	//Filter the depth map. Keep only foreground and biggest blob
+	medianBlur(*depth_map2, *depth_map2, 5);
+	imshow("Foreground bigest blob",*depth_map2);
+
+	//	//Filter out the zero values of depth map
+	//	Mat temp;
+	//	depth_map2->copyTo(temp);
+	//	threshold(temp,temp,0,255,THRESH_BINARY_INV); //Zero values go 255 and everything else goes 0
+	//	bitwise_and(temp, biggest_blob, temp);	//From this, keep only the values inside the blob
+	//	imshow("To be replaced - mask",temp);
+	//
+	//
+	//	previous_depth_map=new Mat(depth_map2->size(),CV_8UC1);
+	//	//Keep only the calculated values of the last map that correspong to present zero values
+	//	bitwise_and(*previous_depth_map, temp, *previous_depth_map);
+	//	imshow("To be replaced - depth",*previous_depth_map);
+	//	//From this, keep only the values inside the blob
+	//	//bitwise_and(*previous_depth_map, biggest_blob, *previous_depth_map);
+	//
+	//	//Add the previous calculated depth values only to zero present values
+	//	add(*depth_map2, *previous_depth_map, *depth_map2);
+	//	depth_map2->copyTo(*previous_depth_map);
+
+
+	//imshow("filtered",*depth_map2);
 
 	Mat jet_depth_map2(height,width,CV_8UC3);
-	applyColorMap(labels, jet_depth_map2, COLORMAP_JET );
+	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
 	imshow( "test", jet_depth_map2 );
+
 
 
 	//imshow("left person",intensity_data);
@@ -724,6 +778,13 @@ int main(){
 	argus_depth *eye_stereo = new argus_depth();
 	bool loop=false;
 	while(1){
+		do{
+			key_pressed = cvWaitKey(1) & 255;
+			if ( key_pressed == 32 )loop=!loop;
+		}while (loop);
+		if ( key_pressed == 27 ) break;
+		if ( key_pressed == 13 ) eye_stereo->take_snapshot();
+
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
 		//eye_stereo->compute_depth_gpu();
@@ -736,11 +797,8 @@ int main(){
 		eye_stereo->refresh_window();
 		eye_stereo->clustering();
 		//key_pressed = cvWaitKey(1) & 255;
-		do{
-			key_pressed = cvWaitKey(1) & 255;
-			if ( key_pressed == 32 )loop=!loop;
-		}while (loop);
-		if ( key_pressed == 27 ) break;
+
+
 
 	}
 
