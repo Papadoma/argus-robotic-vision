@@ -23,7 +23,9 @@ private:
 	Mat* BW_rect_mat_left;
 	Mat* BW_rect_mat_right;
 
-	Mat* depth_map;
+	Mat* depth_map_lowres;
+	Mat* depth_map_highres;
+
 	Mat* previous_depth_map;
 	Mat* depth_map2;
 
@@ -97,7 +99,8 @@ argus_depth::argus_depth(){
 	rect_mat_left=new Mat(height,width,CV_8UC3);
 	rect_mat_right=new Mat(height,width,CV_8UC3);
 
-	depth_map=new Mat(height,width,CV_8UC1);
+	depth_map_lowres=new Mat(height,width,CV_8UC1);
+	depth_map_highres=new Mat(height,width,CV_8UC1);
 
 	thres_mask=new Mat(height,width,CV_8UC1);
 
@@ -124,7 +127,7 @@ argus_depth::argus_depth(){
 	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 3;
+	sgbm.SADWindowSize = 5;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -160,7 +163,7 @@ argus_depth::~argus_depth(){
 	delete(rect_mat_right);
 	delete(BW_rect_mat_left);
 	delete(BW_rect_mat_right);
-	delete(depth_map);
+	delete(depth_map_lowres);
 	delete(previous_depth_map);
 	delete(depth_map2);
 
@@ -213,7 +216,7 @@ void argus_depth::refresh_window(){
 	roiImg2.copyTo(roiImgResult_Right);
 
 	imshow( "Camera", imgResult );
-	//imshow( "depth", *depth_map );
+	//imshow( "depth", *depth_map_lowres );
 
 	Mat jet_depth_map2(height,width,CV_8UC3);
 	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
@@ -323,36 +326,37 @@ void argus_depth::compute_depth(){
 
 	*person_left=(*BW_rect_mat_left)(refined_human_anchor);
 	*person_right=(*BW_rect_mat_right)(refined_human_anchor);
-	sgbm(*person_left,*person_right,*depth_map);
-	//bm(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
-	//var(*BW_rect_mat_left,*BW_rect_mat_right,*depth_map);
-	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
 
-	*depth_map=(*depth_map)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
-	depth_map->copyTo(*depth_map2);
-	//bilateralFilter(*depth_map, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
+	//sgbm.SADWindowSize = 15;
+	//sgbm(*person_left,*person_right,*depth_map_lowres);
 
 
-	//Mat tmp2(*depth_map, roi1 & roi2 & mask);
-	//tmp2.copyTo(*thres_mask);
+	sgbm(*person_left,*person_right,*depth_map_highres);
+
+
+
+
+	//depth_map_lowres->convertTo(*depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
+
+	depth_map_highres->convertTo(*depth_map_highres, CV_8UC1, 255/(numberOfDisparities*16.));
+
+	//bilateralFilter(*depth_map_highres, *depth_map_lowres, 9, 30, 30, BORDER_DEFAULT );
+	//blur(*depth_map_highres, *depth_map_lowres, Size(5,5));
+	//medianBlur(*depth_map_highres,*depth_map_lowres, 11);
+	Mat kernel(3,3,CV_8U,cv::Scalar(1));
+	 morphologyEx(*depth_map_highres, *depth_map_lowres, MORPH_CLOSE , kernel);
+	 medianBlur(*depth_map_lowres,*depth_map_lowres, 9);
+	//GaussianBlur(*depth_map_lowres, *depth_map_lowres, Size(5,5), 50);
 
 	//Smooth out the depth map
-	//this->smooth_depth_map();
+	this->smooth_depth_map();
 
-	//depth_map2->convertTo(*depth_map2, CV_8U);
+	*depth_map_highres=(*depth_map_highres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
+	depth_map_highres->copyTo(*depth_map2);
+	//bilateralFilter(*depth_map_lowres, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
 
-	//	int hbins = 64;
-	//	int histSize[] = {hbins};
-	//	// saturation varies from 0 (black-gray-white) to
-	//	// 255 (pure spectrum color)
-	//	float sranges[] = { 0, 255 };
-	//	const float* ranges[] = { sranges };
-	//	MatND depth_hist;
-	//	int channels[] = {0};
-	//	calcHist( depth_map2, 1, channels, Mat(), depth_hist, 1, histSize, ranges,	true, false );
-	//	//depth_map->convertTo(*depth_map, CV_8U);
-	//	depth_hist = imHist(depth_hist,4,4);
-	//	imshow( "depth_histogram", depth_hist );
+
+
 }
 
 void argus_depth::compute_depth_gpu(){
@@ -361,50 +365,55 @@ void argus_depth::compute_depth_gpu(){
 	//	ocl::bilateralFilter(*right_ocl,*right_ocl,3,30,30,BORDER_REPLICATE    );
 	//	gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
 	//	//ocl::equalizeHist(*depth_ocl,*depth_ocl);
-	//	depth_ocl->download(*depth_map);
-	//	depth_map->convertTo(*depth_map, CV_8UC1, 255/(numberOfDisparities));
-	//	//(*depth_map,*depth_map);
+	//	depth_ocl->download(*depth_map_lowres);
+	//	depth_map_lowres->convertTo(*depth_map_lowres, CV_8UC1, 255/(numberOfDisparities));
+	//	//(*depth_map_lowres,*depth_map_lowres);
 	//
-	//	Mat tmp(*depth_map, *clearview_mask);
+	//	Mat tmp(*depth_map_lowres, *clearview_mask);
 	//	tmp.copyTo(*depth_map2);
 }
 
 void argus_depth::smooth_depth_map(){
-	//*previous_depth_map= abs((*depth_map) - (*previous_depth_map)) ;
-	//bitwise_and(*previous_depth_map, *depth_map, *depth_map);
-	//addWeighted(*depth_map, (double)0.5, *previous_depth_map, (double)0.5, 0, *depth_map);
+
+	imshow("high",*depth_map_highres);
+	imshow("low",*depth_map_lowres);
+
+	//*previous_depth_map= abs((*depth_map_lowres) - (*previous_depth_map)) ;
+	//bitwise_and(*previous_depth_map, *depth_map_lowres, *depth_map_lowres);
+	//addWeighted(*depth_map_lowres, (double)0.5, *previous_depth_map, (double)0.5, 0, *depth_map_lowres);
 
 	//Filter out the zero values of depth map
-	Mat temp(depth_map2->size(),CV_8UC1);
-	depth_map2->copyTo(temp);
+	Mat temp(depth_map_highres->size(),CV_8UC1);
+	depth_map_highres->copyTo(temp);
 	threshold(temp,temp,0,255,THRESH_BINARY_INV); //Zero values go 255 and everything else goes 0
 
-	//Keep only the calculated values of the last map that correspong to present zero values
-	bitwise_and(*previous_depth_map, temp, *previous_depth_map);
+	//Keep only the calculated values of the low res map that correspong to high res zero values
+	bitwise_and(*depth_map_lowres, temp, *depth_map_lowres);
 
-	Mat result(depth_map2->size(),CV_8UC1);
 
 	//Add the previous calculated depth values only to zero present values
-	add(*depth_map2, *previous_depth_map, result);
+	add(*depth_map_highres, *depth_map_lowres, *depth_map_highres);
 
-	//depth_map2->copyTo(result);
-	Mat result2(result.size(),CV_8UC1);
-	bilateralFilter(result, result2, 9, 30, 30, BORDER_DEFAULT );
+	imshow("combined",*depth_map_highres);
 
-	Mat jet_result(result.size(),CV_8UC3);
-	applyColorMap(result, jet_result, COLORMAP_JET );
-	imshow( "smoothed", jet_result);
+	//	//depth_map2->copyTo(result);
+	//	Mat result2(result.size(),CV_8UC1);
+	//	bilateralFilter(result, result2, 9, 30, 30, BORDER_DEFAULT );
+	//
+	//	Mat jet_result(result.size(),CV_8UC3);
+	//	applyColorMap(result, jet_result, COLORMAP_JET );
+	//	imshow( "smoothed", jet_result);
+	//
+	//	applyColorMap(result2, jet_result, COLORMAP_JET );
+	//	imshow( "extrasmoothed", jet_result);
 
-	applyColorMap(result2, jet_result, COLORMAP_JET );
-	imshow( "extrasmoothed", jet_result);
 
-
-	result.copyTo(*previous_depth_map);
+	//result.copyTo(*previous_depth_map);
 
 	//TODO Remove result matrix, pass depth_map2 directly
 
-	//*depth_map= abs((*depth_map) - (*previous_depth_map));
-	//*previous_depth_map=*depth_map;
+	//*depth_map_lowres= abs((*depth_map_lowres) - (*previous_depth_map));
+	//*previous_depth_map=*depth_map_lowres;
 }
 
 
@@ -645,8 +654,8 @@ void argus_depth::clustering(){
 	kmeans(dataset, 3, labels, criteria, 2, KMEANS_PP_CENTERS    );
 
 	//Find out which label shows noise
-	int noise_label, labelA, labelB;
-	float sum_teamA=0, sum_teamB=0;
+	int noise_label, labelA, labelB, popA=0, popB=0;
+	float mean_teamA=0, mean_teamB=0;
 	for(int i=0;i<dataset.rows;i++){
 		if(dataset.at<int>(i,0)==(float)0){
 			noise_label=(int)labels.at<int>(i,0);
@@ -659,14 +668,18 @@ void argus_depth::clustering(){
 	//Calculate the sum of depth for the other teams
 	for(int i=0;i<dataset.rows;i++){
 		if(labels.at<int>(i,0)==(float)labelA){
-			sum_teamA+=dataset.at<int>(i,0);
+			mean_teamA+=dataset.at<int>(i,0);
+			popA++;
 		}else if(labels.at<int>(i,0)==(float)labelB){
-			sum_teamB+=dataset.at<int>(i,0);
+			mean_teamB+=dataset.at<int>(i,0);
+			popB++;
 		};
 	}
+	mean_teamA=mean_teamA/popA;
+	mean_teamB=mean_teamB/popB;
 
 	//Decide which team should be background and which foreground
-	if(sum_teamA>sum_teamB){
+	if(mean_teamA>mean_teamB){
 		for(int i=0;i<dataset.rows;i++){
 			if(labels.at<int>(i,0)==(float)labelA){
 				labels.at<int>(i,0)=(float)2;
