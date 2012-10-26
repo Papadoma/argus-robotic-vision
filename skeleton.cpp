@@ -42,14 +42,32 @@ void skeleton::voronoi(){
 	//imshow("test",mask);
 	bitwise_and(edges2,mask,edges2);
 
-	imshow("before",mask);
-	dilate(mask,mask,Mat(),Point(),1);
-	erode(mask,mask,Mat(),Point(),1);
-	imshow("after",mask);
+	imshow("mask",mask);
+
+	Mat dist_tran, labels;
+	distanceTransform(mask, dist_tran, labels, CV_DIST_L2, 3, DIST_LABEL_CCOMP );
+
+	normalize(dist_tran, dist_tran, 0.0, 1.0, NORM_MINMAX);
+	imshow("distance",dist_tran);
+	//normalize(labels, labels, 0.0, 1.0, NORM_MINMAX);
+	labels.convertTo(labels, CV_8UC1);
+
+//	for(int i=0;i<labels.rows;i++){
+//		for(int j=0;j<labels.cols;j++){
+//			cout<<labels.at<int>(i,j)<<" ";
+//		}
+//		cout<<"\n";
+//	}
+	double min, max;
+	minMaxLoc(labels, &min, &max, 0, 0);
+	labels=labels*255/max;
+	imshow("labels",labels);
+//	cvWaitKey(0);
+
 }
 
 void skeleton::load(){
-	depth=imread("depth2.png",0);
+	depth=imread("depth.png",0);
 	image=imread("person.png",0);
 }
 
@@ -76,5 +94,5 @@ int main(){
 		test.voronoi();
 		test.show();
 	}
-	cout<<test.thres1<<" "<<test.thres1;
+	cout<<test.thres1<<" "<<test.thres2;
 }

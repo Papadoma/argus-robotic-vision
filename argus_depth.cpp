@@ -343,13 +343,13 @@ void argus_depth::compute_depth(){
 	//bilateralFilter(*depth_map_highres, *depth_map_lowres, 9, 30, 30, BORDER_DEFAULT );
 	//blur(*depth_map_highres, *depth_map_lowres, Size(5,5));
 	//medianBlur(*depth_map_highres,*depth_map_lowres, 11);
-	Mat kernel(3,3,CV_8U,cv::Scalar(1));
-	 morphologyEx(*depth_map_highres, *depth_map_lowres, MORPH_CLOSE , kernel);
-	 medianBlur(*depth_map_lowres,*depth_map_lowres, 9);
+	Mat kernel(5,5,CV_8U,cv::Scalar(1));
+	morphologyEx(*depth_map_highres, *depth_map_lowres, MORPH_CLOSE , kernel);
+	//medianBlur(*depth_map_lowres,*depth_map_lowres, 9);
 	//GaussianBlur(*depth_map_lowres, *depth_map_lowres, Size(5,5), 50);
 
 	//Smooth out the depth map
-	this->smooth_depth_map();
+	//this->smooth_depth_map();
 
 	*depth_map_highres=(*depth_map_highres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
 	depth_map_highres->copyTo(*depth_map2);
@@ -520,15 +520,16 @@ void argus_depth::remove_background(){
 
 void argus_depth::detect_human(){
 
-	//	hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());
-	//	ocl::oclMat img_ocl;
-	//	img_ocl.upload(*BW_rect_mat_left);
+	//		hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());
+	//		ocl::oclMat img_ocl;
+	//		img_ocl.upload(*BW_rect_mat_left);
 
 
 	vector<Rect> found, found_filtered;
 
 	double t = (double)getTickCount();
 	hog.detectMultiScale(*BW_rect_mat_left, found, 0, Size(8,8), Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
+	//hog.detectMultiScale(img_ocl, found, 0, Size(8,8), Size(0,0), 1.05, 0);
 	t = (double)getTickCount() - t;
 
 	stringstream ss;//create a stringstream
@@ -628,6 +629,7 @@ void argus_depth::detect_human(){
 }
 
 void argus_depth::take_snapshot(){
+	cout<<"Snapshot taken!\n";
 	imwrite("depth.png", *depth_map2);
 	imwrite("person.png", *person_left);
 }
@@ -675,8 +677,8 @@ void argus_depth::clustering(){
 			popB++;
 		};
 	}
-	mean_teamA=mean_teamA/popA;
-	mean_teamB=mean_teamB/popB;
+	mean_teamA=popA*(mean_teamA/popA);
+	mean_teamB=popB*(mean_teamB/popB);
 
 	//Decide which team should be background and which foreground
 	if(mean_teamA>mean_teamB){
@@ -740,8 +742,12 @@ void argus_depth::clustering(){
 	//imshow("Filtered foreground mask",labels);
 
 	bitwise_and(*depth_map2,labels,*depth_map2);	//Filter the depth map. Keep only foreground and biggest blob
-	medianBlur(*depth_map2, *depth_map2, 5);
+	//medianBlur(*depth_map2, *depth_map2, 5);
 	imshow("Foreground bigest blob",*depth_map2);
+
+	Mat kernel(5,5,CV_8U,cv::Scalar(1));
+	morphologyEx(*depth_map2, *depth_map2, MORPH_CLOSE , kernel);
+	imshow("Foreground bigest blob smoothed",*depth_map2);
 
 	//	//Filter out the zero values of depth map
 	//	Mat temp;
