@@ -68,10 +68,9 @@ public:
 	argus_depth();
 	~argus_depth();
 	void clustering();
-	Mat imHist(Mat, float, float);
 	int fps;
 
-	void remove_background();
+	//void remove_background();
 	void refresh_frame();
 	void refresh_window();
 	void compute_depth();
@@ -127,7 +126,7 @@ argus_depth::argus_depth(){
 	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 5;
+	sgbm.SADWindowSize = 3;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -215,6 +214,10 @@ void argus_depth::refresh_window(){
 	roiImg1.copyTo(roiImgResult_Left);
 	roiImg2.copyTo(roiImgResult_Right);
 
+	stringstream ss;//create a stringstream
+	ss << fps;//add number to the stream
+	putText(imgResult, ss.str(), Point (10,20), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 2, 8, false );
+
 	imshow( "Camera", imgResult );
 	//imshow( "depth", *depth_map_lowres );
 
@@ -284,39 +287,39 @@ void argus_depth::load_param(){
 }
 
 
-Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
-	double maxVal=0;
-
-	//Mask out the zero values from histogram
-	Mat mask=Mat::ones(hist.rows,hist.cols,CV_8UC1);
-	mask.at<float>(0,0)=0;
-
-	//Find the 110% of max value
-	minMaxLoc(hist, 0, &maxVal, 0, 0,mask);
-	maxVal=maxVal*1.1;
-
-	int rows = 64; //default height size
-	int cols = hist.rows; //get the width size from the histogram
-
-	Mat histImg = Mat::zeros(rows*scaleX, cols*scaleY, CV_8UC3);
-
-	//for each bin
-
-	for(int i=0;i<cols-1;i++) {
-		float histValue = hist.at<float>(i,0);
-		float nextValue = hist.at<float>(i+1,0);
-		Point pt1 = Point(i*scaleX, rows*scaleY);
-		Point pt2 = Point(i*scaleX+scaleX, rows*scaleY);
-		Point pt3 = Point(i*scaleX+scaleX, (rows-nextValue*rows/maxVal)*scaleY);
-		Point pt4 = Point(i*scaleX, (rows-nextValue*rows/maxVal)*scaleY);
-
-		int numPts = 5;
-		Point pts[] = {pt1, pt2, pt3, pt4, pt1};
-
-		fillConvexPoly(histImg, pts, numPts, Scalar(255,255,255));
-	}
-	return histImg;
-}
+//Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
+//	double maxVal=0;
+//
+//	//Mask out the zero values from histogram
+//	Mat mask=Mat::ones(hist.rows,hist.cols,CV_8UC1);
+//	mask.at<float>(0,0)=0;
+//
+//	//Find the 110% of max value
+//	minMaxLoc(hist, 0, &maxVal, 0, 0,mask);
+//	maxVal=maxVal*1.1;
+//
+//	int rows = 64; //default height size
+//	int cols = hist.rows; //get the width size from the histogram
+//
+//	Mat histImg = Mat::zeros(rows*scaleX, cols*scaleY, CV_8UC3);
+//
+//	//for each bin
+//
+//	for(int i=0;i<cols-1;i++) {
+//		float histValue = hist.at<float>(i,0);
+//		float nextValue = hist.at<float>(i+1,0);
+//		Point pt1 = Point(i*scaleX, rows*scaleY);
+//		Point pt2 = Point(i*scaleX+scaleX, rows*scaleY);
+//		Point pt3 = Point(i*scaleX+scaleX, (rows-nextValue*rows/maxVal)*scaleY);
+//		Point pt4 = Point(i*scaleX, (rows-nextValue*rows/maxVal)*scaleY);
+//
+//		int numPts = 5;
+//		Point pts[] = {pt1, pt2, pt3, pt4, pt1};
+//
+//		fillConvexPoly(histImg, pts, numPts, Scalar(255,255,255));
+//	}
+//	return histImg;
+//}
 
 void argus_depth::compute_depth(){
 
@@ -330,192 +333,46 @@ void argus_depth::compute_depth(){
 	//sgbm.SADWindowSize = 15;
 	//sgbm(*person_left,*person_right,*depth_map_lowres);
 
-
+	sgbm.SADWindowSize = 3;
 	sgbm(*person_left,*person_right,*depth_map_highres);
 
+	sgbm.SADWindowSize = 11;
+	//sgbm(*person_left,*person_right,*depth_map_lowres);
+	*depth_map_lowres=*depth_map_highres;
 
-
-
-	//depth_map_lowres->convertTo(*depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
-
+	depth_map_lowres->convertTo(*depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
 	depth_map_highres->convertTo(*depth_map_highres, CV_8UC1, 255/(numberOfDisparities*16.));
 
 	//bilateralFilter(*depth_map_highres, *depth_map_lowres, 9, 30, 30, BORDER_DEFAULT );
 	//blur(*depth_map_highres, *depth_map_lowres, Size(5,5));
 	//medianBlur(*depth_map_highres,*depth_map_lowres, 11);
-	Mat kernel(5,5,CV_8U,cv::Scalar(1));
-	morphologyEx(*depth_map_highres, *depth_map_lowres, MORPH_CLOSE , kernel);
+
 	//medianBlur(*depth_map_lowres,*depth_map_lowres, 9);
 	//GaussianBlur(*depth_map_lowres, *depth_map_lowres, Size(5,5), 50);
 
 	//Smooth out the depth map
-	//this->smooth_depth_map();
+
 
 	*depth_map_highres=(*depth_map_highres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
-	depth_map_highres->copyTo(*depth_map2);
+	*depth_map_lowres=(*depth_map_lowres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
+
+	this->smooth_depth_map();
+
+	//depth_map_highres->copyTo(*depth_map2);
 	//bilateralFilter(*depth_map_lowres, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
 
-
-
-}
-
-void argus_depth::compute_depth_gpu(){
-
-	//	ocl::bilateralFilter(*left_ocl,*left_ocl,3,30,30,BORDER_REPLICATE    );
-	//	ocl::bilateralFilter(*right_ocl,*right_ocl,3,30,30,BORDER_REPLICATE    );
-	//	gpu_bm(*left_ocl, *right_ocl, *depth_ocl);
-	//	//ocl::equalizeHist(*depth_ocl,*depth_ocl);
-	//	depth_ocl->download(*depth_map_lowres);
-	//	depth_map_lowres->convertTo(*depth_map_lowres, CV_8UC1, 255/(numberOfDisparities));
-	//	//(*depth_map_lowres,*depth_map_lowres);
-	//
-	//	Mat tmp(*depth_map_lowres, *clearview_mask);
-	//	tmp.copyTo(*depth_map2);
 }
 
 void argus_depth::smooth_depth_map(){
+	Mat holes;
+	threshold(*depth_map_highres,holes,1,255,THRESH_BINARY_INV); //keep only the holes
 
-	imshow("high",*depth_map_highres);
-	imshow("low",*depth_map_lowres);
+	bitwise_and(holes,*depth_map_lowres,holes);
+	bitwise_or(holes,*depth_map_highres,*depth_map2);
 
-	//*previous_depth_map= abs((*depth_map_lowres) - (*previous_depth_map)) ;
-	//bitwise_and(*previous_depth_map, *depth_map_lowres, *depth_map_lowres);
-	//addWeighted(*depth_map_lowres, (double)0.5, *previous_depth_map, (double)0.5, 0, *depth_map_lowres);
+	//	Mat kernel(5,5,CV_8U,cv::Scalar(1));
+	//	morphologyEx(*depth_map_highres, *depth_map_lowres, MORPH_CLOSE , kernel);
 
-	//Filter out the zero values of depth map
-	Mat temp(depth_map_highres->size(),CV_8UC1);
-	depth_map_highres->copyTo(temp);
-	threshold(temp,temp,0,255,THRESH_BINARY_INV); //Zero values go 255 and everything else goes 0
-
-	//Keep only the calculated values of the low res map that correspong to high res zero values
-	bitwise_and(*depth_map_lowres, temp, *depth_map_lowres);
-
-
-	//Add the previous calculated depth values only to zero present values
-	add(*depth_map_highres, *depth_map_lowres, *depth_map_highres);
-
-	imshow("combined",*depth_map_highres);
-
-	//	//depth_map2->copyTo(result);
-	//	Mat result2(result.size(),CV_8UC1);
-	//	bilateralFilter(result, result2, 9, 30, 30, BORDER_DEFAULT );
-	//
-	//	Mat jet_result(result.size(),CV_8UC3);
-	//	applyColorMap(result, jet_result, COLORMAP_JET );
-	//	imshow( "smoothed", jet_result);
-	//
-	//	applyColorMap(result2, jet_result, COLORMAP_JET );
-	//	imshow( "extrasmoothed", jet_result);
-
-
-	//result.copyTo(*previous_depth_map);
-
-	//TODO Remove result matrix, pass depth_map2 directly
-
-	//*depth_map_lowres= abs((*depth_map_lowres) - (*previous_depth_map));
-	//*previous_depth_map=*depth_map_lowres;
-}
-
-
-void argus_depth::remove_background(){
-	(*BSMOG)(*BW_rect_mat_left,*thres_mask,0.00005);
-
-	threshold(*thres_mask, *thres_mask, 128, 255, THRESH_BINARY); //shadows are 127
-	imshow( "MOG based mask", *thres_mask );
-
-	Mat temp(height,width,CV_8UC1);
-	BW_rect_mat_left->copyTo(temp);
-	temp=abs(temp-(*prev_rect_mat_left));
-	//bitwise_xor(*prev_rect_mat_left, temp,temp);
-	threshold(temp, temp, 20, 255, THRESH_BINARY);
-	//medianBlur(temp,temp, 5);
-	//	imshow("Frame difference based mask", temp);
-	BW_rect_mat_left->copyTo(*prev_rect_mat_left);
-
-	bitwise_or(*thres_mask, temp, *thres_mask);
-	//imshow( "Fused", *thres_mask );
-
-	Mat skin_image(height,width,CV_8UC1);
-	Mat rect_mat_left_YCrCb(height,width,CV_8UC3);
-	cvtColor(*rect_mat_left, rect_mat_left_YCrCb, CV_BGR2YCrCb);
-	Scalar yccMin(0, 131, 80);
-	Scalar yccMax(255, 185, 135);
-	inRange(rect_mat_left_YCrCb, yccMin, yccMax, skin_image);
-	imshow("Skin",skin_image);
-
-	medianBlur(*thres_mask, *thres_mask, 5);
-	imshow( "Fused and smoothed", *thres_mask );
-
-	Mat img_8uc3(height,width,CV_8UC3);
-	thres_mask->copyTo(img_8uc3);
-	vector<vector<Point> > contours;
-	vector<Vec4i> hierarchy;
-
-	dilate(*thres_mask,*thres_mask,Mat(),Point(),25);
-	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
-
-	//	Mat tmp(*thres_mask, *clearview_mask);
-	//	tmp.copyTo(*thres_mask);
-
-	findContours( *thres_mask, contours, hierarchy,CV_RETR_CCOMP, CV_CHAIN_APPROX_SIMPLE );
-
-	cvtColor( *thres_mask, img_8uc3, CV_GRAY2BGR );
-	drawContours( img_8uc3, contours, -1, CV_RGB(250,0,0), 1, 8, hierarchy,1 );
-	//	for(int idx = 0 ; idx >= 0; idx = hierarchy[idx][0] )
-	//	{
-	//		//Scalar color( rand()&255, rand()&255, rand()&255 );
-	//		//drawContours( img_8uc3, contours, idx, CV_RGB(250,0,0), CV_FILLED, 8, hierarchy );
-	//	}
-
-	//	int n=0;
-	//printf( "Total Contours Detected: %d\n", Nc );
-	//	CvScalar red = CV_RGB(250,0,0);
-	//	CvScalar blue = CV_RGB(0,0,250);
-
-	//	for( CvSeq* c=first_contour; c!=NULL; c=c->h_next ){
-	//		cvCvtColor( thres_mask, &img_8uc3, CV_GRAY2BGR );
-	//		cvDrawContours(&img_8uc3,c,red,blue,1,2,8);
-	////		printf( "Contour #%dn", n );
-	////		printf( " %d elements:\n", c->total );
-	////		for( int i=0; itotal; ++i ){
-	////			CvPoint* p = CV_GET_SEQ_ELEM( CvPoint, c, i );
-	////			printf(" (%d,%d)\n", p->x, p->y );
-	////		}
-	////		cvWaitKey();
-	////		n++;
-	//	}
-	//bitwise_or(img_8uc3, *thres_mask, img_8uc3);
-	imshow( "Contours 2", img_8uc3 );
-
-	dilate(*thres_mask,*thres_mask,Mat(),Point(),30);
-	erode(*thres_mask,*thres_mask,Mat(),Point(),12);
-	//imshow( "Fused, smoothed and inflated", *thres_mask );
-
-	//	//	Mat tmp2(*rect_mat_left, *clearview_mask);
-	//	Mat tmp2(*rect_mat_left);
-	//	//tmp2.copyTo(*rect_mat_left);
-	//	bitwise_and(tmp2, *thres_mask, *thres_mask);
-	//	imshow( "output_thres", *thres_mask );
-
-
-
-	//	double minVal;
-	//	double maxVal;
-	//	//*depth_map2 = (*depth_map2)|(*thres_mask);
-	//	depth_map2->copyTo(tmp);
-	//	bitwise_and(*depth_map2, *thres_mask, tmp);
-	//	//tmp.copyTo(*depth_map2);
-	//	minMaxLoc(tmp,0,&maxVal,0,0,Mat());
-	//
-	//	tmp=~tmp;
-	//	threshold(tmp, tmp, 254, 255, THRESH_TOZERO_INV);
-	//	minMaxLoc(tmp,0,&minVal,0,0,Mat());
-	//	minVal=255-minVal;
-	//
-	//	//imshow( "thres_mask", tmp );
-	//	//threshold(tmp, tmp, 0, 255, THRESH_TOZERO_INV);
-	//	threshold(*depth_map2, *depth_map2, ((int)maxVal)+1, 255, THRESH_TOZERO_INV);
-	//	threshold(*depth_map2, *depth_map2, ((int)minVal), 255, THRESH_TOZERO);
 }
 
 void argus_depth::detect_human(){
@@ -524,17 +381,10 @@ void argus_depth::detect_human(){
 	//		ocl::oclMat img_ocl;
 	//		img_ocl.upload(*BW_rect_mat_left);
 
-
 	vector<Rect> found, found_filtered;
 
-	double t = (double)getTickCount();
 	hog.detectMultiScale(*BW_rect_mat_left, found, 0, Size(8,8), Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
 	//hog.detectMultiScale(img_ocl, found, 0, Size(8,8), Size(0,0), 1.05, 0);
-	t = (double)getTickCount() - t;
-
-	stringstream ss;//create a stringstream
-	ss << t*1000./cv::getTickFrequency();//add number to the stream
-	putText(*rect_mat_left, ss.str(), Point (10,20), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 2, 8, false );
 
 	size_t i, j;
 
@@ -709,8 +559,6 @@ void argus_depth::clustering(){
 	labels=labels*255;
 	labels=labels.reshape(1,depth_map2->rows);
 
-	//imshow("Unfiltered foreground mask",labels);
-
 
 	//bilateralFilter(labels, labels2, 9, 30, 30, BORDER_DEFAULT );
 	//labels2.copyTo(labels);
@@ -739,35 +587,31 @@ void argus_depth::clustering(){
 	drawContours( biggest_blob, contours, max_contour_pos, Scalar(255), CV_FILLED, 8 ); //Fill biggest blob
 	threshold(biggest_blob,biggest_blob,254,255,THRESH_BINARY); //This clears any contour leftovers caused by findContours
 	bitwise_and(biggest_blob,labels,labels); 					//Keep the internal detail of the biggest blob
-	//imshow("Filtered foreground mask",labels);
+//	imshow("mask",biggest_blob);
 
 	bitwise_and(*depth_map2,labels,*depth_map2);	//Filter the depth map. Keep only foreground and biggest blob
 	//medianBlur(*depth_map2, *depth_map2, 5);
-	imshow("Foreground bigest blob",*depth_map2);
+//	imshow("Foreground bigest blob",*depth_map2);
 
-	Mat kernel(5,5,CV_8U,cv::Scalar(1));
-	morphologyEx(*depth_map2, *depth_map2, MORPH_CLOSE , kernel);
-	imshow("Foreground bigest blob smoothed",*depth_map2);
+	Mat holes1,holes2;
+	threshold(*depth_map2,holes1,1,255,THRESH_BINARY_INV); //find the holes of the original depth map
+	threshold(*depth_map_highres,holes2,1,255,THRESH_BINARY_INV); //find the holes of the fragmented depth map
+	imshow("holes1",holes1);
+	imshow("holes2",holes2);
+	bitwise_and(holes2,biggest_blob,holes2); //keep only the holes inside the blob
+	imshow("both holes",holes2);
+	bitwise_and(holes1,holes2,holes1); //combine the 2 holes, so you know which holes are real, fake ones have depth
 
-	//	//Filter out the zero values of depth map
-	//	Mat temp;
-	//	depth_map2->copyTo(temp);
-	//	threshold(temp,temp,0,255,THRESH_BINARY_INV); //Zero values go 255 and everything else goes 0
-	//	bitwise_and(temp, biggest_blob, temp);	//From this, keep only the values inside the blob
-	//	imshow("To be replaced - mask",temp);
-	//
-	//
-	//	previous_depth_map=new Mat(depth_map2->size(),CV_8UC1);
-	//	//Keep only the calculated values of the last map that correspong to present zero values
-	//	bitwise_and(*previous_depth_map, temp, *previous_depth_map);
-	//	imshow("To be replaced - depth",*previous_depth_map);
-	//	//From this, keep only the values inside the blob
-	//	//bitwise_and(*previous_depth_map, biggest_blob, *previous_depth_map);
-	//
-	//	//Add the previous calculated depth values only to zero present values
-	//	add(*depth_map2, *previous_depth_map, *depth_map2);
-	//	depth_map2->copyTo(*previous_depth_map);
+	Mat cover_depth;
+	Mat kernel(9,9,CV_8U,cv::Scalar(1));
+	medianBlur(*depth_map_highres,cover_depth, 5);
+	morphologyEx(cover_depth, cover_depth, MORPH_CLOSE , kernel);	//Create a depth map free of holes but not sharp
+	imshow("cover_depth",cover_depth);
+	bitwise_and(holes1,cover_depth,holes1);	//keep the info for the holes
 
+	imshow("before",*depth_map2);
+	add(holes1,*depth_map2,*depth_map2); //cover the holes
+	imshow("after",*depth_map2);
 
 	//imshow("filtered",*depth_map2);
 
@@ -806,13 +650,12 @@ int main(){
 
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
-		//eye_stereo->compute_depth_gpu();
 		eye_stereo->detect_human();
+		t = (double)getTickCount();
 		eye_stereo->compute_depth();
-
-		//eye_stereo->remove_background();
 		t = (double)getTickCount() - t;
-		eye_stereo->fps= 1/(t/cv::getTickFrequency());
+		eye_stereo->fps = 1/(t/cv::getTickFrequency());//for fps
+		//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms
 		eye_stereo->refresh_window();
 		eye_stereo->clustering();
 		//key_pressed = cvWaitKey(1) & 255;
