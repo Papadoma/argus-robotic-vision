@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <opencv.hpp>
-#include "opencv2/ocl/ocl.hpp"
+//#include "opencv2/ocl/ocl.hpp"
 //#include <skeltrack.h>
 
 
-#include "module_eye.hpp"
+//#include "module_eye.hpp"
 #include "module_file.hpp"
 
 using namespace std;
@@ -36,9 +36,9 @@ private:
 
 	Mat* prev_rect_mat_left;
 
-	ocl::oclMat* left_ocl;
-	ocl::oclMat* right_ocl;
-	ocl::oclMat* depth_ocl;
+	//ocl::oclMat* left_ocl;
+	//ocl::oclMat* right_ocl;
+	//ocl::oclMat* depth_ocl;
 
 	Rect human_anchor;
 	Rect roi1, roi2;
@@ -105,9 +105,9 @@ argus_depth::argus_depth(){
 
 	prev_rect_mat_left=new Mat(height,width,CV_8UC1);
 
-	left_ocl=new ocl::oclMat(height,width,CV_8UC1);
-	right_ocl=new ocl::oclMat(height,width,CV_8UC1);
-	depth_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	//left_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	//right_ocl=new ocl::oclMat(height,width,CV_8UC1);
+	//depth_ocl=new ocl::oclMat(height,width,CV_8UC1);
 
 	//	printf("Begin creating ocl context...\n");
 	//	//std::vector<ocl::Info> oclinfo;
@@ -629,14 +629,14 @@ void argus_depth::clustering(){
 int main(){
 	int key_pressed=255;
 
-	vector<ocl::Info> info;
-	CV_Assert(ocl::getDevice(info));
-	int devnums =ocl::getDevice(info);
+//	vector<ocl::Info> info;
+//	CV_Assert(ocl::getDevice(info));
+//	int devnums =ocl::getDevice(info);
 
 
-	if(devnums<1){
-		std::cout << "no OPENCL device found\n";
-	}
+//	if(devnums<1){
+//		std::cout << "no OPENCL device found\n";
+//	}
 
 	argus_depth *eye_stereo = new argus_depth();
 	bool loop=false;
