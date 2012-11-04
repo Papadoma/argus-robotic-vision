@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <opencv.hpp>
-#include "opencv2/ocl/ocl.hpp"
-//#include <skeltrack.h>
+//#include "opencv2/ocl/ocl.hpp"
+#include <skeltrack.h>
 
 using namespace std;
 using namespace cv;
@@ -19,6 +19,7 @@ public:
 	void load();
 	void show();
 	void voronoi();
+	void track_skel();
 	int thres1;
 	int thres2;
 
@@ -150,6 +151,10 @@ void skeleton::show(){
 	imshow("person", image);
 	//imshow("edges", edges);
 	imshow("edges2", edges2);
+}
+
+void skeleton::track_skel(){
+
 }
 
 int main(){
