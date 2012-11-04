@@ -2,6 +2,7 @@
 #include <opencv.hpp>
 //#include "opencv2/ocl/ocl.hpp"
 #include <skeltrack.h>
+#include <glib-object.h>
 
 using namespace std;
 using namespace cv;
@@ -13,6 +14,8 @@ private:
 	Mat edges;
 	Mat edges2;
 
+	SkeltrackSkeleton *skeleton;
+	SkeltrackJointList list;
 
 public:
 
@@ -24,6 +27,15 @@ public:
 	int thres2;
 
 };
+
+typedef struct
+{
+  guint16 *reduced_buffer;
+  gint width;
+  gint height;
+  gint reduced_width;
+  gint reduced_height;
+} BufferInfo;
 
 void skeleton::voronoi(){
 	equalizeHist(image, image);
@@ -79,28 +91,6 @@ void skeleton::voronoi(){
 	//size = np.size(img)
 	//skel = np.zeros(img.shape,np.uint8)
 
-
-	Mat cropped_image;
-	bitwise_and(image,mask,cropped_image);
-	vector<Vec3f> circles;
-	/// Apply the Hough Transform to find the circles
-	HoughCircles( cropped_image, circles, CV_HOUGH_GRADIENT, 1,100, 10, 50, 0, 0 );
-cout<<"circles "<<circles.size()<<"\n";
-	/// Draw the circles detected
-	for( size_t i = 0; i < circles.size(); i++ )
-	{
-		Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
-		int radius = cvRound(circles[i][2]);
-		// circle center
-		circle( cropped_image, center, 3, Scalar(255,255,255), -1, 8, 0 );
-		// circle outline
-		circle( cropped_image, center, radius, Scalar(255,255,255), 3, 8, 0 );
-	}
-
-	/// Show your results
-	imshow( "detected circles", cropped_image );
-
-
 	Mat skel(mask.size(), CV_8UC1, cv::Scalar(0));
 	Mat temp;
 	Mat eroded;
@@ -154,7 +144,15 @@ void skeleton::show(){
 }
 
 void skeleton::track_skel(){
-
+	GError *error = NULL;
+	BufferInfo *buffer_info;
+	list = skeltrack_skeleton_track_joints_sync(
+			skeleton,
+			buffer_info->reduced_buffer,
+			buffer_info->reduced_width,
+			buffer_info->reduced_height,
+			NULL,
+			NULL);
 }
 
 int main(){
@@ -172,6 +170,7 @@ int main(){
 		if ( key_pressed == 91 && test.thres2>=0) test.thres2--;
 		test.voronoi();
 		test.show();
+		test.track_skel();
 	}
 	cout<<test.thres1<<" "<<test.thres2;
 }
