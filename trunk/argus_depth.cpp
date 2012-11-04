@@ -356,9 +356,9 @@ void argus_depth::compute_depth(){
 	*depth_map_highres=(*depth_map_highres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
 	*depth_map_lowres=(*depth_map_lowres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
 
-	this->smooth_depth_map();
+	//this->smooth_depth_map();
 
-	//depth_map_highres->copyTo(*depth_map2);
+	depth_map_highres->copyTo(*depth_map2);
 	//bilateralFilter(*depth_map_lowres, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
 
 }
@@ -596,22 +596,22 @@ void argus_depth::clustering(){
 	Mat holes1,holes2;
 	threshold(*depth_map2,holes1,1,255,THRESH_BINARY_INV); //find the holes of the original depth map
 	threshold(*depth_map_highres,holes2,1,255,THRESH_BINARY_INV); //find the holes of the fragmented depth map
-	imshow("holes1",holes1);
-	imshow("holes2",holes2);
+	//imshow("holes1",holes1);
+	//imshow("holes2",holes2);
 	bitwise_and(holes2,biggest_blob,holes2); //keep only the holes inside the blob
-	imshow("both holes",holes2);
+	//imshow("both holes",holes2);
 	bitwise_and(holes1,holes2,holes1); //combine the 2 holes, so you know which holes are real, fake ones have depth
 
 	Mat cover_depth;
 	Mat kernel(9,9,CV_8U,cv::Scalar(1));
 	medianBlur(*depth_map_highres,cover_depth, 5);
 	morphologyEx(cover_depth, cover_depth, MORPH_CLOSE , kernel);	//Create a depth map free of holes but not sharp
-	imshow("cover_depth",cover_depth);
+	//imshow("cover_depth",cover_depth);
 	bitwise_and(holes1,cover_depth,holes1);	//keep the info for the holes
 
-	imshow("before",*depth_map2);
+	//imshow("before",*depth_map2);
 	add(holes1,*depth_map2,*depth_map2); //cover the holes
-	imshow("after",*depth_map2);
+	//imshow("after",*depth_map2);
 
 	//imshow("filtered",*depth_map2);
 
@@ -644,6 +644,7 @@ int main(){
 		do{
 			key_pressed = cvWaitKey(1) & 255;
 			if ( key_pressed == 32 )loop=!loop;
+			if ( key_pressed == 27 ) break;
 		}while (loop);
 		if ( key_pressed == 27 ) break;
 		if ( key_pressed == 13 ) eye_stereo->take_snapshot();
