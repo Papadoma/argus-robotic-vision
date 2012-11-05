@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <opencv.hpp>
 //#include "opencv2/ocl/ocl.hpp"
-#include <skeltrack.h>
-#include <glib-object.h>
+//#include <skeltrack.h>
+//#include <glib-object.h>
 
 using namespace std;
 using namespace cv;
@@ -14,28 +14,21 @@ private:
 	Mat edges;
 	Mat edges2;
 
-	SkeltrackSkeleton *skeleton;
-	SkeltrackJointList list;
+	//	SkeltrackSkeleton *skeleton;
+	//	SkeltrackJointList list;
 
 public:
 
 	void load();
 	void show();
 	void voronoi();
-	void track_skel();
+	Mat thinning(Mat);
 	int thres1;
 	int thres2;
 
 };
 
-typedef struct
-{
-  guint16 *reduced_buffer;
-  gint width;
-  gint height;
-  gint reduced_width;
-  gint reduced_height;
-} BufferInfo;
+
 
 void skeleton::voronoi(){
 	equalizeHist(image, image);
@@ -91,6 +84,8 @@ void skeleton::voronoi(){
 	//size = np.size(img)
 	//skel = np.zeros(img.shape,np.uint8)
 
+	imshow("thinning", thinning(mask));
+
 	Mat skel(mask.size(), CV_8UC1, cv::Scalar(0));
 	Mat temp;
 	Mat eroded;
@@ -143,24 +138,59 @@ void skeleton::show(){
 	imshow("edges2", edges2);
 }
 
-void skeleton::track_skel(){
-	GError *error = NULL;
-	BufferInfo *buffer_info;
-	list = skeltrack_skeleton_track_joints_sync(
-			skeleton,
-			buffer_info->reduced_buffer,
-			buffer_info->reduced_width,
-			buffer_info->reduced_height,
-			NULL,
-			NULL);
+Mat skeleton::thinning(Mat src){
+	//src.convertTo(src,CV_8U);
+	normalize(src, src, 0.0, 255.0, NORM_MINMAX);
+	Mat result;
+	//Mat marker=Mat::zeros(src.rows, src.cols, CV_8UC1);
+	int count=0;
+	for(int y=0;y<src.rows;y++){
+		for(int x=0;x<src.cols;x++){
+			int P1=src.at<int>(0,y,x);
+//			if((P1==255) && (y>0) && (x>0)){
+//				int AP1=0;
+//				Mat element(1,8,CV_8UC1);
+//				//at<int>(rows,cols)
+//				element.at<int>(0,0,0)=src.at<int>(y-1,x,0);
+//				element.at<int>(0,1,0)=src.at<int>(y-1,x+1,0);
+//				element.at<int>(0,2,0)=src.at<int>(y,x+1,0);
+//				element.at<int>(0,3,0)=src.at<int>(y+1,x+1,0);
+//				element.at<int>(0,4,0)=src.at<int>(y+1,x,0);
+//				element.at<int>(0,5,0)=src.at<int>(y+1,x-1,0);
+//				element.at<int>(0,6,0)=src.at<int>(y,x-1,0);
+//				element.at<int>(0,7,0)=src.at<int>(y-1,x-1,0);
+//				for(int i=0;i<8;i++){
+//					if( (element.at<int>(0,i,0)==0) && (element.at<int>(0,(i+1)%8,0)==255)){
+//						AP1++;
+//					}
+//				}
+//
+//
+//			}
+			cout<<(int)P1<<"_";
+			count++;
+			//src.at<int>(y,x,1)=255;
+
+			//cvWaitKey(100);
+		}
+		cout<<"\n";
+
+	}
+	cout<<"\n"<<count;
+	imshow("test",src);
+
+	return src;
 }
 
 int main(){
-
+cout<<"start"<<"\n";
 	skeleton test;
 	test.load();
 	test.thres1=86;
 	test.thres2=86;
+	test.voronoi();
+
+	test.show();
 	while(1){
 		int key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
@@ -168,9 +198,9 @@ int main(){
 		if ( key_pressed == 44 && test.thres1>=0) test.thres1--;
 		if ( key_pressed == 93 ) test.thres2++;
 		if ( key_pressed == 91 && test.thres2>=0) test.thres2--;
-		test.voronoi();
-		test.show();
-		test.track_skel();
+		//test.voronoi();
+		//test.show();
+		//test.track_skel();
 	}
 	cout<<test.thres1<<" "<<test.thres2;
 }
