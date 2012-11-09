@@ -70,6 +70,25 @@ void skeleton::voronoi(){
 	imshow("erode/dilate", skeleton2);
 	imshow("laplace", skeleton3);
 
+	vector<vector<Point> > contours;
+	vector<Vec4i> hierarchy;
+	RNG rng(12345);
+
+	findContours( skeleton1, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_KCOS);
+	cvtColor( skeleton1, skeleton1, CV_GRAY2BGR );
+	for( int i = 0; i< contours.size(); i++ )
+	{
+		cout<<"->"<<contours[i].size()<<" ";
+		Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
+		drawContours( skeleton1, contours, i, color, 1, 8, hierarchy, 0, Point() );
+	}
+	for(int i=0;i<contours[1].size();i++){
+		circle(skeleton1, contours[1][i], 3, Scalar(0,255,0), 1, 8, 0);
+	}
+	//approxPolyDP(contours[1], skeleton1, 1, false);
+	imshow("contours", skeleton1);
+
+
 }
 
 void skeleton::load(){
