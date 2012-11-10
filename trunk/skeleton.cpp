@@ -16,6 +16,7 @@ private:
 
 	Mat thinning_sub(Mat , int , int , int , int *);
 
+	void locate_upper_torso(Mat, Mat, Mat);
 public:
 
 	void load();
@@ -45,63 +46,97 @@ void skeleton::voronoi(){
 
 
 
-	Mat skeleton1, skeleton2, skeleton3;
-	mask.copyTo(skeleton1);
-	mask.copyTo(skeleton2);
-	mask.copyTo(skeleton3);
+	Mat skeleton;
+	mask.copyTo(skeleton);
+	//	mask.copyTo(skeleton2);
+	//	mask.copyTo(skeleton3);
 
 	double t = (double)getTickCount();
-	thinning1(skeleton1);
+	thinning1(skeleton);
 	t = (double)getTickCount() - t;
-	cout<< t*1000./cv::getTickFrequency()<<" ";
+	//	cout<< t*1000./cv::getTickFrequency()<<" ";
 
 
-	t = (double)getTickCount();
-	thinning2(skeleton2);
-	t = (double)getTickCount() - t;
-	cout<< t*1000./cv::getTickFrequency()<<" ";
+	//	t = (double)getTickCount();
+	//	thinning2(skeleton2);
+	//	t = (double)getTickCount() - t;
+	//	cout<< t*1000./cv::getTickFrequency()<<" ";
+	//
+	//	t = (double)getTickCount();
+	//	thinning3(skeleton3);
+	//	t = (double)getTickCount() - t;
+	//	cout<< t*1000./cv::getTickFrequency()<<"\n";
 
-	t = (double)getTickCount();
-	thinning3(skeleton3);
-	t = (double)getTickCount() - t;
-	cout<< t*1000./cv::getTickFrequency()<<"\n";
-
-	imshow("custom", skeleton1);
-	imshow("erode/dilate", skeleton2);
-	imshow("laplace", skeleton3);
+	imshow("custom", skeleton);
+	//	imshow("erode/dilate", skeleton2);
+	//	imshow("laplace", skeleton3);
 
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 	RNG rng(12345);
 
-	findContours( skeleton1, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_KCOS);
-	cvtColor( skeleton1, skeleton1, CV_GRAY2BGR );
-	for( int i = 0; i< contours.size(); i++ )
-	{
-		cout<<"->"<<contours[i].size()<<" ";
-		Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-		drawContours( skeleton1, contours, i, color, 1, 8, hierarchy, 0, Point() );
-	}
-	for(int i=0;i<contours[1].size();i++){
-		circle(skeleton1, contours[1][i], 3, Scalar(0,255,0), 1, 8, 0);
-	}
-	//approxPolyDP(contours[1], skeleton1, 1, false);
-	imshow("contours", skeleton1);
+	Mat skeleton2;
+	skeleton.copyTo(skeleton2);
+	findContours( skeleton2, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_KCOS);
+	cvtColor( skeleton, skeleton, CV_GRAY2BGR );
 
+	vector<Point> contour_aprox;
+	approxPolyDP(contours[0], contour_aprox, 5, false);
 
+	//	for( int i = 0; i< contour_aprox.size(); i++ )
+	//	{
+	//		Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
+	//		drawContours( skeleton1, contour_aprox, i, color, 1, 8, hierarchy, 0, Point() );
+	//	}
+	for(int i=0;i<contour_aprox.size();i++){
+		circle(skeleton, contour_aprox[i], 3, Scalar(0,255,0), 1, 8, 0);
+		line(skeleton, contour_aprox[i], contour_aprox[(i+1)%contour_aprox.size()], Scalar(0,0,255), 1, 8);
+	}
+
+	imshow("contours", skeleton);
+
+	Mat mask_A, mask_B;
+	locate_upper_torso(mask,mask_A, mask_B);
 }
 
 void skeleton::load(){
 	depth=imread("depth2.png",0);
-	image=imread("person.png",0);
+	image=imread("person2.png",0);
 }
 
 void skeleton::show(){
-	imshow("depth", depth);
-	imshow("person", image);
+	imshow("depth2", depth);
+	imshow("person2", image);
 	//imshow("edges", edges);
 	//imshow("edges2", edges2);
 }
+
+void skeleton::locate_upper_torso(Mat src,Mat mask_A, Mat mask_B){
+	Mat local;
+	src.copyTo(local);
+
+
+
+//	rectangle(mask_B, Point(83,0), Point(340,149), Scalar(255), CV_FILLED);		//head
+//	rectangle(mask_B, Point(0,149), Point(428,532), Scalar(255), CV_FILLED);	//torso
+//
+//	rectangle(mask_A, Point(145,52), Point(283,212), Scalar(255), CV_FILLED);		//head
+//	rectangle(mask_A, Point(66,212), Point(362,532), Scalar(255), CV_FILLED);	//torso
+
+	mask_A=Mat::zeros(177,154,CV_8UC1);
+	mask_B=Mat::zeros(177,154,CV_8UC1);
+	rectangle(mask_B, Point(25,0), Point(129,50), Scalar(255), CV_FILLED);		//head
+	rectangle(mask_B, Point(0,50), Point(154,177), Scalar(255), CV_FILLED);	//torso
+
+	rectangle(mask_A, Point(52,27), Point(102,77), Scalar(255), CV_FILLED);		//head
+	rectangle(mask_A, Point(27,77), Point(127,177), Scalar(255), CV_FILLED);	//torso
+	mask_B-=mask_A;
+	int areaA=countNonZero(mask_A);
+
+	imshow("maskA",mask_A);
+	imshow("maskB",mask_B);
+}
+
 
 void skeleton::thinning1(Mat init_image){
 	Mat sub_result;

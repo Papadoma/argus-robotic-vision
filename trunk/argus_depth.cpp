@@ -16,6 +16,10 @@ private:
 	//module_eye input_module;
 	module_file input_module;
 
+	Mat cameraMatrix[2], distCoeffs[2];
+	Mat R, T, E, F, Q;
+	Mat R1, R2, P1, P2;
+
 	Mat* mat_left;
 	Mat* mat_right;
 	Mat* rect_mat_left;
@@ -237,10 +241,6 @@ void argus_depth::load_param(){
 
 	string intrinsics="intrinsics_eye.yml";
 	string extrinsics="extrinsics_eye.yml";
-
-	Mat cameraMatrix[2], distCoeffs[2];
-	Mat R, T, E, F;
-	Mat R1, R2, P1, P2, Q;
 
 	Size imageSize(width,height);
 
@@ -587,11 +587,11 @@ void argus_depth::clustering(){
 	drawContours( biggest_blob, contours, max_contour_pos, Scalar(255), CV_FILLED, 8 ); //Fill biggest blob
 	threshold(biggest_blob,biggest_blob,254,255,THRESH_BINARY); //This clears any contour leftovers caused by findContours
 	bitwise_and(biggest_blob,labels,labels); 					//Keep the internal detail of the biggest blob
-//	imshow("mask",biggest_blob);
+	//	imshow("mask",biggest_blob);
 
 	bitwise_and(*depth_map2,labels,*depth_map2);	//Filter the depth map. Keep only foreground and biggest blob
 	//medianBlur(*depth_map2, *depth_map2, 5);
-//	imshow("Foreground bigest blob",*depth_map2);
+	//	imshow("Foreground bigest blob",*depth_map2);
 
 	Mat holes1,holes2;
 	threshold(*depth_map2,holes1,1,255,THRESH_BINARY_INV); //find the holes of the original depth map
@@ -619,7 +619,44 @@ void argus_depth::clustering(){
 	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
 	imshow( "test", jet_depth_map2 );
 
+	imshow("test1",*depth_map2);
+	Mat point_cloud;
+	reprojectImageTo3D(*depth_map2, point_cloud, Q, false, -1 );
+	//cout<<point_cloud;
+	Mat projection;
+	Mat objectPoints=point_cloud.reshape(1,(depth_map2->rows)*(depth_map2->cols));
+	Mat R_vec;
+	Rodrigues(R1, R_vec);
+	projectPoints(objectPoints, R_vec, T, cameraMatrix[0], distCoeffs[0], projection);
 
+	//extraxt x and y channels
+	cv::Mat xy[2]; //X,Y
+	cv::split(projection, xy);
+	cout<<xy[0]<<"\n";
+	//calculate angle and magnitude
+	cv::Mat magnitude, angle;
+	cv::cartToPolar(xy[0], xy[1], magnitude, angle, true);
+
+	//translate magnitude to range [0;1]
+	double mag_max;
+	cv::minMaxLoc(magnitude, 0, &mag_max);
+	magnitude.convertTo(magnitude, -1, 255.0/mag_max);
+
+	//build hsv image
+	cv::Mat _hsv[3], hsv;
+	_hsv[0] = angle;
+	_hsv[1] = Mat::ones(angle.size(), CV_32F);
+	_hsv[2] = magnitude;
+	cv::merge(_hsv, 3, hsv);
+
+	//convert to BGR and show
+	Mat bgr;//CV_32FC3 matrix
+	cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
+	cv::imshow("optical flow", bgr);
+
+	//imshow("test2",projection2);
+
+	//projectPoints(InputArray objectPoints, InputArray rvec, InputArray tvec, InputArray cameraMatrix, InputArray distCoeffs, OutputArray imagePoints, OutputArray jacobian=noArray(), 0);
 
 	//imshow("left person",intensity_data);
 	//imshow("test2",dataset2);
@@ -629,14 +666,14 @@ void argus_depth::clustering(){
 int main(){
 	int key_pressed=255;
 
-//	vector<ocl::Info> info;
-//	CV_Assert(ocl::getDevice(info));
-//	int devnums =ocl::getDevice(info);
+	//	vector<ocl::Info> info;
+	//	CV_Assert(ocl::getDevice(info));
+	//	int devnums =ocl::getDevice(info);
 
 
-//	if(devnums<1){
-//		std::cout << "no OPENCL device found\n";
-//	}
+	//	if(devnums<1){
+	//		std::cout << "no OPENCL device found\n";
+	//	}
 
 	argus_depth *eye_stereo = new argus_depth();
 	bool loop=false;
