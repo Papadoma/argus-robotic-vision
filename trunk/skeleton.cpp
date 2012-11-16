@@ -7,6 +7,18 @@
 using namespace std;
 using namespace cv;
 
+struct limbs{
+	Point location;
+	int length;
+}head,l_arm,r_arm,l_foot,r_foot;
+
+struct segment{
+	Point start;
+	Point end;
+	int length;
+};
+
+
 class skeleton{
 private:
 	Mat depth;
@@ -24,6 +36,7 @@ private:
 	Mat thinning_sub(Mat , int , int , int , int *);
 
 	void locate_upper_torso(Mat, Mat, Mat);
+	vector<vector<Point> > segm_skel(vector<Point>, Mat);
 public:
 
 	void load();
@@ -70,22 +83,24 @@ void skeleton::voronoi(){
 	vector<vector<Point> > contours;
 	vector<Vec4i> hierarchy;
 
-	Mat skeleton2;
+	Mat skeleton2, skeleton_draw;
 	skeleton.copyTo(skeleton2);
 
-	findContours( skeleton2, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_TC89_KCOS);
-	//cvtColor( skeleton, skeleton, CV_GRAY2BGR );
+
+	findContours( skeleton2, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
+	cvtColor( skeleton, skeleton_draw, CV_GRAY2BGR );
 
 	//vector<Point> contour_aprox;
 	//approxPolyDP(contours[0], contour_aprox, 10, false);
 
 	vector<vector<Point> >hull( contours.size() );
 	for( int i = 0; i < (int)contours.size(); i++ )convexHull( Mat(contours[i]), hull[i], false );
-	//drawContours( skeleton, hull, -1, Scalar(255));
+	//	drawContours( skeleton, hull, -1, Scalar(255));
 
 
 	//Find possible limbs. The limb must be a skeleton's end
-	vector<Point> limbs;
+	//vector<Point> limbs;
+	vector<Point> buffer;
 	for(int i=0;i<(int)hull[0].size();i++){
 		int whites_area=0;
 		whites_area+=skeleton.at<uchar>(hull[0][i].y-1,hull[0][i].x+1)/255;
@@ -97,29 +112,43 @@ void skeleton::voronoi(){
 		whites_area+=skeleton.at<uchar>(hull[0][i].y+1,hull[0][i].x)/255;
 		whites_area+=skeleton.at<uchar>(hull[0][i].y+1,hull[0][i].x-1)/255;
 		//cout<<whites_area<<hull[0][i]<<"\n";
-		if(whites_area==1)limbs.push_back(hull[0][i]); //found possible limbs
+		//circle(skeleton_draw, hull[0][i], 3, Scalar(0,255,0), 2, 8, 0);
+		if(whites_area==1)buffer.push_back(hull[0][i]); //found possible limbs
 	}
-	cout<<limbs.size()<<"\n";
-
-	//Sort the limbs by y distance using bubblesort ;)
-	for(int i=(int)limbs.size();i>1;i--){
-		for(int j=0;j<i-1;j++){
-			if(limbs[j].y>limbs[j+1].y){
-				Point temp=limbs[j+1];
-				limbs[j+1]=limbs[j];
-				limbs[j]=temp;
-			}
-		}
+	cout<<"Found: "<<buffer.size()<<" limbs"<<"\n";
+	//circle(skeleton_draw, buffer.front(), 3, Scalar(0,255,0), 2, 8, 0);
+	vector<vector<Point> > segmented;
+	//segmented = segm_skel(contours[0], skeleton);
+	cout<<"segs "<<segmented.size()<<"\n";
+	Mat test(skeleton.rows,skeleton.cols,CV_8UC1);
+	for(int i=0;i<contours[0].size();i++){
+		test.at<uchar>(contours[0][i].y,contours[0][i].x)=127;
 	}
+	imshow("test", test);
+	//	int pos=5;
+	//	cout<<"size "<<segmented[pos].size()<<" ";
+	//	for(int i=0;i<segmented[pos].size();i++){
+	//		circle(skeleton_draw, segmented[pos][i], 3, Scalar(0,255,255), 2, 8, 0);
+	//	}
 
-	//Define feet
-	Point temp1, temp2;
-	temp1=limbs.back();
-	temp2=limbs.back();
+
+
+	//
+	//	//Sort the limbs by y distance using bubblesort ;)
+	//	for(int i=(int)limbs.size();i>1;i--){
+	//		for(int j=0;j<i-1;j++){
+	//			if(limbs[j].y>limbs[j+1].y){
+	//				Point temp=limbs[j+1];
+	//				limbs[j+1]=limbs[j];
+	//				limbs[j]=temp;
+	//			}
+	//		}
+	//	}
 
 
 
-	circle(skeleton, R_Foot, 3, Scalar(127), 2, 8, 0);
+
+	//circle(skeleton_draw, R_Foot, 3, Scalar(0,255,0), 2, 8, 0);
 
 
 
@@ -136,15 +165,58 @@ void skeleton::voronoi(){
 
 
 
-	imshow("contours", skeleton);
+	//	putText(skeleton_draw, "1", contours[0][0], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "2", contours[0][5], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "3", contours[0][10], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "4", contours[0][15], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "5", contours[0][20], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "6", contours[0][25], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "7", contours[0][30], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "8", contours[0][35], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "9", contours[0][40], 1, 1, Scalar(0,255,0));
+	//	putText(skeleton_draw, "10", contours[0][45], 1, 1, Scalar(0,255,0));
+
+	imshow("contours", skeleton_draw);
 
 	//Mat mask_A, mask_B;
 	//locate_upper_torso(mask,mask_A, mask_B);
 }
 
+vector<vector<Point> > skeleton::segm_skel(vector<Point> contours, Mat skeleton){
+	vector<vector<Point> > segmented;
+	vector <Point> buffer;
+	Mat skeleton_draw;
+	cvtColor( skeleton, skeleton_draw, CV_GRAY2BGR );
+
+	while(!contours.empty()){
+		int whites_area=0;
+		Point mark=contours.back();
+		contours.pop_back();
+		whites_area+=skeleton.at<uchar>(mark.y-1,mark.x+1)/255;
+		whites_area+=skeleton.at<uchar>(mark.y-1,mark.x)/255;
+		whites_area+=skeleton.at<uchar>(mark.y-1,mark.x-1)/255;
+		whites_area+=skeleton.at<uchar>(mark.y,mark.x+1)/255;
+		whites_area+=skeleton.at<uchar>(mark.y,mark.x-1)/255;
+		whites_area+=skeleton.at<uchar>(mark.y+1,mark.x+1)/255;
+		whites_area+=skeleton.at<uchar>(mark.y+1,mark.x)/255;
+		whites_area+=skeleton.at<uchar>(mark.y+1,mark.x-1)/255;
+		if(whites_area==3){
+			circle(skeleton_draw, mark, 3, Scalar(0,255,255), 2, 8, 0);
+			segmented.push_back(buffer);
+			buffer.clear();
+		}else{
+
+			buffer.push_back(mark);
+		}
+		imshow("test",skeleton_draw);
+	}
+
+	return segmented;
+}
+
 void skeleton::load(){
-	depth=imread("depth2.png",0);
-	image=imread("person2.png",0);
+	depth=imread("depth.png",0);
+	image=imread("person.png",0);
 }
 
 void skeleton::show(){
