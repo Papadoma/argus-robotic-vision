@@ -21,10 +21,11 @@ struct segment{
 
 class skeleton{
 private:
+	bool found_human;
+
+
 	Mat depth;
 	Mat image;
-	Mat edges;
-	Mat edges2;
 
 	Point Head;
 	Point L_Hand;
@@ -32,13 +33,13 @@ private:
 	Point L_Foot;
 	Point R_Foot;
 
-
-	Mat thinning_sub(Mat , int , int , int , int *);
+	Point Upper_torso;
+	Point Lower_torso;
 
 	void locate_upper_torso(Mat, Mat, Mat);
-	vector<vector<Point> > segm_skel(vector<Point>, Mat);
+	vector<vector<Point> > segm_skel(vector<Point> , Mat );
 public:
-
+	skeleton();
 	void load();
 	void show();
 	void voronoi();
@@ -50,7 +51,16 @@ public:
 
 };
 
-
+skeleton::skeleton(){
+	found_human=false;
+	Head=Point(0,0);
+	L_Hand=Point(0,0);
+	R_Hand=Point(0,0);
+	L_Foot=Point(0,0);
+	R_Foot=Point(0,0);
+	Upper_torso=Point(0,0);
+	Lower_torso=Point(0,0);
+}
 
 void skeleton::voronoi(){
 	equalizeHist(image, image);
@@ -60,123 +70,135 @@ void skeleton::voronoi(){
 	threshold(depth,mask,1,255,THRESH_BINARY);
 	//	Mat kernel(11,11,CV_8U,cv::Scalar(1));
 	//morphologyEx(mask, mask, MORPH_CLOSE , kernel);
-	medianBlur(mask, mask, 5);
-	//erode(mask, mask, Mat(),Point(),5);
-	//dilate(mask, mask, Mat(),Point(),5);
+	medianBlur(mask, mask, 7);
 
-	imshow("mask",mask);
+	imshow("Mask",mask);
+
+	//find contour and convex of mask
+	vector<vector<Point> > mask_contours;
+	vector<Vec4i> mask_hierarchy;
+	findContours( mask, mask_contours, mask_hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
+	drawContours(mask, mask_contours, 0, Scalar(255), CV_FILLED);	//fill any inside holes, if any :P
+	//	vector<vector<int> >mask_hull( mask_contours.size() );
+	//	convexHull( Mat(mask_contours[0]), mask_hull[0] );
+	//
 
 
 
-	//Mat skeleton(depth.rows,depth.cols,CV_8UC1);
+	//prepare for skeleton forming
 	Mat skeleton;
 	mask.copyTo(skeleton);
 
-	double t = (double)getTickCount();
+	//form skeleton using thinning algorithm
 	thinning1(skeleton);
-	t = (double)getTickCount() - t;
 
-	imshow("custom", skeleton);
-	//	imshow("erode/dilate", skeleton2);
-	//	imshow("laplace", skeleton3);
-
-	vector<vector<Point> > contours;
-	vector<Vec4i> hierarchy;
-
+	//find contour and convex of skeleton
+	vector<vector<Point> > skel_contours;
+	vector<Vec4i> skel_hierarchy;
 	Mat skeleton2, skeleton_draw;
-	skeleton.copyTo(skeleton2);
+	skeleton.copyTo(skeleton2);	//keep skeleton intact, findcontours() changes the source
+	findContours( skeleton2, skel_contours, skel_hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE  );
+	cvtColor( skeleton, skeleton_draw, CV_GRAY2BGR );	//skeleton_draw for colorful viewing purposes
+	vector<vector<Point> >skel_hull( skel_contours.size() );
+	vector<vector<int> >skel_hull2( skel_contours.size() );
+	convexHull( Mat(skel_contours[0]), skel_hull[0], false );
+	convexHull( Mat(skel_contours[0]), skel_hull2[0], true );
 
+	vector <Vec4i> conv_def_idx;
+	convexityDefects(skel_contours[0], skel_hull2[0], conv_def_idx);
 
-	findContours( skeleton2, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
-	cvtColor( skeleton, skeleton_draw, CV_GRAY2BGR );
+	//Find skeleton contours approximation
+	vector<Point>  approx_contours;
+	approxPolyDP(skel_contours[0],approx_contours, skeleton.cols/20, true);
 
-	//vector<Point> contour_aprox;
-	//approxPolyDP(contours[0], contour_aprox, 10, false);
+	//	//Draw skeleton contours approximation
+	//	for(int i=0;i<(int)approx_contours.size();i++){
+	//		circle(skeleton_draw, approx_contours[i], 2, Scalar(0,255,0), -1, 8, 0);
+	//	}
+	//	cout<<"approx"<<approx_contours.size()<<"\n";
 
-	vector<vector<Point> >hull( contours.size() );
-	for( int i = 0; i < (int)contours.size(); i++ )convexHull( Mat(contours[i]), hull[i], false );
-	//	drawContours( skeleton, hull, -1, Scalar(255));
+	//Draw convex defects
+	for(int i=0;i<(int)conv_def_idx.size();i++){
+		Point start_p,end_p;
+		start_p.x=(skel_contours[0][conv_def_idx[i][0]].x+skel_contours[0][conv_def_idx[i][1]].x)/2;
+		start_p.y=(skel_contours[0][conv_def_idx[i][0]].y+skel_contours[0][conv_def_idx[i][1]].y)/2;
+		end_p=skel_contours[0][conv_def_idx[i][2]];
+
+		line(skeleton_draw, start_p, end_p, Scalar(255,255,0));
+	}
 
 
 	//Find possible limbs. The limb must be a skeleton's end
-	//vector<Point> limbs;
-	vector<Point> buffer;
-	for(int i=0;i<(int)hull[0].size();i++){
+	vector<Point> limbs_buffer;
+	for(int i=0;i<(int)skel_hull[0].size();i++){
 		int whites_area=0;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y-1,hull[0][i].x+1)/255;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y-1,hull[0][i].x)/255;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y-1,hull[0][i].x-1)/255;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y,hull[0][i].x+1)/255;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y,hull[0][i].x-1)/255;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y+1,hull[0][i].x+1)/255;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y+1,hull[0][i].x)/255;
-		whites_area+=skeleton.at<uchar>(hull[0][i].y+1,hull[0][i].x-1)/255;
-		//cout<<whites_area<<hull[0][i]<<"\n";
-		//circle(skeleton_draw, hull[0][i], 3, Scalar(0,255,0), 2, 8, 0);
-		if(whites_area==1)buffer.push_back(hull[0][i]); //found possible limbs
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y-1,skel_hull[0][i].x+1)/255;
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y-1,skel_hull[0][i].x)/255;
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y-1,skel_hull[0][i].x-1)/255;
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y,skel_hull[0][i].x+1)/255;
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y,skel_hull[0][i].x-1)/255;
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y+1,skel_hull[0][i].x+1)/255;
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y+1,skel_hull[0][i].x)/255;
+		whites_area+=skeleton.at<uchar>(skel_hull[0][i].y+1,skel_hull[0][i].x-1)/255;
+
+		if(whites_area==1){
+			circle(skeleton_draw, skel_hull[0][i], 4, Scalar(0,0,255), 1, 8, 0);
+			limbs_buffer.push_back(skel_hull[0][i]); //found possible limbs
+		}
 	}
-	cout<<"Found: "<<buffer.size()<<" limbs"<<"\n";
-	//circle(skeleton_draw, buffer.front(), 3, Scalar(0,255,0), 2, 8, 0);
-	vector<vector<Point> > segmented;
-	//segmented = segm_skel(contours[0], skeleton);
-	cout<<"segs "<<segmented.size()<<"\n";
-	Mat test(skeleton.rows,skeleton.cols,CV_8UC1);
-	for(int i=0;i<contours[0].size();i++){
-		test.at<uchar>(contours[0][i].y,contours[0][i].x)=127;
+	cout<<"Found: "<<limbs_buffer.size()<<" limbs"<<"\n";
+
+
+	//Find which points are joints and not limbs
+	vector<Point> temp_buffer=approx_contours;
+	for(int i=0;i<(int)limbs_buffer.size();i++){
+		for(int j=0;j<(int)temp_buffer.size();j++){
+			if(limbs_buffer[i]==temp_buffer[j]){
+				temp_buffer.erase(temp_buffer.begin()+j);
+				break;
+			}
+		}
 	}
-	imshow("test", test);
-	//	int pos=5;
-	//	cout<<"size "<<segmented[pos].size()<<" ";
-	//	for(int i=0;i<segmented[pos].size();i++){
-	//		circle(skeleton_draw, segmented[pos][i], 3, Scalar(0,255,255), 2, 8, 0);
-	//	}
 
+	//Find which points are joints and relate to convex defects
+	vector<Point> joints_buffer;
+	for(int j=0;j<(int)temp_buffer.size();j++){
+		for(int i=0;i<(int)conv_def_idx.size();i++){
 
+			if(skel_contours[0][conv_def_idx[i][2]]==temp_buffer[j]){
+				joints_buffer.push_back(temp_buffer[j]);
+				//temp_buffer.erase(temp_buffer.begin()+j);
+				conv_def_idx.erase(conv_def_idx.begin()+i);
+				break;
+			}
+		}
+	}
+	cout<<joints_buffer;
 
-	//
-	//	//Sort the limbs by y distance using bubblesort ;)
-	//	for(int i=(int)limbs.size();i>1;i--){
-	//		for(int j=0;j<i-1;j++){
-	//			if(limbs[j].y>limbs[j+1].y){
-	//				Point temp=limbs[j+1];
-	//				limbs[j+1]=limbs[j];
-	//				limbs[j]=temp;
+	//	//Find presence (a joint could appear more than once)
+	//	vector<int> presence;
+	//	for(int i=0;i<(int)joints_buffer.size();i++){
+	//		int count=0;
+	//		for(int j=0;j<(int)joints_buffer.size();j++){
+	//			if(joints_buffer[i]==joints_buffer[j]){
+	//				count++;
 	//			}
+	//
 	//		}
+	//		presence.push_back(count);
 	//	}
+	//	cout<<presence;
+
+	//Find upper and lower torso
+
+	//Draw skeleton joints
+	for(int i=0;i<(int)joints_buffer.size();i++){
+		circle(skeleton_draw, joints_buffer[i], 2, Scalar(0,255,0), -1, 8, 0);
+	}
 
 
 
-
-	//circle(skeleton_draw, R_Foot, 3, Scalar(0,255,0), 2, 8, 0);
-
-
-
-	//	for( int i = 0; i< contour_aprox.size(); i++ )
-	//	{
-	//		Scalar color = Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-	//		drawContours( skeleton1, contour_aprox, i, color, 1, 8, hierarchy, 0, Point() );
-	//	}
-
-	//		for(int i=0;i<(int)contour_aprox.size();i++){
-	//			circle(skeleton, contour_aprox[i], 3, Scalar(0,255,0), 1, 8, 0);
-	//			line(skeleton, contour_aprox[i], contour_aprox[(i+1)%contour_aprox.size()], Scalar(0,0,255), 1, 8);
-	//		}
-
-
-
-	//	putText(skeleton_draw, "1", contours[0][0], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "2", contours[0][5], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "3", contours[0][10], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "4", contours[0][15], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "5", contours[0][20], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "6", contours[0][25], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "7", contours[0][30], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "8", contours[0][35], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "9", contours[0][40], 1, 1, Scalar(0,255,0));
-	//	putText(skeleton_draw, "10", contours[0][45], 1, 1, Scalar(0,255,0));
-
-	imshow("contours", skeleton_draw);
+	imshow("Skeleton", skeleton_draw);
 
 	//Mat mask_A, mask_B;
 	//locate_upper_torso(mask,mask_A, mask_B);
@@ -215,8 +237,8 @@ vector<vector<Point> > skeleton::segm_skel(vector<Point> contours, Mat skeleton)
 }
 
 void skeleton::load(){
-	depth=imread("depth.png",0);
-	image=imread("person.png",0);
+	depth=imread("depth2.png",0);
+	image=imread("person2.png",0);
 }
 
 void skeleton::show(){
