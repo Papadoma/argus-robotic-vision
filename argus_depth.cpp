@@ -81,6 +81,7 @@ public:
 	void detect_human();
 	void compute_depth_gpu();
 	void take_snapshot();
+	void camera_view(Mat , Mat , Mat , Mat , Mat , Mat, Mat, Mat, Mat);
 };
 
 //Constructor
@@ -622,37 +623,42 @@ void argus_depth::clustering(){
 	imshow("test1",*depth_map2);
 	Mat point_cloud;
 	reprojectImageTo3D(*depth_map2, point_cloud, Q, false, -1 );
-	//cout<<point_cloud;
-	Mat projection;
-	Mat objectPoints=point_cloud.reshape(1,(depth_map2->rows)*(depth_map2->cols));
+
+	Mat xyz= point_cloud.reshape(3,point_cloud.size().area());
 	Mat R_vec;
 	Rodrigues(R1, R_vec);
-	projectPoints(objectPoints, R_vec, T, cameraMatrix[0], distCoeffs[0], projection);
 
-//	//extraxt x and y channels
-//	cv::Mat xy[2]; //X,Y
-//	cv::split(projection, xy);
-//	cout<<xy[0]<<"\n";
-//	//calculate angle and magnitude
-//	cv::Mat magnitude, angle;
-//	cv::cartToPolar(xy[0], xy[1], magnitude, angle, true);
-//
-//	//translate magnitude to range [0;1]
-//	double mag_max;
-//	cv::minMaxLoc(magnitude, 0, &mag_max);
-//	magnitude.convertTo(magnitude, -1, 255.0/mag_max);
-//
-//	//build hsv image
-//	cv::Mat _hsv[3], hsv;
-//	_hsv[0] = angle;
-//	_hsv[1] = Mat::ones(angle.size(), CV_32F);
-//	_hsv[2] = magnitude;
-//	cv::merge(_hsv, 3, hsv);
-//
-//	//convert to BGR and show
-//	Mat bgr;//CV_32FC3 matrix
-//	cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
-//	cv::imshow("optical flow", bgr);
+	Mat destimage, destdisp, image, disp;
+
+	image = (*BW_rect_mat_left)(human_anchor).clone();
+	depth_map2->copyTo(disp);
+	imshow("test",image);
+	camera_view(image,destimage,disp,destdisp,xyz,R_vec,T,cameraMatrix[0],distCoeffs[0]);
+
+	//	//extraxt x and y channels
+	//	cv::Mat xy[2]; //X,Y
+	//	cv::split(projection, xy);
+	//	cout<<xy[0]<<"\n";
+	//	//calculate angle and magnitude
+	//	cv::Mat magnitude, angle;
+	//	cv::cartToPolar(xy[0], xy[1], magnitude, angle, true);
+	//
+	//	//translate magnitude to range [0;1]
+	//	double mag_max;
+	//	cv::minMaxLoc(magnitude, 0, &mag_max);
+	//	magnitude.convertTo(magnitude, -1, 255.0/mag_max);
+	//
+	//	//build hsv image
+	//	cv::Mat _hsv[3], hsv;
+	//	_hsv[0] = angle;
+	//	_hsv[1] = Mat::ones(angle.size(), CV_32F);
+	//	_hsv[2] = magnitude;
+	//	cv::merge(_hsv, 3, hsv);
+	//
+	//	//convert to BGR and show
+	//	Mat bgr;//CV_32FC3 matrix
+	//	cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
+	//	cv::imshow("optical flow", bgr);
 
 	//imshow("test2",projection2);
 
@@ -663,7 +669,42 @@ void argus_depth::clustering(){
 	//	imshow("test2",dataset);
 }
 
+void argus_depth::camera_view(Mat image, Mat destimage, Mat disp, Mat destdisp, Mat xyz, Mat R, Mat t, Mat K, Mat dist){
 
+	if(destimage.empty())destimage=Mat::zeros(Size(image.size()),image.type());
+	if(destdisp.empty())destdisp=Mat::zeros(Size(image.size()),disp.type());
+	vector<Point2f> pt;
+	if(dist.empty()) dist = Mat::zeros(Size(5,1),CV_32F);
+	cv::projectPoints(xyz,R,t,K,dist,pt);
+
+	destimage.setTo(0);
+	destdisp.setTo(0);
+
+
+	for(int j=1;j<image.rows-1;j++)
+	{
+		int count=j*image.cols;
+		uchar* img=image.ptr<uchar>(j);
+
+		for(int i=0;i<image.cols;i++,count++)
+		{
+			int x=(int)(pt[count].x+0.5);
+			int y=(int)(pt[count].y+0.5);
+
+			if(pt[count].x>=1 && pt[count].x<image.cols-1 && pt[count].y>=1 && pt[count].y<image.rows-1)
+			{
+				short v=destdisp.at<uchar>(y,x);
+				if(v<disp.at<uchar>(j,i))
+				{
+					destimage.at<uchar>(y,3*x+0)=img[3*i+0];
+					destimage.at<uchar>(y,3*x+1)=img[3*i+1];
+					destimage.at<uchar>(y,3*x+2)=img[3*i+2];
+					destdisp.at<uchar>(y,x)=disp.at<uchar>(j,i);
+				}
+			}
+		}
+	}
+}
 
 int main(){
 	int key_pressed=255;
