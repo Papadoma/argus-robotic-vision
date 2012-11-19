@@ -18,11 +18,10 @@ struct segment{
 	int length;
 };
 
-
 class skeleton{
 private:
 	bool found_human;
-
+//
 
 	Mat depth;
 	Mat image;
@@ -79,6 +78,7 @@ void skeleton::voronoi(){
 	vector<Vec4i> mask_hierarchy;
 	findContours( mask, mask_contours, mask_hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_NONE );
 	drawContours(mask, mask_contours, 0, Scalar(255), CV_FILLED);	//fill any inside holes, if any :P
+
 	//	vector<vector<int> >mask_hull( mask_contours.size() );
 	//	convexHull( Mat(mask_contours[0]), mask_hull[0] );
 	//
@@ -103,6 +103,8 @@ void skeleton::voronoi(){
 	vector<vector<int> >skel_hull2( skel_contours.size() );
 	convexHull( Mat(skel_contours[0]), skel_hull[0], false );
 	convexHull( Mat(skel_contours[0]), skel_hull2[0], true );
+
+	drawContours(skeleton_draw, mask_contours, 0, Scalar(0,255,0), 1);
 
 	vector <Vec4i> conv_def_idx;
 	convexityDefects(skel_contours[0], skel_hull2[0], conv_def_idx);
@@ -237,7 +239,7 @@ vector<vector<Point> > skeleton::segm_skel(vector<Point> contours, Mat skeleton)
 }
 
 void skeleton::load(){
-	depth=imread("depth2.png",0);
+	depth=imread("depth3.png",0);
 	image=imread("person2.png",0);
 }
 
@@ -333,13 +335,13 @@ void skeleton::locate_upper_torso(Mat src,Mat mask_A, Mat mask_B){
 
 }
 
-
 void skeleton::thinning1(Mat init_image){
 	Mat sub_result;
 	init_image=~init_image;
 	init_image.copyTo(sub_result);
 	do{
 		int count=0;
+
 		for(int y=0;y<init_image.rows;y++){
 			for(int x=0;x<init_image.cols;x++){
 				int P1=init_image.at<uchar>(y,x);
