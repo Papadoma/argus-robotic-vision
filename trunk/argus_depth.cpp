@@ -629,30 +629,30 @@ void argus_depth::clustering(){
 	Rodrigues(R1, R_vec);
 	projectPoints(objectPoints, R_vec, T, cameraMatrix[0], distCoeffs[0], projection);
 
-	//extraxt x and y channels
-	cv::Mat xy[2]; //X,Y
-	cv::split(projection, xy);
-	cout<<xy[0]<<"\n";
-	//calculate angle and magnitude
-	cv::Mat magnitude, angle;
-	cv::cartToPolar(xy[0], xy[1], magnitude, angle, true);
-
-	//translate magnitude to range [0;1]
-	double mag_max;
-	cv::minMaxLoc(magnitude, 0, &mag_max);
-	magnitude.convertTo(magnitude, -1, 255.0/mag_max);
-
-	//build hsv image
-	cv::Mat _hsv[3], hsv;
-	_hsv[0] = angle;
-	_hsv[1] = Mat::ones(angle.size(), CV_32F);
-	_hsv[2] = magnitude;
-	cv::merge(_hsv, 3, hsv);
-
-	//convert to BGR and show
-	Mat bgr;//CV_32FC3 matrix
-	cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
-	cv::imshow("optical flow", bgr);
+//	//extraxt x and y channels
+//	cv::Mat xy[2]; //X,Y
+//	cv::split(projection, xy);
+//	cout<<xy[0]<<"\n";
+//	//calculate angle and magnitude
+//	cv::Mat magnitude, angle;
+//	cv::cartToPolar(xy[0], xy[1], magnitude, angle, true);
+//
+//	//translate magnitude to range [0;1]
+//	double mag_max;
+//	cv::minMaxLoc(magnitude, 0, &mag_max);
+//	magnitude.convertTo(magnitude, -1, 255.0/mag_max);
+//
+//	//build hsv image
+//	cv::Mat _hsv[3], hsv;
+//	_hsv[0] = angle;
+//	_hsv[1] = Mat::ones(angle.size(), CV_32F);
+//	_hsv[2] = magnitude;
+//	cv::merge(_hsv, 3, hsv);
+//
+//	//convert to BGR and show
+//	Mat bgr;//CV_32FC3 matrix
+//	cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
+//	cv::imshow("optical flow", bgr);
 
 	//imshow("test2",projection2);
 
@@ -662,6 +662,8 @@ void argus_depth::clustering(){
 	//imshow("test2",dataset2);
 	//	imshow("test2",dataset);
 }
+
+
 
 int main(){
 	int key_pressed=255;
