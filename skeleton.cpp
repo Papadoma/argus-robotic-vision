@@ -239,8 +239,8 @@ vector<vector<Point> > skeleton::segm_skel(vector<Point> contours, Mat skeleton)
 }
 
 void skeleton::load(){
-	depth=imread("depth3.png",0);
-	image=imread("person2.png",0);
+	depth=imread("depth.png",0);
+	image=imread("person.png",0);
 }
 
 void skeleton::show(){

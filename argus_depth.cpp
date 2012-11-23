@@ -22,23 +22,22 @@ private:
 
 	Mat* mat_left;
 	Mat* mat_right;
-	Mat* rect_mat_left;
-	Mat* rect_mat_right;
-	Mat* BW_rect_mat_left;
-	Mat* BW_rect_mat_right;
+	Mat rect_mat_left;
+	Mat rect_mat_right;
+	Mat BW_rect_mat_left;
+	Mat BW_rect_mat_right;
 
-	Mat* depth_map_lowres;
-	Mat* depth_map_highres;
+	Mat depth_map_lowres;
+	Mat depth_map_highres;
 
-	Mat* previous_depth_map;
-	Mat* depth_map2;
+	Mat depth_map2;
 
-	Mat* person_left;
-	Mat* person_right;
+	Mat person_left;
+	Mat person_right;
 
-	Mat* thres_mask;
+	Mat thres_mask;
 
-	Mat* prev_rect_mat_left;
+
 
 	//ocl::oclMat* left_ocl;
 	//ocl::oclMat* right_ocl;
@@ -67,8 +66,14 @@ private:
 	void load_param();
 	void smooth_depth_map();
 
-
+	void lookat(Point3d from, Point3d to, Mat& destR);
+	void eular2rot(double yaw,double pitch, double roll,Mat& dest);
+	void cloud_to_disparity(Mat, Mat);
 public:
+	double baseline;
+	Point3d viewpoint;
+	Point3d lookatpoint;
+
 	argus_depth();
 	~argus_depth();
 	void clustering();
@@ -81,7 +86,7 @@ public:
 	void detect_human();
 	void compute_depth_gpu();
 	void take_snapshot();
-	void camera_view(Mat , Mat , Mat , Mat , Mat , Mat, Mat, Mat, Mat);
+	void camera_view(Mat& , Mat& , Mat& , Mat& , Mat& , Mat&, Mat&, Mat&, Mat&);
 };
 
 //Constructor
@@ -96,19 +101,10 @@ argus_depth::argus_depth(){
 
 	mat_left=new Mat(height,width,CV_8UC3);
 	mat_right=new Mat(height,width,CV_8UC3);
-	BW_rect_mat_left=new Mat(height,width,CV_8UC1);
-	BW_rect_mat_right=new Mat(height,width,CV_8UC1);
-	person_left=new Mat(height,width,CV_8UC1);
-	person_right=new Mat(height,width,CV_8UC1);
-	rect_mat_left=new Mat(height,width,CV_8UC3);
-	rect_mat_right=new Mat(height,width,CV_8UC3);
 
-	depth_map_lowres=new Mat(height,width,CV_8UC1);
-	depth_map_highres=new Mat(height,width,CV_8UC1);
-
-	thres_mask=new Mat(height,width,CV_8UC1);
-
-	prev_rect_mat_left=new Mat(height,width,CV_8UC1);
+	baseline = 9.5;
+	viewpoint=Point3d(0.0,0.0,baseline*10);
+	lookatpoint=Point3d(0.0,0.0,-baseline*10.0);
 
 	//left_ocl=new ocl::oclMat(height,width,CV_8UC1);
 	//right_ocl=new ocl::oclMat(height,width,CV_8UC1);
@@ -124,7 +120,6 @@ argus_depth::argus_depth(){
 	//	if(devnums<1){
 	//		std::cout << "no OPENCL device found\n";
 	//	}
-
 
 	this->load_param();
 
@@ -143,16 +138,10 @@ argus_depth::argus_depth(){
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = true;
 
-
-
-
 	clearview_mask=new Rect(numberOfDisparities,0,width,height);
 	*clearview_mask = roi1 & roi2 & (*clearview_mask);
 
-	previous_depth_map=new Mat(clearview_mask->height,clearview_mask->width,CV_8UC1);
-	*previous_depth_map = Mat::zeros(clearview_mask->height, clearview_mask->width, CV_8UC1);
-
-	depth_map2=new Mat(clearview_mask->height,clearview_mask->width,CV_8UC1);
+	//depth_map2=new Mat(clearview_mask->height,clearview_mask->width,CV_8UC1);
 
 	BSMOG=new BackgroundSubtractorMOG2(500,100,true);
 
@@ -163,18 +152,8 @@ argus_depth::~argus_depth(){
 
 	delete(mat_left);
 	delete(mat_right);
-	delete(rect_mat_left);
-	delete(rect_mat_right);
-	delete(BW_rect_mat_left);
-	delete(BW_rect_mat_right);
-	delete(depth_map_lowres);
-	delete(previous_depth_map);
-	delete(depth_map2);
 
-	delete(thres_mask);
 	delete(BSMOG);
-
-	delete(prev_rect_mat_left);
 
 	destroyAllWindows();
 	//	input_module.~module_eye();
@@ -183,11 +162,11 @@ argus_depth::~argus_depth(){
 void argus_depth::refresh_frame(){
 	input_module.getFrame(mat_left,mat_right);
 
-	remap(*mat_left, *rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
-	remap(*mat_right, *rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+	remap(*mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
+	remap(*mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
 
-	cvtColor(*rect_mat_left,*BW_rect_mat_left,CV_RGB2GRAY);
-	cvtColor(*rect_mat_right,*BW_rect_mat_right,CV_RGB2GRAY);
+	cvtColor(rect_mat_left,BW_rect_mat_left,CV_RGB2GRAY);
+	cvtColor(rect_mat_right,BW_rect_mat_right,CV_RGB2GRAY);
 
 	frame_counter++;
 	//	equalizeHist(*BW_rect_mat_left,*BW_rect_mat_left);
@@ -208,14 +187,14 @@ void argus_depth::refresh_window(){
 	//		imshow( "original_camera_left", *mat_left );
 	//	imshow( "original_camera_right", *mat_right );
 
-	rectangle(*rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
-	rectangle(*rect_mat_right, *clearview_mask, Scalar(255,255,255), 1, 8);
+	rectangle(rect_mat_left, *clearview_mask, Scalar(255,255,255), 1, 8);
+	rectangle(rect_mat_right, *clearview_mask, Scalar(255,255,255), 1, 8);
 
 	Mat imgResult(height,2*width,CV_8UC3); // Your final imageasd
-	Mat roiImgResult_Left = imgResult(Rect(0,0,rect_mat_left->cols,rect_mat_left->rows));
-	Mat roiImgResult_Right = imgResult(Rect(rect_mat_right->cols,0,rect_mat_right->cols,rect_mat_right->rows));
-	Mat roiImg1 = (*rect_mat_left)(Rect(0,0,rect_mat_left->cols,rect_mat_left->rows));
-	Mat roiImg2 = (*rect_mat_right)(Rect(0,0,rect_mat_right->cols,rect_mat_right->rows));
+	Mat roiImgResult_Left = imgResult(Rect(0,0,rect_mat_left.cols,rect_mat_left.rows));
+	Mat roiImgResult_Right = imgResult(Rect(rect_mat_right.cols,0,rect_mat_right.cols,rect_mat_right.rows));
+	Mat roiImg1 = (rect_mat_left)(Rect(0,0,rect_mat_left.cols,rect_mat_left.rows));
+	Mat roiImg2 = (rect_mat_right)(Rect(0,0,rect_mat_right.cols,rect_mat_right.rows));
 	roiImg1.copyTo(roiImgResult_Left);
 	roiImg2.copyTo(roiImgResult_Right);
 
@@ -227,7 +206,7 @@ void argus_depth::refresh_window(){
 	//imshow( "depth", *depth_map_lowres );
 
 	Mat jet_depth_map2(height,width,CV_8UC3);
-	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
+	applyColorMap(depth_map2, jet_depth_map2, COLORMAP_JET );
 	imshow( "depth2", jet_depth_map2 );
 
 	//imshow("person",person_left);
@@ -274,9 +253,11 @@ void argus_depth::load_param(){
 	else
 		cout << "Error: can not load the extrinsics parameters\n";
 
-	if(flag1&&flag2){
 
-		stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
+
+	if(flag1&&flag2){
+		Mat Q_local=Q.clone();
+		stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q_local, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
 
 		//getOptimalNewCameraMatrix(cameraMatrix[0], distCoeffs[0], imageSize, 1, imageSize, &roi1);
 		//getOptimalNewCameraMatrix(cameraMatrix[1], distCoeffs[1], imageSize, 1, imageSize, &roi2);
@@ -328,21 +309,21 @@ void argus_depth::compute_depth(){
 	refined_human_anchor.x=human_anchor.x-numberOfDisparities;
 	refined_human_anchor.width=human_anchor.width+numberOfDisparities;
 
-	*person_left=(*BW_rect_mat_left)(refined_human_anchor);
-	*person_right=(*BW_rect_mat_right)(refined_human_anchor);
+	person_left=(BW_rect_mat_left)(refined_human_anchor);
+	person_right=(BW_rect_mat_right)(refined_human_anchor);
 
 	//sgbm.SADWindowSize = 15;
 	//sgbm(*person_left,*person_right,*depth_map_lowres);
 
 	sgbm.SADWindowSize = 3;
-	sgbm(*person_left,*person_right,*depth_map_highres);
+	sgbm(person_left,person_right,depth_map_highres);
 
 	sgbm.SADWindowSize = 11;
 	//sgbm(*person_left,*person_right,*depth_map_lowres);
-	*depth_map_lowres=*depth_map_highres;
+	depth_map_lowres=depth_map_highres.clone();
 
-	depth_map_lowres->convertTo(*depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
-	depth_map_highres->convertTo(*depth_map_highres, CV_8UC1, 255/(numberOfDisparities*16.));
+	depth_map_lowres.convertTo(depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
+	depth_map_highres.convertTo(depth_map_highres, CV_8UC1, 255/(numberOfDisparities*16.));
 
 	//bilateralFilter(*depth_map_highres, *depth_map_lowres, 9, 30, 30, BORDER_DEFAULT );
 	//blur(*depth_map_highres, *depth_map_lowres, Size(5,5));
@@ -354,22 +335,23 @@ void argus_depth::compute_depth(){
 	//Smooth out the depth map
 
 
-	*depth_map_highres=(*depth_map_highres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
-	*depth_map_lowres=(*depth_map_lowres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height));
+	depth_map_highres=(depth_map_highres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
+	depth_map_lowres=(depth_map_lowres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
 
 	//this->smooth_depth_map();
 
-	depth_map_highres->copyTo(*depth_map2);
+	depth_map_highres.copyTo(depth_map2);
+
 	//bilateralFilter(*depth_map_lowres, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
 
 }
 
 void argus_depth::smooth_depth_map(){
 	Mat holes;
-	threshold(*depth_map_highres,holes,1,255,THRESH_BINARY_INV); //keep only the holes
+	threshold(depth_map_highres,holes,1,255,THRESH_BINARY_INV); //keep only the holes
 
-	bitwise_and(holes,*depth_map_lowres,holes);
-	bitwise_or(holes,*depth_map_highres,*depth_map2);
+	bitwise_and(holes,depth_map_lowres,holes);
+	bitwise_or(holes,depth_map_highres,depth_map2);
 
 	//	Mat kernel(5,5,CV_8U,cv::Scalar(1));
 	//	morphologyEx(*depth_map_highres, *depth_map_lowres, MORPH_CLOSE , kernel);
@@ -384,7 +366,7 @@ void argus_depth::detect_human(){
 
 	vector<Rect> found, found_filtered;
 
-	hog.detectMultiScale(*BW_rect_mat_left, found, 0, Size(8,8), Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
+	hog.detectMultiScale(BW_rect_mat_left, found, 0, Size(8,8), Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
 	//hog.detectMultiScale(img_ocl, found, 0, Size(8,8), Size(0,0), 1.05, 0);
 
 	size_t i, j;
@@ -441,8 +423,8 @@ void argus_depth::detect_human(){
 		// so we slightly shrink the rectangles to get a nicer output.
 		Rect r = found_filtered[i];
 
-		rectangle(*rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
-		rectangle(*rect_mat_right, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
+		rectangle(rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
+		rectangle(rect_mat_right, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
 	}
 	//	if(!found_filtered.empty()){
 	//		stringstream ss2;//create a stringstream
@@ -454,7 +436,7 @@ void argus_depth::detect_human(){
 	//	}
 	vector<Point> points_person;
 	for( i = 0; i < found_person.size(); i++ ){
-		rectangle(*rect_mat_left, found_person[i].tl(), found_person[i].br(), cv::Scalar(0,255,255), 2);
+		rectangle(rect_mat_left, found_person[i].tl(), found_person[i].br(), cv::Scalar(0,255,255), 2);
 		Point p1=found_person[i].tl();
 		Point p2(found_person[i].x+found_person[i].width,found_person[i].y);
 		Point p3=found_person[i].br();
@@ -466,13 +448,13 @@ void argus_depth::detect_human(){
 	}
 	if(points_person.size()>1){
 		Rect final = boundingRect(points_person);
-		rectangle(*rect_mat_left, final.tl(), final.br(), cv::Scalar(0,0,255), 3);
+		rectangle(rect_mat_left, final.tl(), final.br(), cv::Scalar(0,0,255), 3);
 		//if(final.area()>human_anchor.area())human_anchor=final;
 		if(final.area()>0.7*human_anchor.area())human_anchor=final;
 
 	}
 	human_anchor=(*clearview_mask) & human_anchor;
-	rectangle(*rect_mat_left, human_anchor.tl(), human_anchor.br(), cv::Scalar(255,0,255), 1);
+	rectangle(rect_mat_left, human_anchor.tl(), human_anchor.br(), cv::Scalar(255,0,255), 1);
 
 	//	person_left = (*BW_rect_mat_left)(human_anchor).clone();
 	//	person_right = (*BW_rect_mat_right)(human_anchor).clone();
@@ -481,14 +463,15 @@ void argus_depth::detect_human(){
 
 void argus_depth::take_snapshot(){
 	cout<<"Snapshot taken!\n";
-	imwrite("depth.png", *depth_map2);
-	imwrite("person.png", *person_left);
+	imwrite("depth.png", depth_map2);
+	imwrite("person.png", person_left);
 }
 
 void argus_depth::clustering(){
+
 	//Mat dataset((depth_map2->rows)*(depth_map2->cols),3,CV_8UC1);
 	//Mat intensity_data=(*BW_rect_mat_left)(human_anchor);
-	Mat data=depth_map2->reshape(1,1);
+	Mat data=depth_map2.reshape(1,1);
 	Mat dataset(1,data.cols,CV_8UC1);
 	data.row(0).copyTo(dataset.row(0));
 	//equalizeHist(intensity_data,intensity_data);
@@ -558,7 +541,7 @@ void argus_depth::clustering(){
 	labels.convertTo(labels,CV_8UC1);
 	labels=labels/2;
 	labels=labels*255;
-	labels=labels.reshape(1,depth_map2->rows);
+	labels=labels.reshape(1,depth_map2.rows);
 
 
 	//bilateralFilter(labels, labels2, 9, 30, 30, BORDER_DEFAULT );
@@ -590,13 +573,13 @@ void argus_depth::clustering(){
 	bitwise_and(biggest_blob,labels,labels); 					//Keep the internal detail of the biggest blob
 	//	imshow("mask",biggest_blob);
 
-	bitwise_and(*depth_map2,labels,*depth_map2);	//Filter the depth map. Keep only foreground and biggest blob
+	bitwise_and(depth_map2,labels,depth_map2);	//Filter the depth map. Keep only foreground and biggest blob
 	//medianBlur(*depth_map2, *depth_map2, 5);
 	//	imshow("Foreground bigest blob",*depth_map2);
 
 	Mat holes1,holes2;
-	threshold(*depth_map2,holes1,1,255,THRESH_BINARY_INV); //find the holes of the original depth map
-	threshold(*depth_map_highres,holes2,1,255,THRESH_BINARY_INV); //find the holes of the fragmented depth map
+	threshold(depth_map2,holes1,1,255,THRESH_BINARY_INV); //find the holes of the original depth map
+	threshold(depth_map_highres,holes2,1,255,THRESH_BINARY_INV); //find the holes of the fragmented depth map
 	//imshow("holes1",holes1);
 	//imshow("holes2",holes2);
 	bitwise_and(holes2,biggest_blob,holes2); //keep only the holes inside the blob
@@ -605,24 +588,24 @@ void argus_depth::clustering(){
 
 	Mat cover_depth;
 	Mat kernel(9,9,CV_8U,cv::Scalar(1));
-	medianBlur(*depth_map_highres,cover_depth, 5);
+	medianBlur(depth_map_highres,cover_depth, 5);
 	morphologyEx(cover_depth, cover_depth, MORPH_CLOSE , kernel);	//Create a depth map free of holes but not sharp
 	//imshow("cover_depth",cover_depth);
 	bitwise_and(holes1,cover_depth,holes1);	//keep the info for the holes
 
 	//imshow("before",*depth_map2);
-	add(holes1,*depth_map2,*depth_map2); //cover the holes
+	add(holes1,depth_map2,depth_map2); //cover the holes
 	//imshow("after",*depth_map2);
 
 	//imshow("filtered",*depth_map2);
 
 	Mat jet_depth_map2(height,width,CV_8UC3);
-	applyColorMap(*depth_map2, jet_depth_map2, COLORMAP_JET );
-	imshow( "test", jet_depth_map2 );
+	applyColorMap(depth_map2, jet_depth_map2, COLORMAP_JET );
+	//imshow( "test", jet_depth_map2 );
 
-	imshow("test1",*depth_map2);
+	//imshow("test1",depth_map2);
 	Mat point_cloud;
-	reprojectImageTo3D(*depth_map2, point_cloud, Q, false, -1 );
+	reprojectImageTo3D(depth_map_highres, point_cloud, Q, false, -1 );
 
 	Mat xyz= point_cloud.reshape(3,point_cloud.size().area());
 	Mat R_vec;
@@ -630,46 +613,103 @@ void argus_depth::clustering(){
 
 	Mat destimage, destdisp, image, disp;
 
-	image = (*BW_rect_mat_left)(human_anchor).clone();
-	depth_map2->copyTo(disp);
-	imshow("test",image);
-	camera_view(image,destimage,disp,destdisp,xyz,R_vec,T,cameraMatrix[0],distCoeffs[0]);
+	image = (BW_rect_mat_left)(human_anchor).clone();
+	disp=depth_map_highres.clone();
 
-	//	//extraxt x and y channels
-	//	cv::Mat xy[2]; //X,Y
-	//	cv::split(projection, xy);
-	//	cout<<xy[0]<<"\n";
-	//	//calculate angle and magnitude
-	//	cv::Mat magnitude, angle;
-	//	cv::cartToPolar(xy[0], xy[1], magnitude, angle, true);
-	//
-	//	//translate magnitude to range [0;1]
-	//	double mag_max;
-	//	cv::minMaxLoc(magnitude, 0, &mag_max);
-	//	magnitude.convertTo(magnitude, -1, 255.0/mag_max);
-	//
-	//	//build hsv image
-	//	cv::Mat _hsv[3], hsv;
-	//	_hsv[0] = angle;
-	//	_hsv[1] = Mat::ones(angle.size(), CV_32F);
-	//	_hsv[2] = magnitude;
-	//	cv::merge(_hsv, 3, hsv);
-	//
-	//	//convert to BGR and show
-	//	Mat bgr;//CV_32FC3 matrix
-	//	cv::cvtColor(hsv, bgr, cv::COLOR_HSV2BGR);
-	//	cv::imshow("optical flow", bgr);
+	//image.convertTo(image,CV_8UC1);
+	//disp.convertTo(disp,CV_8UC1);
 
-	//imshow("test2",projection2);
+	double focal_length = 598.57;
 
-	//projectPoints(InputArray objectPoints, InputArray rvec, InputArray tvec, InputArray cameraMatrix, InputArray distCoeffs, OutputArray imagePoints, OutputArray jacobian=noArray(), 0);
+	//(3) camera setting
+	Mat K=Mat::eye(3,3,CV_64F);
+	K.at<double>(0,0)=focal_length;
+	K.at<double>(1,1)=focal_length;
+	K.at<double>(0,2)=(image.cols-1.0)/2.0;
+	K.at<double>(1,2)=(image.rows-1.0)/2.0;
 
-	//imshow("left person",intensity_data);
-	//imshow("test2",dataset2);
-	//	imshow("test2",dataset);
+	Mat dist=Mat::zeros(5,1,CV_64F);
+	Mat R=Mat::eye(3,3,CV_64F);
+	Mat t=Mat::zeros(3,1,CV_64F);
+
+
+
+	lookat(viewpoint, lookatpoint , R);
+
+	t.at<double>(0,0)=viewpoint.x;
+	t.at<double>(1,0)=viewpoint.y;
+	t.at<double>(2,0)=viewpoint.z;
+	t=R*t;
+
+
+
+	camera_view(image,destimage,disp,destdisp,xyz,R,t,K,dist);
+	destdisp.convertTo(destdisp,CV_8U,0.5);
+	imshow("out",destdisp);
+
+	Mat new_disp;
+	cloud_to_disparity(new_disp, point_cloud);
+}
+void argus_depth::cloud_to_disparity(Mat disparity, Mat xyz){
+	disparity=Mat(xyz.rows,xyz.cols,CV_32FC1);
+	float z,y;
+	for(int i=0;i<xyz.rows;i++){
+		for(int j=0;j<xyz.cols;j++){
+			z=xyz.ptr<float>(i)[3*j+2];
+			y=xyz.ptr<float>(i)[3*j+1];
+			if(y>-95&&z>-350){
+				disparity.at<float>(i,j)=Q.at<double>(2,3)/z*Q.at<double>(3,2);
+			}else{
+				disparity.at<float>(i,j)=0;
+			}
+
+		}
+	}
+
+	//cout<<z<<" ";
+	normalize(disparity, disparity, 0.0, 255.0, NORM_MINMAX);
+	disparity.convertTo(disparity,CV_8UC1);
+
+	//cvtColor(xyz,xyz,CV_RGB2GRAY);
+
+	imshow("hello",disparity);
 }
 
-void argus_depth::camera_view(Mat image, Mat destimage, Mat disp, Mat destdisp, Mat xyz, Mat R, Mat t, Mat K, Mat dist){
+void argus_depth::lookat(Point3d from, Point3d to, Mat& destR)
+{
+	double x=(to.x-from.x);
+	double y=(to.y-from.y);
+	double z=(to.z-from.z);
+
+	double pitch =asin(x/sqrt(x*x+z*z))/CV_PI*180.0;
+	double yaw   =asin(-y/sqrt(y*y+z*z))/CV_PI*180.0;
+
+	eular2rot(yaw, pitch, 0,destR);
+}
+
+void argus_depth::eular2rot(double yaw,double pitch, double roll,Mat& dest)
+{
+	double theta = yaw/180.0*CV_PI;
+	double pusai = pitch/180.0*CV_PI;
+	double phi = roll/180.0*CV_PI;
+
+	double datax[3][3] = {{1.0,0.0,0.0},
+			{0.0,cos(theta),-sin(theta)},
+			{0.0,sin(theta),cos(theta)}};
+	double datay[3][3] = {{cos(pusai),0.0,sin(pusai)},
+			{0.0,1.0,0.0},
+			{-sin(pusai),0.0,cos(pusai)}};
+	double dataz[3][3] = {{cos(phi),-sin(phi),0.0},
+			{sin(phi),cos(phi),0.0},
+			{0.0,0.0,1.0}};
+	Mat Rx(3,3,CV_64F,datax);
+	Mat Ry(3,3,CV_64F,datay);
+	Mat Rz(3,3,CV_64F,dataz);
+	Mat rr=Rz*Rx*Ry;
+	rr.copyTo(dest);
+}
+
+void argus_depth::camera_view(Mat& image, Mat& destimage, Mat& disp, Mat& destdisp, Mat& xyz, Mat& R, Mat& t, Mat& K, Mat& dist){
 
 	if(destimage.empty())destimage=Mat::zeros(Size(image.size()),image.type());
 	if(destdisp.empty())destdisp=Mat::zeros(Size(image.size()),disp.type());
@@ -684,7 +724,7 @@ void argus_depth::camera_view(Mat image, Mat destimage, Mat disp, Mat destdisp, 
 	for(int j=1;j<image.rows-1;j++)
 	{
 		int count=j*image.cols;
-		uchar* img=image.ptr<uchar>(j);
+		//uchar* img=image.ptr<uchar>(j);
 
 		for(int i=0;i<image.cols;i++,count++)
 		{
@@ -696,14 +736,15 @@ void argus_depth::camera_view(Mat image, Mat destimage, Mat disp, Mat destdisp, 
 				short v=destdisp.at<uchar>(y,x);
 				if(v<disp.at<uchar>(j,i))
 				{
-					destimage.at<uchar>(y,3*x+0)=img[3*i+0];
-					destimage.at<uchar>(y,3*x+1)=img[3*i+1];
-					destimage.at<uchar>(y,3*x+2)=img[3*i+2];
+					//					destimage.at<uchar>(y,3*x+0)=img[3*i+0];
+					//					destimage.at<uchar>(y,3*x+1)=img[3*i+1];
+					//					destimage.at<uchar>(y,3*x+2)=img[3*i+2];
 					destdisp.at<uchar>(y,x)=disp.at<uchar>(j,i);
 				}
 			}
 		}
 	}
+
 }
 
 int main(){
@@ -728,6 +769,11 @@ int main(){
 		}while (loop);
 		if ( key_pressed == 27 ) break;
 		if ( key_pressed == 13 ) eye_stereo->take_snapshot();
+
+		if ( key_pressed == 119 ) eye_stereo->viewpoint.y+=10;	//W
+		if ( key_pressed == 97 ) eye_stereo->viewpoint.x+=10;		//A
+		if ( key_pressed == 115 ) eye_stereo->viewpoint.y-=10;		//S
+		if ( key_pressed == 100 ) eye_stereo->viewpoint.x-=10;		//D
 
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
