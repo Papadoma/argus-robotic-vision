@@ -1,7 +1,9 @@
 #include <stdio.h>
+#include <iostream>
 #include <winsock.h>
 #include <winsock2.h>
 
+using namespace std;
 //#include <sys/types.h>
 //#include <stdio.h>
 //#include <unistd.h>
@@ -11,37 +13,46 @@
 
 int main()
 {
-int sock;
-struct sockaddr_in server_addr;
-struct hostent *host;
-char send_data[1024];
+	char pkt[] = { 'H', 'e', 'l', 'l', 'o' };
+	int pkt_length = 5;
+	char RecvBuf[1024];
+	int BufLen = 1024;
 
-host= (struct hostent *) gethostbyname((char *)"127.0.0.1");
+	sockaddr_in dest;
+	sockaddr_in local;
+	sockaddr_in SenderAddr;
+	int SenderAddrSize = sizeof (SenderAddr);
 
+	WSAData data;
+	WSAStartup( MAKEWORD( 2, 2 ), &data );
 
-if ((sock = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-{
-perror("socket");
-exit(1);
-}
+	local.sin_family = AF_INET;
+	local.sin_addr.s_addr = inet_addr( "127.0.0.1" );
+	local.sin_port = 12345; // choose any
 
-server_addr.sin_family = AF_INET;
-server_addr.sin_port = htons(12345);
-server_addr.sin_addr = *((struct in_addr *)host->h_addr);
+	dest.sin_family = AF_INET;
+	dest.sin_addr.s_addr = inet_addr( "127.0.0.1" );
+	dest.sin_port = htons( 12345 );
 
-   while (1)
-   {
+	// create the socket
+	SOCKET s = socket( AF_INET, SOCK_DGRAM, IPPROTO_UDP );
+	// bind to the local address
+	bind( s, (sockaddr *)&local, sizeof(local) );
+	// send the pkt
 
-    printf("Type Something (q or Q to quit):");
-    gets(send_data);
+	while(1){
 
-    if ((strcmp(send_data , "q") == 0) || strcmp(send_data , "Q") == 0)
-       break;
+		int ret = sendto( s, pkt, pkt_length, 0, (sockaddr *)&dest, sizeof(dest) );
+		if(ret==pkt_length){
+			cout<<"Sent packet\n";
+		}else{
+			cout<<"Failed to send\n";
+		}
 
-    else
-       sendto(sock, send_data, strlen(send_data), 0,
-              (struct sockaddr *)&server_addr, sizeof(struct sockaddr));
-
-   }
+		//int iResult = recv(s,RecvBuf, BufLen, 1);
+		int iResult = recvfrom( s, RecvBuf, sizeof( RecvBuf ), 1, (sockaddr *)&dest, 0 );
+		cout<<"Bytes received: "<<iResult<<"\n";
+		//cout<<RecvBuf<<"\n";
+	}
 
 }
