@@ -28,7 +28,7 @@ int main()
 
 	local.sin_family = AF_INET;
 	local.sin_addr.s_addr = inet_addr( "127.0.0.1" );
-	local.sin_port = 12345; // choose any
+	local.sin_port = 12347; // choose any
 
 	dest.sin_family = AF_INET;
 	dest.sin_addr.s_addr = inet_addr( "127.0.0.1" );
@@ -49,8 +49,8 @@ int main()
 			cout<<"Failed to send\n";
 		}
 
-		//int iResult = recv(s,RecvBuf, BufLen, 1);
-		int iResult = recvfrom( s, RecvBuf, sizeof( RecvBuf ), 1, (sockaddr *)&dest, 0 );
+		int iResult = recv(s,RecvBuf, BufLen, 1);
+		//int iResult = recvfrom( s, RecvBuf, sizeof( RecvBuf ), 1, (sockaddr *)&dest, 0 );
 		cout<<"Bytes received: "<<iResult<<"\n";
 		//cout<<RecvBuf<<"\n";
 	}
