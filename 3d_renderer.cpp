@@ -106,16 +106,18 @@ int main()
 	connect(connectionFd,
 			(struct sockaddr *)&servAddr, sizeof(servAddr));
 
+	for(int i=1;i<10;i++){
+		// Send request to Server
+		sprintf( buffer, "%s", "Hello from opencv" );
+		send( connectionFd, buffer, strlen(buffer), 0 );
+		printf("Client sent to sever %s\n", buffer);
 
-	// Receive data from Server
-	sprintf( buffer, "%s", "" );
-	recv(connectionFd, buffer, MAX_BUFFER, 0);
-	printf("Client read from Server [ %s ]\n", buffer);
+		// Receive data from Server
+		sprintf( buffer, "%s", "" );
+		recv(connectionFd, buffer, MAX_BUFFER, 0);
+		printf("Client read from Server [ %s ]\n", buffer);
+	}
 
-	// Send request to Server
-	sprintf( buffer, "%s", "Hello from opencv" );
-	send( connectionFd, buffer, strlen(buffer), 0 );
-	printf("Client sent to sever %s\n", buffer);
 
 	closesocket(connectionFd);
 	printf("Client closed.\n");
