@@ -36,7 +36,7 @@ private:
 	Mat person_right;
 
 	Mat thres_mask;
-
+Mat test;
 
 
 	//ocl::oclMat* left_ocl;
