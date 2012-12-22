@@ -74,13 +74,13 @@ int main()
 			// Often, when one rendersystem fail, the other at least kind-a-work.
 			// I put them in a std::vector, because then I can factorise operations and calls (do a 'for').
 			Strings lPluginNames;
-			lPluginNames.push_back("RenderSystem_GL");
-			//lPluginNames.push_back("RenderSystem_Direct3D9");
-			lPluginNames.push_back("Plugin_ParticleFX");
-			lPluginNames.push_back("Plugin_CgProgramManager");
+			//lPluginNames.push_back("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/debug/RenderSystem_GL_d");
+			lPluginNames.push_back("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/debug/RenderSystem_Direct3D9_d");
+			lPluginNames.push_back("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/debug/Plugin_ParticleFX_d");
+			//lPluginNames.push_back("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/release/Plugin_CgProgramManager");
 			//lPluginNames.push_back("Plugin_PCZSceneManager");
 			//lPluginNames.push_back("Plugin_OctreeZone");
-			lPluginNames.push_back("Plugin_OctreeSceneManager");
+			lPluginNames.push_back("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/debug/Plugin_OctreeSceneManager_d");
 			//lPluginNames.push_back("Plugin_BSPSceneManager");
 			{
 				Strings::iterator lIter = lPluginNames.begin();
@@ -98,6 +98,7 @@ int main()
 					}
 					lRoot->loadPlugin(lPluginName);
 				}
+				//lRoot->loadPlugin("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/debug/RenderSystem_GL_d");
 			}
 		}
 
