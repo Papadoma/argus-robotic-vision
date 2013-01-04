@@ -759,7 +759,7 @@ int main(){
 	//		std::cout << "no OPENCL device found\n";
 	//	}
 
-	argus_depth *eye_stereo = new argus_depth();
+	argus_depth *eye_stereo = new argus_depth;
 	bool loop=false;
 	while(1){
 		do{
