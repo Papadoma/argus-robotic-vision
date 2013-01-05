@@ -7,21 +7,12 @@
 using namespace std;
 using namespace cv;
 
-struct limbs{
-	Point location;
-	int length;
-}head,l_arm,r_arm,l_foot,r_foot;
 
-struct segment{
-	Point start;
-	Point end;
-	int length;
-};
 
 class skeleton{
 private:
 	bool found_human;
-//
+	//
 
 	Mat depth;
 	Mat image;
@@ -37,11 +28,13 @@ private:
 
 	void locate_upper_torso(Mat, Mat, Mat);
 	vector<vector<Point> > segm_skel(vector<Point> , Mat );
+
+
 public:
 	skeleton();
 	void load();
 	void show();
-	void voronoi();
+	void find_extremas();
 	void thinning1(Mat);
 	void thinning2(Mat);
 	void thinning3(Mat);
@@ -61,7 +54,10 @@ skeleton::skeleton(){
 	Lower_torso=Point(0,0);
 }
 
-void skeleton::voronoi(){
+bool sort_points_by_y(Point i, Point j){return(i.y<j.y);}
+bool sort_points_by_x(Point i, Point j){return(i.x<j.x);}
+
+void skeleton::find_extremas(){
 	equalizeHist(image, image);
 
 	Mat mask;
@@ -130,7 +126,7 @@ void skeleton::voronoi(){
 	}
 
 
-	//Find possible limbs. The limb must be a skeleton's end
+	//Find possible limbs. The limb must be a skeleton's end. Using the convex hull of skeleton.
 	vector<Point> limbs_buffer;
 	for(int i=0;i<(int)skel_hull[0].size();i++){
 		int whites_area=0;
@@ -148,7 +144,17 @@ void skeleton::voronoi(){
 			limbs_buffer.push_back(skel_hull[0][i]); //found possible limbs
 		}
 	}
-	cout<<"Found: "<<limbs_buffer.size()<<" limbs"<<"\n";
+	//cout<<"Found: "<<limbs_buffer.size()<<" limbs"<<"\n";
+//	cout<<limbs_buffer<<" ";
+	//sort (limbs_buffer.begin(), limbs_buffer.end(), sort_points_by_y);
+
+	vector <Point> lowerbody;
+	vector <Point> upperbody;
+
+
+
+//	cout<<limbs_buffer<<"\n";
+
 
 
 	//Find which points are joints and not limbs
@@ -162,7 +168,7 @@ void skeleton::voronoi(){
 		}
 	}
 
-	//Find which points are joints and relate to convex defects
+	//Find which points are joints and related to convex defects
 	vector<Point> joints_buffer;
 	for(int j=0;j<(int)temp_buffer.size();j++){
 		for(int i=0;i<(int)conv_def_idx.size();i++){
@@ -175,7 +181,7 @@ void skeleton::voronoi(){
 			}
 		}
 	}
-	cout<<joints_buffer;
+	//cout<<joints_buffer;
 
 	//	//Find presence (a joint could appear more than once)
 	//	vector<int> presence;
@@ -238,9 +244,13 @@ vector<vector<Point> > skeleton::segm_skel(vector<Point> contours, Mat skeleton)
 	return segmented;
 }
 
+//void skeleton::geodesic_dist(){
+//
+//}
+
 void skeleton::load(){
-	depth=imread("depth.png",0);
-	image=imread("person.png",0);
+	depth=imread("depth2.png",0);
+	image=imread("person2.png",0);
 }
 
 void skeleton::show(){
@@ -455,7 +465,7 @@ int main(){
 	test.load();
 	test.thres1=86;
 	test.thres2=86;
-	//test.voronoi();
+	//test.find_extremas();
 
 	test.show();
 	while(1){
@@ -465,7 +475,7 @@ int main(){
 		if ( key_pressed == 44 && test.thres1>=0) test.thres1--;
 		if ( key_pressed == 93 ) test.thres2++;
 		if ( key_pressed == 91 && test.thres2>=0) test.thres2--;
-		test.voronoi();
+		test.find_extremas();
 		test.show();
 		//test.track_skel();
 	}

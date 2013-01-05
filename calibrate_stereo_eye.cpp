@@ -13,13 +13,24 @@
 #include "opencv2/contrib/contrib.hpp"
 #include <stdio.h>
 
+#include "module_eye.hpp"
+//#include "module_file.hpp"
+
 using namespace std;
 using namespace cv;
 
+stringstream ss;
+vector<String> debug_msg;
+
 class eye_stereo_calibrate{
 private:
-	VideoCapture* capture_left;
-	VideoCapture* capture_right;
+	module_eye input_module;
+
+	//VideoCapture* capture_left;
+	//VideoCapture* capture_right;
+
+	Mat debug_window;
+
 	Mat* mat_left;
 	Mat* mat_right;
 	Mat* calib_mat_left;
@@ -38,6 +49,7 @@ private:
 	vector<Point2f> left_corners;
 	vector<Point2f> right_corners;
 
+
 	Mat cameraMatrix[2], distCoeffs[2];
 	Mat R, T, E, F;
 
@@ -54,6 +66,7 @@ private:
 
 	bool calib_left_flag;
 	bool calib_right_flag;
+
 
 
 public:
@@ -78,8 +91,11 @@ public:
 
 //Constructor
 eye_stereo_calibrate::eye_stereo_calibrate(){
-	width = 640;
-	height = 480;
+
+	Size frame_size=input_module.getSize();
+	height=frame_size.height;
+	width=frame_size.width;
+
 	squareSize = 25;//mm
 	circleSize = 17.5;//mm
 
@@ -100,6 +116,9 @@ eye_stereo_calibrate::eye_stereo_calibrate(){
 	cameraMatrix[0] = Mat::eye(3, 3, CV_64F);
 	cameraMatrix[1] = Mat::eye(3, 3, CV_64F);
 
+	debug_window=Mat(height,width,CV_8UC1);
+	//debug_window=Mat::zeros(height,width,CV_8UC1);
+
 	mat_left=new Mat(height,width,CV_8UC1);
 	mat_right=new Mat(height,width,CV_8UC1);
 	calib_mat_left=new Mat(height,width,CV_8UC1);
@@ -107,16 +126,16 @@ eye_stereo_calibrate::eye_stereo_calibrate(){
 	chess_mat_left=new Mat(height,width,CV_8UC1);
 	chess_mat_right=new Mat(height,width,CV_8UC1);
 
-	capture_left = new VideoCapture(1);
-	capture_right = new VideoCapture(2);
-	if(!capture_left->isOpened())cout<<"Could not initialize left camera/n";
-	if(!capture_right->isOpened())cout<<"Could not initialize right camera/n";
-	
-	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
-	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
-
-	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
-	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+	//	capture_left = new VideoCapture(1);
+	//	capture_right = new VideoCapture(2);
+	//	if(!capture_left->isOpened())cout<<"Could not initialize left camera/n";
+	//	if(!capture_right->isOpened())cout<<"Could not initialize right camera/n";
+	//
+	//	capture_left->set(CV_CAP_PROP_FRAME_WIDTH, width);
+	//	capture_left->set(CV_CAP_PROP_FRAME_HEIGHT, height);
+	//
+	//	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
+	//	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
 
 	namedWindow("camera_left",CV_WINDOW_AUTOSIZE);
 	namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
@@ -130,26 +149,27 @@ eye_stereo_calibrate::~eye_stereo_calibrate(){
 	destroyWindow("camera_right");
 	destroyWindow("calib_camera_left");
 	destroyWindow("calib_camera_right");
-	delete(capture_left);
-	delete(capture_right);
+	//	delete(capture_left);
+	//	delete(capture_right);
 
 }
 
 void eye_stereo_calibrate::refresh_frame(){
-	if((capture_left->isOpened())&&(capture_right->isOpened())){
-		capture_left->grab();
-		capture_right->grab();
-		capture_left->retrieve(*mat_left);
-		capture_right->retrieve(*mat_right);
+	//	if((capture_left->isOpened())&&(capture_right->isOpened())){
+	//		capture_left->grab();
+	//		capture_right->grab();
+	//		capture_left->retrieve(*mat_left);
+	//		capture_right->retrieve(*mat_right);
 
-		mat_left->copyTo(*chess_mat_left);
-		mat_right->copyTo(*chess_mat_right);
+	input_module.getFrame(mat_left,mat_right);
+	mat_left->copyTo(*chess_mat_left);
+	mat_right->copyTo(*chess_mat_right);
 
-		cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
-		cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
+	cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
+	cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
 
 
-	}
+	//	}
 
 }
 
@@ -177,6 +197,7 @@ void eye_stereo_calibrate::save_snapshot(){
 
 	if(flagl&&flagr){
 		cout<<"Stereo image "<<image_num<<" captured!\n";
+
 		image_num++;
 	}
 }
@@ -231,17 +252,28 @@ void eye_stereo_calibrate::detect_chessboard(){
 
 void eye_stereo_calibrate::info(){
 
-	cout<<"\nCalibrate Playstation Eye Stereo rig"<<"\n";
-	cout<<"------------------------------------"<<"\n";
-	cout<<"c: 	capture stereo images"<<"\n";
-	cout<<"[:	select square pattern (default)"<<"\n";
-	cout<<"]:	select circle pattern"<<"\n";
-	cout<<"0:	select left camera (default)"<<"\n";
-	cout<<"1:	select right camera"<<"\n";
-	cout<<"2:	select stereo camera"<<"\n";
-	cout<<"a:	add calibration data"<<"\n";
-	cout<<"s:	start calibration"<<"\n";
-	cout<<"ESC: terminate program"<<"\n\n";
+	debug_window=Mat::zeros(height,width,CV_8UC1);
+
+	putText(debug_window, "Calibrate Playstation Eye Stereo rig", Point(5,20), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "------------------------------------", Point(5,40), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "c: capture stereo images", Point(5,60), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "[: select square pattern (default)", Point(5,80), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "]: select circle pattern", Point(5,100), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "0: select left camera (default)", Point(5,120), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "1: select right camera", Point(5,140), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "2: select stereo camera", Point(5,160), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "a: add calibration data", Point(5,180), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "s: start calibration", Point(5,200), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "ESC: terminate program", Point(5,220), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	putText(debug_window, "---------------DEBUG----------------", Point(5,260), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+
+	if (debug_msg.size()>6)debug_msg.erase(debug_msg.begin());
+
+	for(int i=0;i<(int)debug_msg.size();i++){
+		putText(debug_window, debug_msg[i], Point(5,280+i*20), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255));
+	}
+
+	imshow("Debug",debug_window);
 }
 
 void eye_stereo_calibrate::add_calibration_data(){
@@ -264,9 +296,16 @@ void eye_stereo_calibrate::add_calibration_data(){
 		objectPoints.push_back(obj);
 
 		saved_data++;
-		cout<<"Added calibration snapshot:"<<saved_data<<"\n";
+
+		//cout<<"Added calibration snapshot:"<<saved_data<<"\n";
+		ss.str("");
+		ss<<"Added calibration snapshot:"<<saved_data;
+		debug_msg.push_back(ss.str());
 	}else{
-		cout<<"Pattern not visible on configuration: "<<camera_choice<<"\n";
+		//cout<<"Pattern not visible on configuration: "<<camera_choice<<"\n";
+		ss.str("");
+		ss<<"Pattern not visible on configuration: "<<camera_choice;
+		debug_msg.push_back(ss.str());
 	}
 }
 
@@ -281,65 +320,111 @@ void eye_stereo_calibrate::calibrate(){
 
 	switch (camera_choice){
 	case 0:
-		cout<<"Calibration for left camera started!\n";
+		//cout<<"Calibration for left camera started!\n";
+		ss.str("");
+		ss<<"Calibration for left camera started!";
+		debug_msg.push_back(ss.str());
+
 		rms_left = calibrateCamera(objectPoints, imagePoints[0], imageSize, cameraMatrix[0],
 				distCoeffs[0], rvecs, tvecs,
 				CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
-		cout<<"Calibration for left camera ended! RMS error:" <<rms_left<<"\n";
+		//cout<<"Calibration for left camera ended! RMS error:" <<rms_left<<"\n";
+		ss.str("");
+		ss<<"Calibration for left camera ended! RMS error:"<<rms_left;
+		debug_msg.push_back(ss.str());
+
 		imagePoints[0].clear();
 		objectPoints.clear();
-		this->info();
+		//this->info();
 		saved_data=0;
 		calib_left_flag=true;
 		break;
 
 	case 1:
-		cout<<"Calibration for right camera started!\n";
+		//cout<<"Calibration for right camera started!\n";
+		ss.str("");
+		ss<<"Calibration for right camera started!";
+		debug_msg.push_back(ss.str());
+
 		rms_right = calibrateCamera(objectPoints, imagePoints[1], imageSize, cameraMatrix[1],
 				distCoeffs[1], rvecs, tvecs,
 				CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
-		cout<<"Calibration for right camera ended! RMS error:" <<rms_right<<"\n";
+		//cout<<"Calibration for right camera ended! RMS error:" <<rms_right<<"\n";
+		ss.str("");
+		ss<<"Calibration for right camera ended! RMS error:"<<rms_right;
+		debug_msg.push_back(ss.str());
+
 		imagePoints[1].clear();
 		objectPoints.clear();
-		this->info();
+		//this->info();
 		saved_data=0;
 		calib_right_flag=true;
 		break;
 
 	case 2:
 		if(calib_right_flag&&calib_left_flag){
-			cout<<"Calibration for stereo started!\n";
+			//cout<<"Calibration for stereo started!\n";
+			ss.str("");
+			ss<<"Calibration for stereo started!";
+			debug_msg.push_back(ss.str());
+
 			rms_stereo = stereoCalibrate(objectPoints, imagePoints[0], imagePoints[1],
 					cameraMatrix[0], distCoeffs[0],
 					cameraMatrix[1], distCoeffs[1],
 					imageSize, R, T, E, F,
 					TermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 100, 1e-5),
 					CV_CALIB_FIX_INTRINSIC);
-			cout<<"Calibration for stereo ended! RMS error:" <<rms_stereo<<"\n";
+			//cout<<"Calibration for stereo ended! RMS error:" <<rms_stereo<<"\n";
+			ss.str("");
+			ss<<"Calibration for stereo ended! RMS error:"<<rms_stereo;
+			debug_msg.push_back(ss.str());
 		}else{
-			cout<<"Calibration for left camera started!\n";
+			//cout<<"Calibration for left camera started!\n";
+			ss.str("");
+			ss<<"Calibration for left camera started!";
+			debug_msg.push_back(ss.str());
+
 			rms_left = calibrateCamera(objectPoints, imagePoints[0], imageSize, cameraMatrix[0],
 					distCoeffs[0], rvecs, tvecs,
 					CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
-			cout<<"Calibration for left camera ended! RMS error:" <<rms_left<<"\n";
-			cout<<"Calibration for right camera started!\n";
+
+			//cout<<"Calibration for left camera ended! RMS error:" <<rms_left<<"\n";
+			ss.str("");
+			ss<<"Calibration for left camera ended! RMS error:"<<rms_left;
+			debug_msg.push_back(ss.str());
+			//cout<<"Calibration for right camera started!\n";
+			ss.str("");
+			ss<<"Calibration for right camera started!";
+			debug_msg.push_back(ss.str());
+
 			rms_right = calibrateCamera(objectPoints, imagePoints[1], imageSize, cameraMatrix[1],
 					distCoeffs[1], rvecs, tvecs,
 					CV_CALIB_FIX_K4| CV_CALIB_FIX_K5);
-			cout<<"Calibration for right camera ended! RMS error:" <<rms_right<<"\n";
-			cout<<"Calibration for stereo started!\n";
+
+			//cout<<"Calibration for right camera ended! RMS error:" <<rms_right<<"\n";
+			ss.str("");
+			ss<<"Calibration for right camera ended! RMS error:"<<rms_right;
+			debug_msg.push_back(ss.str());
+			//cout<<"Calibration for stereo started!\n";
+			ss.str("");
+			ss<<"Calibration for stereo started!";
+			debug_msg.push_back(ss.str());
+
 			rms_stereo = stereoCalibrate(objectPoints, imagePoints[0], imagePoints[1],
 					cameraMatrix[0], distCoeffs[0],
 					cameraMatrix[1], distCoeffs[1],
 					imageSize, R, T, E, F,
 					TermCriteria(CV_TERMCRIT_ITER+CV_TERMCRIT_EPS, 100, 1e-5),
 					CV_CALIB_FIX_INTRINSIC);
-			cout<<"Calibration for stereo ended! RMS error:" <<rms_stereo<<"\n";
+			//cout<<"Calibration for stereo ended! RMS error:" <<rms_stereo<<"\n";
+			ss.str("");
+			ss<<"Calibration for stereo ended! RMS error:"<<rms_stereo;
+			debug_msg.push_back(ss.str());
 		}
 		imagePoints[0].clear();
 		imagePoints[1].clear();
 		objectPoints.clear();
-		this->info();
+		//this->info();
 		this->save_data();
 		saved_data=0;
 		calib_stereo=true;
@@ -359,8 +444,12 @@ void eye_stereo_calibrate::save_data(){
 				"M2" << cameraMatrix[1] << "D2" << distCoeffs[1];
 		fs.release();
 	}
-	else
-		cout << "Error: can not save the intrinsic parameters\n";
+	else{
+		//cout << "Error: can not save the intrinsic parameters\n";
+		ss.str("");
+		ss<<"Error: can not save the intrinsic parameters";
+		debug_msg.push_back(ss.str());
+	}
 
 	Mat R1, R2, P1, P2, Q;
 	Rect validRoi[2];
@@ -376,10 +465,16 @@ void eye_stereo_calibrate::save_data(){
 		fs << "R" << R << "T" << T << "R1" << R1 << "R2" << R2 << "P1" << P1 << "P2" << P2 << "Q" << Q;
 		fs.release();
 	}
-	else
-		cout << "Error: can not save the extrinsic parameters\n";
-
-	cout << "Saved parameters!\n";
+	else{
+		//cout << "Error: can not save the extrinsic parameters\n";
+		ss.str("");
+		ss<<"Error: can not save the extrinsic parameters";
+		debug_msg.push_back(ss.str());
+	}
+	//cout << "Saved parameters!\n";
+	ss.str("");
+	ss<<"Saved parameters!";
+	debug_msg.push_back(ss.str());
 
 }
 
@@ -413,16 +508,48 @@ int main(){
 		key_pressed = cvWaitKey(10) & 255;
 		if ( key_pressed == 27 ) break; //esc
 		if ( key_pressed == 99 ) {eye_stereo->save_snapshot();} //c
-		if ( key_pressed == 91 ) {eye_stereo->pattern_choice=0;cout<<"Square pattern selected!"<<"\n";} //[
-		if ( key_pressed == 93 ) {eye_stereo->pattern_choice=1;cout<<"Circle pattern selected!"<<"\n";} //]
-		if ( key_pressed == 48 ) {eye_stereo->camera_choice=0;cout<<"Left camera selected!"<<"\n";} //0
-		if ( key_pressed == 49 ) {eye_stereo->camera_choice=1;cout<<"Right camera selected!"<<"\n";} //1
-		if ( key_pressed == 50 ) {eye_stereo->camera_choice=2;cout<<"Stereo camera selected!"<<"\n";} //2
-		if ( key_pressed == 97 ) {eye_stereo->add_calibration_data();} //a
+		if ( key_pressed == 91 ) {
+			eye_stereo->pattern_choice=0;
+			//cout<<"Square pattern selected!"<<"\n";
+			ss.str("");
+			ss<<"Square pattern selected!";
+			debug_msg.push_back(ss.str());
+		} //[
+		if ( key_pressed == 93 ) {
+			eye_stereo->pattern_choice=1;
+			//cout<<"Circle pattern selected!"<<"\n";
+			ss.str("");
+			ss<<"Circle pattern selected!";
+			debug_msg.push_back(ss.str());
+		} //]
+		if ( key_pressed == 48 ) {
+			eye_stereo->camera_choice=0;
+			//cout<<"Left camera selected!"<<"\n";
+			ss.str("");
+			ss<<"Left camera selected!";
+			debug_msg.push_back(ss.str());
+		} //0
+		if ( key_pressed == 49 ) {
+			eye_stereo->camera_choice=1;
+			//cout<<"Right camera selected!"<<"\n";
+			ss.str("");
+			ss<<"Right camera selected!";
+			debug_msg.push_back(ss.str());
+		} //1
+		if ( key_pressed == 50 ) {
+			eye_stereo->camera_choice=2;
+			//cout<<"Stereo camera selected!"<<"\n";
+			ss.str("");
+			ss<<"Stereo camera selected!";
+			debug_msg.push_back(ss.str());
+		} //2
+		if ( key_pressed == 97 ) {
+			eye_stereo->add_calibration_data();
+		} //a
 		if ( key_pressed == 115 ) {eye_stereo->calibrate();} //s
 
 		if(eye_stereo->calib_stereo){eye_stereo->undistort();}
-
+		eye_stereo->info();
 	}
 
 	delete(eye_stereo);
