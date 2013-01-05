@@ -4,8 +4,8 @@
 //#include <skeltrack.h>
 
 
-//#include "module_eye.hpp"
-#include "module_file.hpp"
+#include "module_eye.hpp"
+//#include "module_file.hpp"
 
 using namespace std;
 using namespace cv;
@@ -13,8 +13,8 @@ using namespace cv;
 
 class argus_depth{
 private:
-	//module_eye input_module;
-	module_file input_module;
+	module_eye input_module;
+	//module_file input_module;
 
 	Mat cameraMatrix[2], distCoeffs[2];
 	Mat R, T, E, F, Q;
@@ -267,41 +267,6 @@ void argus_depth::load_param(){
 	}
 
 }
-
-
-//Mat argus_depth::imHist(Mat hist, float scaleX=1, float scaleY=1){
-//	double maxVal=0;
-//
-//	//Mask out the zero values from histogram
-//	Mat mask=Mat::ones(hist.rows,hist.cols,CV_8UC1);
-//	mask.at<float>(0,0)=0;
-//
-//	//Find the 110% of max value
-//	minMaxLoc(hist, 0, &maxVal, 0, 0,mask);
-//	maxVal=maxVal*1.1;
-//
-//	int rows = 64; //default height size
-//	int cols = hist.rows; //get the width size from the histogram
-//
-//	Mat histImg = Mat::zeros(rows*scaleX, cols*scaleY, CV_8UC3);
-//
-//	//for each bin
-//
-//	for(int i=0;i<cols-1;i++) {
-//		float histValue = hist.at<float>(i,0);
-//		float nextValue = hist.at<float>(i+1,0);
-//		Point pt1 = Point(i*scaleX, rows*scaleY);
-//		Point pt2 = Point(i*scaleX+scaleX, rows*scaleY);
-//		Point pt3 = Point(i*scaleX+scaleX, (rows-nextValue*rows/maxVal)*scaleY);
-//		Point pt4 = Point(i*scaleX, (rows-nextValue*rows/maxVal)*scaleY);
-//
-//		int numPts = 5;
-//		Point pts[] = {pt1, pt2, pt3, pt4, pt1};
-//
-//		fillConvexPoly(histImg, pts, numPts, Scalar(255,255,255));
-//	}
-//	return histImg;
-//}
 
 void argus_depth::compute_depth(){
 

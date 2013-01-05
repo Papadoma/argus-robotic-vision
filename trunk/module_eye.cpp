@@ -1,7 +1,7 @@
 #include <opencv.hpp>
 #include <stdio.h>
 #include "CLEyeMulticam.h"
-//dd
+
 #include "module_eye.hpp"
 
 module_eye::module_eye(){
@@ -70,18 +70,7 @@ void module_eye::getFrame(Mat* mat_left,Mat* mat_right){
 	cvGetImageRawData(pCapImageLeft, &pCapBufferLeft);
 	cvGetImageRawData(pCapImageRight, &pCapBufferRight);
 
-	//*mat_left=pCapImageLeft;
-	//*mat_right=pCapImageRight;
-
 	cvtColor((Mat)pCapImageLeft,*mat_left,COLOR_RGBA2RGB);
 	cvtColor((Mat)pCapImageRight,*mat_right,COLOR_RGBA2RGB);
-
-	//	cvtColor(*temp_mat_left,*temp_mat_left,COLOR_RGBA2RGB);
-	//	cvtColor(*temp_mat_right,*temp_mat_right,COLOR_RGBA2RGB);
-	//	temp_mat_left->convertTo(*temp_mat_left,CV_8UC3);
-	//	temp_mat_right->convertTo(*temp_mat_right,CV_8UC3);
-	//
-	//	cvtColor(*temp_mat_left,*mat_left,CV_RGB2GRAY);
-	//	cvtColor(*temp_mat_right,*mat_right,CV_RGB2GRAY);
 
 }
