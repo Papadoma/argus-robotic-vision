@@ -4,7 +4,7 @@
 //#include <skeltrack.h>
 
 
-#include "module_eye.hpp"
+#include "module_input.hpp"
 //#include "module_file.hpp"
 
 using namespace std;

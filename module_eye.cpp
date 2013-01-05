@@ -1,10 +1,7 @@
-#include <opencv.hpp>
-#include <stdio.h>
-#include "CLEyeMulticam.h"
-
 #include "module_eye.hpp"
 
 module_eye::module_eye(){
+#ifdef WIN32
 	int numCams = CLEyeGetCameraCount();
 	if(numCams == 0)
 	{
@@ -44,17 +41,34 @@ module_eye::module_eye(){
 	}else{
 		cout<<"Right Camera failed\n";
 	}
+#else
+	width=640;
+	height=480;
 
-	//
-	//	temp_mat_left=new Mat(height,width,CV_8UC4);
-	//	temp_mat_right=new Mat(height,width,CV_8UC4);
+
+	capture_left.open(0);
+	capture_right.open(1);
+
+	if(capture_left.isOpened()){
+		cout<<"Right Camera initiated recording\n";
+	}else{
+		cout<<"Right Camera failed\n";
+	}
+	if(capture_right.isOpened()){
+		cout<<"Left Camera initiated recording\n";
+	}else{
+		cout<<"Left Camera failed\n";
+	}
+#endif
 }
 
 module_eye::~module_eye(){
+#ifdef WIN32
 	CLEyeCameraStop(capture_left);
 	CLEyeCameraStop(capture_right);
 	CLEyeDestroyCamera(capture_left);
 	CLEyeDestroyCamera(capture_right);
+#endif
 }
 
 Size module_eye::getSize(){
@@ -63,14 +77,21 @@ Size module_eye::getSize(){
 }
 
 void module_eye::getFrame(Mat* mat_left,Mat* mat_right){
-
+#ifdef WIN32
 	CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 100);
 	CLEyeCameraGetFrame(capture_right,	pCapBufferRight, 100);
-
 	cvGetImageRawData(pCapImageLeft, &pCapBufferLeft);
 	cvGetImageRawData(pCapImageRight, &pCapBufferRight);
-
 	cvtColor((Mat)pCapImageLeft,*mat_left,COLOR_RGBA2RGB);
 	cvtColor((Mat)pCapImageRight,*mat_right,COLOR_RGBA2RGB);
-
+#else
+	VideoCapture capture_left;
+	VideoCapture capture_right;
+	capture_left.grab();
+	capture_right.grab();
+	capture_left.retrieve(frame_left);
+	capture_right.retrieve(frame_right);
+	mat_left=&frame_left;
+	mat_right=&frame_right;
+#endif
 }
