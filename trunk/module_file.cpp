@@ -42,11 +42,6 @@ module_file::~module_file(){
 
 }
 
-Size module_file::getSize(){
-	Size temp_size(width,height);
-	return temp_size;
-}
-
 void module_file::getFrame(Mat* mat_left,Mat* mat_right){
 	if((capture_left->isOpened())&&(capture_right->isOpened())){
 		if(!capture_left->grab())EoF=true;

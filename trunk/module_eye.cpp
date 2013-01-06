@@ -1,6 +1,17 @@
 #include "module_eye.hpp"
+#include <iostream>
 
-module_eye::module_eye(){
+module_eye::module_eye()
+#ifndef WIN32
+: capture_left(0),
+  capture_right(1),
+  width(640),
+  height(480)
+#endif
+{
+	using std::cout;
+	using std::endl;
+
 #ifdef WIN32
 	int numCams = CLEyeGetCameraCount();
 	if(numCams == 0)
@@ -32,32 +43,25 @@ module_eye::module_eye(){
 	CLEyeSetCameraParameter(capture_right,CLEYE_AUTO_WHITEBALANCE,true);
 
 	if(CLEyeCameraStart(capture_left)){
-		cout<<"Left Camera initiated recording\n";
+		cout << "Left Camera initiated recording" << endl;
 	}else{
-		cout<<"Left Camera failed\n";
+		cout << "Left Camera failed" << endl;
 	}
 	if(CLEyeCameraStart(capture_right)){
-		cout<<"Right Camera initiated recording\n";
+		cout << "Right Camera initiated recording" << endl;
 	}else{
-		cout<<"Right Camera failed\n";
+		cout << "Right Camera failed" << endl;
 	}
 #else
-	width=640;
-	height=480;
-
-
-	capture_left.open(0);
-	capture_right.open(1);
-
 	if(capture_left.isOpened()){
-		cout<<"Right Camera initiated recording\n";
+		cout << "Right Camera initiated recording" << endl;
 	}else{
-		cout<<"Right Camera failed\n";
+		cout << "Right Camera failed" << endl;
 	}
 	if(capture_right.isOpened()){
-		cout<<"Left Camera initiated recording\n";
+		cout<<"Left Camera initiated recording" << endl;
 	}else{
-		cout<<"Left Camera failed\n";
+		cout<<"Left Camera failed" << endl;
 	}
 #endif
 }
@@ -71,12 +75,7 @@ module_eye::~module_eye(){
 #endif
 }
 
-Size module_eye::getSize(){
-	Size temp_size(width,height);
-	return temp_size;
-}
-
-void module_eye::getFrame(Mat* mat_left,Mat* mat_right){
+void module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
 #ifdef WIN32
 	CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 100);
 	CLEyeCameraGetFrame(capture_right,	pCapBufferRight, 100);
@@ -85,13 +84,23 @@ void module_eye::getFrame(Mat* mat_left,Mat* mat_right){
 	cvtColor((Mat)pCapImageLeft,*mat_left,COLOR_RGBA2RGB);
 	cvtColor((Mat)pCapImageRight,*mat_right,COLOR_RGBA2RGB);
 #else
-	VideoCapture capture_left;
-	VideoCapture capture_right;
 	capture_left.grab();
 	capture_right.grab();
-	capture_left.retrieve(frame_left);
-	capture_right.retrieve(frame_right);
-	mat_left=&frame_left;
-	mat_right=&frame_right;
+	capture_left.retrieve(mat_left);
+	capture_right.retrieve(mat_right);
 #endif
+}
+
+int main(){
+	module_eye test;
+	cv::Mat left, right;
+
+	test.getFrame(left, right);
+	cv::imshow("left",left);
+	cv::imshow("right",right);
+
+	int i = 0;
+	std::cin >> i;
+
+	return 0;
 }
