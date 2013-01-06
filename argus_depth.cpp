@@ -20,8 +20,8 @@ private:
 	Mat R, T, E, F, Q;
 	Mat R1, R2, P1, P2;
 
-	Mat* mat_left;
-	Mat* mat_right;
+	Mat mat_left;
+	Mat mat_right;
 	Mat rect_mat_left;
 	Mat rect_mat_right;
 	Mat BW_rect_mat_left;
@@ -90,7 +90,9 @@ public:
 };
 
 //Constructor
-argus_depth::argus_depth(){
+argus_depth::argus_depth()
+{
+
 	frame_counter=0;
 	//hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
 	hog.setSVMDetector(HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
@@ -98,9 +100,7 @@ argus_depth::argus_depth(){
 	Size framesize = input_module.getSize();
 	height=framesize.height;
 	width=framesize.width;
-
-	mat_left=new Mat(height,width,CV_8UC3);
-	mat_right=new Mat(height,width,CV_8UC3);
+	human_anchor=Rect(width/2,height/2,10,10);
 
 	baseline = 9.5;
 	viewpoint=Point3d(0.0,0.0,baseline*10);
@@ -126,7 +126,7 @@ argus_depth::argus_depth(){
 	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 3;
+	sgbm.SADWindowSize = 5;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -149,10 +149,6 @@ argus_depth::argus_depth(){
 
 //Destructor
 argus_depth::~argus_depth(){
-
-	delete(mat_left);
-	delete(mat_right);
-
 	delete(BSMOG);
 
 	destroyAllWindows();
@@ -162,8 +158,8 @@ argus_depth::~argus_depth(){
 void argus_depth::refresh_frame(){
 	input_module.getFrame(mat_left,mat_right);
 
-	remap(*mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
-	remap(*mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+	remap(mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
+	remap(mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
 
 	cvtColor(rect_mat_left,BW_rect_mat_left,CV_RGB2GRAY);
 	cvtColor(rect_mat_right,BW_rect_mat_right,CV_RGB2GRAY);
@@ -276,7 +272,8 @@ void argus_depth::compute_depth(){
 
 	person_left=(BW_rect_mat_left)(refined_human_anchor);
 	person_right=(BW_rect_mat_right)(refined_human_anchor);
-
+imshow("debugleft",person_left);
+imshow("debugright",person_right);
 	//sgbm.SADWindowSize = 15;
 	//sgbm(*person_left,*person_right,*depth_map_lowres);
 
@@ -743,16 +740,14 @@ int main(){
 		double t = (double)getTickCount();
 		eye_stereo->refresh_frame();
 		eye_stereo->detect_human();
-		t = (double)getTickCount();
+
 		eye_stereo->compute_depth();
 		t = (double)getTickCount() - t;
 		eye_stereo->fps = 1/(t/cv::getTickFrequency());//for fps
 		//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms
 		eye_stereo->refresh_window();
-		eye_stereo->clustering();
+		//eye_stereo->clustering();
 		//key_pressed = cvWaitKey(1) & 255;
-
-
 
 	}
 

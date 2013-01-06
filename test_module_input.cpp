@@ -1,4 +1,4 @@
-#include "module_eye.hpp"
+#include "module_input.hpp"
 
 int main(){
 	module_eye test;
