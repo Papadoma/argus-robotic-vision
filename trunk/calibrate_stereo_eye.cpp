@@ -13,7 +13,7 @@
 #include "opencv2/contrib/contrib.hpp"
 #include <stdio.h>
 
-#include "module_eye.hpp"
+#include "module_input.hpp"
 //#include "module_file.hpp"
 
 using namespace std;
@@ -31,12 +31,12 @@ private:
 
 	Mat debug_window;
 
-	Mat* mat_left;
-	Mat* mat_right;
-	Mat* calib_mat_left;
-	Mat* calib_mat_right;
-	Mat* chess_mat_left;
-	Mat* chess_mat_right;
+	Mat mat_left;
+	Mat mat_right;
+	Mat calib_mat_left;
+	Mat calib_mat_right;
+	Mat chess_mat_left;
+	Mat chess_mat_right;
 
 	Size square_pattern_size;
 	Size circle_pattern_size;
@@ -49,7 +49,8 @@ private:
 	vector<Point2f> left_corners;
 	vector<Point2f> right_corners;
 
-
+	Mat R1, R2, P1, P2, Q;
+	Rect validRoi[2];
 	Mat cameraMatrix[2], distCoeffs[2];
 	Mat R, T, E, F;
 
@@ -66,7 +67,7 @@ private:
 
 	bool calib_left_flag;
 	bool calib_right_flag;
-
+	vector<Scalar> colorline;
 
 
 public:
@@ -104,7 +105,7 @@ eye_stereo_calibrate::eye_stereo_calibrate(){
 	numSquares=6*9;
 
 	camera_choice=0;
-	pattern_choice=0;
+	pattern_choice=1;
 
 	square_pattern_size=Size(9,6); //size(width,height)
 	circle_pattern_size=Size(4,11);
@@ -119,12 +120,14 @@ eye_stereo_calibrate::eye_stereo_calibrate(){
 	debug_window=Mat(height,width,CV_8UC1);
 	//debug_window=Mat::zeros(height,width,CV_8UC1);
 
-	mat_left=new Mat(height,width,CV_8UC1);
-	mat_right=new Mat(height,width,CV_8UC1);
-	calib_mat_left=new Mat(height,width,CV_8UC1);
-	calib_mat_right=new Mat(height,width,CV_8UC1);
-	chess_mat_left=new Mat(height,width,CV_8UC1);
-	chess_mat_right=new Mat(height,width,CV_8UC1);
+
+	mat_left=Mat::zeros(height,width,CV_8UC1);
+	mat_right=Mat::zeros(height,width,CV_8UC1);
+	calib_mat_left=Mat::zeros(height,width,CV_8UC1);
+	calib_mat_right=Mat::zeros(height,width,CV_8UC1);
+	chess_mat_left=Mat::zeros(height,width,CV_8UC1);
+	chess_mat_right=Mat::zeros(height,width,CV_8UC1);
+
 
 	//	capture_left = new VideoCapture(1);
 	//	capture_right = new VideoCapture(2);
@@ -137,18 +140,12 @@ eye_stereo_calibrate::eye_stereo_calibrate(){
 	//	capture_right->set(CV_CAP_PROP_FRAME_WIDTH, width);
 	//	capture_right->set(CV_CAP_PROP_FRAME_HEIGHT, height);
 
-	namedWindow("camera_left",CV_WINDOW_AUTOSIZE);
-	namedWindow("camera_right",CV_WINDOW_AUTOSIZE);
-	namedWindow("calib_camera_left",CV_WINDOW_AUTOSIZE);
-	namedWindow("calib_camera_right",CV_WINDOW_AUTOSIZE);
+
 }
 
 //Destructor
 eye_stereo_calibrate::~eye_stereo_calibrate(){
-	destroyWindow("camera_left");
-	destroyWindow("camera_right");
-	destroyWindow("calib_camera_left");
-	destroyWindow("calib_camera_right");
+
 	//	delete(capture_left);
 	//	delete(capture_right);
 
@@ -162,11 +159,11 @@ void eye_stereo_calibrate::refresh_frame(){
 	//		capture_right->retrieve(*mat_right);
 
 	input_module.getFrame(mat_left,mat_right);
-	mat_left->copyTo(*chess_mat_left);
-	mat_right->copyTo(*chess_mat_right);
+	mat_left.copyTo(chess_mat_left);
+	mat_right.copyTo(chess_mat_right);
 
-	cvtColor(*mat_left, *mat_left, CV_RGB2GRAY);
-	cvtColor(*mat_right, *mat_right, CV_RGB2GRAY);
+	cvtColor(mat_left, mat_left, CV_RGB2GRAY);
+	cvtColor(mat_right, mat_right, CV_RGB2GRAY);
 
 
 	//	}
@@ -174,10 +171,22 @@ void eye_stereo_calibrate::refresh_frame(){
 }
 
 void eye_stereo_calibrate::refresh_window(){
-	imshow( "camera_left", *chess_mat_left );
-	imshow( "camera_right", *chess_mat_right );
-	imshow( "calib_camera_left", *calib_mat_left );
-	imshow( "calib_camera_right", *calib_mat_right );
+	Mat color_calib_mat_left,color_calib_mat_right;
+	cvtColor(calib_mat_left, color_calib_mat_left, CV_GRAY2BGR);
+	cvtColor(calib_mat_right, color_calib_mat_right, CV_GRAY2BGR);
+	rectangle(color_calib_mat_left,validRoi[0],Scalar(0,0,255));
+	rectangle(color_calib_mat_right,validRoi[1],Scalar(0,0,255));
+
+	for( int j = 0; j < height; j += 16 ){
+		line(color_calib_mat_left, Point(0, j), Point(color_calib_mat_left.cols, j), Scalar((6*j*255/height)%255,8*(255-j*255/height)%255,j*255*10/height%255), 1, 8);
+		line(color_calib_mat_right, Point(0, j), Point(color_calib_mat_right.cols, j), Scalar((6*j*255/height)%255,8*(255-j*255/height)%255,j*255*10/height%255), 1, 8);
+	}
+	imshow( "camera_left", chess_mat_left );
+	imshow( "camera_right", chess_mat_right );
+	imshow( "cal_left", color_calib_mat_left );
+	imshow( "cal_right", color_calib_mat_right );
+
+
 }
 
 
@@ -187,13 +196,13 @@ void eye_stereo_calibrate::save_snapshot(){
 	string str1;
 	ss1 <<"cal_left"<< image_num<<".jpg";
 	ss1 >> str1;
-	bool flagl = imwrite(str1.c_str(), *mat_left);
+	bool flagl = imwrite(str1.c_str(), mat_left);
 
 	stringstream ss2;
 	string str2;
 	ss2 <<"cal_right"<< image_num<<".jpg";
 	ss2 >> str2;
-	bool flagr = imwrite(str2.c_str(), *mat_right);
+	bool flagr = imwrite(str2.c_str(), mat_right);
 
 	if(flagl&&flagr){
 		cout<<"Stereo image "<<image_num<<" captured!\n";
@@ -208,41 +217,41 @@ void eye_stereo_calibrate::detect_chessboard(){
 	//that don't contain any chessboard corners
 	if(camera_choice==0||camera_choice==2){
 		if(pattern_choice==0){
-			flag_pattern_left = findChessboardCorners(*mat_left, square_pattern_size, left_corners,
+			flag_pattern_left = findChessboardCorners(mat_left, square_pattern_size, left_corners,
 					CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE /*+ CALIB_CB_FAST_CHECK*/);
 		}else{
-			flag_pattern_left = findCirclesGrid(*mat_left, circle_pattern_size, left_corners,
+			flag_pattern_left = findCirclesGrid(mat_left, circle_pattern_size, left_corners,
 					CALIB_CB_ASYMMETRIC_GRID);
 		}
 	}
 	if(camera_choice==1||camera_choice==2){
 		if(pattern_choice==0){
-			flag_pattern_right = findChessboardCorners(*mat_right, square_pattern_size, right_corners,
+			flag_pattern_right = findChessboardCorners(mat_right, square_pattern_size, right_corners,
 					CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE/*+ CALIB_CB_FAST_CHECK*/);
 
 		}else{
-			flag_pattern_right = findCirclesGrid(*mat_right, circle_pattern_size, right_corners,
+			flag_pattern_right = findCirclesGrid(mat_right, circle_pattern_size, right_corners,
 					CALIB_CB_ASYMMETRIC_GRID);
 		}
 	}
 
 	if(flag_pattern_left&&flag_pattern_right&&pattern_choice==0){
-		cornerSubPix(*mat_left, left_corners, Size(11, 11), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
-		cornerSubPix(*mat_right, right_corners, Size(11, 11), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
+		cornerSubPix(mat_left, left_corners, Size(11, 11), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
+		cornerSubPix(mat_right, right_corners, Size(11, 11), Size(-1, -1), TermCriteria(CV_TERMCRIT_EPS + CV_TERMCRIT_ITER, 30, 0.1));
 	}
 
 	if(camera_choice==0||camera_choice==2){
 		if(pattern_choice==0){
-			drawChessboardCorners(*chess_mat_left, square_pattern_size, Mat(left_corners), flag_pattern_left);
+			drawChessboardCorners(chess_mat_left, square_pattern_size, Mat(left_corners), flag_pattern_left);
 		}else{
-			drawChessboardCorners(*chess_mat_left, circle_pattern_size, Mat(left_corners), flag_pattern_left);
+			drawChessboardCorners(chess_mat_left, circle_pattern_size, Mat(left_corners), flag_pattern_left);
 		}
 	}
 	if(camera_choice==1||camera_choice==2){
 		if(pattern_choice==0){
-			drawChessboardCorners(*chess_mat_right, square_pattern_size, Mat(right_corners), flag_pattern_right);
+			drawChessboardCorners(chess_mat_right, square_pattern_size, Mat(right_corners), flag_pattern_right);
 		}else{
-			drawChessboardCorners(*chess_mat_right, circle_pattern_size, Mat(right_corners), flag_pattern_right);
+			drawChessboardCorners(chess_mat_right, circle_pattern_size, Mat(right_corners), flag_pattern_right);
 		}
 	}
 
@@ -310,7 +319,7 @@ void eye_stereo_calibrate::add_calibration_data(){
 }
 
 void eye_stereo_calibrate::calibrate(){
-	Size imageSize=mat_left->size();
+	Size imageSize=mat_left.size();
 	vector<Mat> rvecs;
 	vector<Mat> tvecs;
 	vector<float> reprojErrs;
@@ -436,7 +445,7 @@ void eye_stereo_calibrate::calibrate(){
 }
 
 void eye_stereo_calibrate::save_data(){
-	Size imageSize=mat_left->size();
+	Size imageSize=mat_left.size();
 	FileStorage fs("intrinsics_eye.yml", CV_STORAGE_WRITE);
 	if( fs.isOpened() )
 	{
@@ -451,8 +460,7 @@ void eye_stereo_calibrate::save_data(){
 		debug_msg.push_back(ss.str());
 	}
 
-	Mat R1, R2, P1, P2, Q;
-	Rect validRoi[2];
+
 
 	stereoRectify(cameraMatrix[0], distCoeffs[0],
 			cameraMatrix[1], distCoeffs[1],
@@ -479,19 +487,15 @@ void eye_stereo_calibrate::save_data(){
 }
 
 void eye_stereo_calibrate::init_undistort(){
-	Mat R1, R2, P1, P2, Q;
-	Size imageSize=mat_left->size();
-	Rect roi1, roi2;
-
-	stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
-
+	Size imageSize=mat_left.size();
+	stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q, CALIB_ZERO_DISPARITY, -1, imageSize, &validRoi[0], &validRoi[1] );
 	initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
 	initUndistortRectifyMap(cameraMatrix[1], distCoeffs[1], R2, P2, imageSize, CV_16SC2, rmap[1][0], rmap[1][1]);
 }
 
 void eye_stereo_calibrate::undistort(){
-	remap(*mat_left, *calib_mat_left, rmap[0][0], rmap[0][1], INTER_LINEAR);
-	remap(*mat_right, *calib_mat_right, rmap[1][0], rmap[1][1], INTER_LINEAR);
+	remap(mat_left, calib_mat_left, rmap[0][0], rmap[0][1], INTER_LINEAR);
+	remap(mat_right, calib_mat_right, rmap[1][0], rmap[1][1], INTER_LINEAR);
 }
 
 int main(){
