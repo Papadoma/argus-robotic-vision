@@ -5,7 +5,7 @@ class test_depth{
 private:
 	module_eye input_module;
 	cv::StereoSGBM sgbm;
-
+	//
 	cv::Mat cameraMatrix[2], distCoeffs[2];
 	cv::Mat R, T, E, F, Q;
 	cv::Mat R1, R2, P1, P2;
