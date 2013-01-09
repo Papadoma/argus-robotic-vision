@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <opencv.hpp>
 
-#include "module_eye.hpp"
+#include "module_input.hpp"
 
 using namespace std;
 using namespace cv;
@@ -13,8 +13,8 @@ private:
 	VideoWriter video_left;
 	VideoWriter video_right;
 
-	Mat* mat_left;
-	Mat* mat_right;
+	Mat mat_left;
+	Mat mat_right;
 
 	Rect roi1, roi2;
 	Mat rmap[2][2];
@@ -43,9 +43,6 @@ stereo_save_file::stereo_save_file(){
 	width = framesize.width;
 	height = framesize.height;
 
-	mat_left=new Mat(height,width,CV_8UC3);
-	mat_right=new Mat(height,width,CV_8UC3);
-
 	video_left.open("left.mpg",CV_FOURCC('P','I','M','1'),30,framesize,true);
 	video_right.open("right.mpg",CV_FOURCC('P','I','M','1'),30,framesize,true);
 
@@ -60,8 +57,6 @@ stereo_save_file::stereo_save_file(){
 
 //Destructor
 stereo_save_file::~stereo_save_file(){
-	delete(mat_left);
-	delete(mat_right);
 	destroyAllWindows();
 }
 
@@ -74,8 +69,8 @@ void stereo_save_file::refresh_window(){
 	Mat imgResult(height,2*width,CV_8UC3); // Your final image
 	Mat roiImgResult_Left = imgResult(Rect(0,0,width,height));
 	Mat roiImgResult_Right = imgResult(Rect(width,0,width,height));
-	Mat roiImg1 = (*mat_left)(Rect(0,0,width,height));
-	Mat roiImg2 = (*mat_right)(Rect(0,0,width,height));
+	Mat roiImg1 = mat_left(Rect(0,0,width,height));
+	Mat roiImg2 = mat_right(Rect(0,0,width,height));
 	roiImg1.copyTo(roiImgResult_Left);
 	roiImg2.copyTo(roiImgResult_Right);
 
@@ -86,12 +81,13 @@ void stereo_save_file::refresh_window(){
 		putText(imgResult, "Ready...", Point(10,30), FONT_HERSHEY_SIMPLEX, 1, Scalar (0,255,0),2);
 	}
 	imshow( "original_camera", imgResult );
+	imshow( "left", mat_left );
 }
 
 void stereo_save_file::saveFrame(){
 	if(flag_recording){
-		video_left<<*mat_left;
-		video_right<<*mat_right;
+		video_left<<mat_left;
+		video_right<<mat_right;
 	}
 }
 

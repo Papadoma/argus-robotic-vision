@@ -2,16 +2,16 @@
 #define MODULE_EYE_HPP
 
 
-#include <opencv.hpp>
-#include "cv.h"
+#include <opencv2/opencv.hpp>
+#include <opencv/cv.h>
 
-#ifdef WIN32
-#include "CLEyeMulticam.h"
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#include <CLEyeMulticam.h>
 #endif
 
 class module_eye{
 private:
-#ifdef WIN32
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 	typedef CLEyeCameraInstance capture_type;
 #else
 	typedef cv::VideoCapture capture_type;
@@ -27,7 +27,7 @@ private:
 	cv::VideoCapture file_left;
 	cv::VideoCapture file_right;
 
-#ifdef WIN32
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 	PBYTE pCapBufferLeft;
 	PBYTE pCapBufferRight;
 	IplImage *pCapImageLeft;
@@ -45,15 +45,14 @@ public:
 
 inline module_eye::module_eye()
 :use_camera(true)
-#ifndef WIN32
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 ,
 width(640),
 height(480)
 #endif
 
 {
-
-#ifdef WIN32
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 	int numCams = CLEyeGetCameraCount();
 	if(numCams == 0)
 	{
@@ -64,16 +63,16 @@ height(480)
 	GUID left_id=CLEyeGetCameraUUID(1);
 	GUID right_id=CLEyeGetCameraUUID(0);
 
-	capture_left = CLEyeCreateCamera(left_id, CLEYE_COLOR_RAW , CLEYE_VGA, (float)60);
-	capture_right = CLEyeCreateCamera(right_id, CLEYE_COLOR_RAW , CLEYE_VGA, (float)60);
+	capture_left = CLEyeCreateCamera(left_id, CLEYE_BAYER_RAW , CLEYE_VGA, (float)60);
+	capture_right = CLEyeCreateCamera(right_id, CLEYE_BAYER_RAW , CLEYE_VGA, (float)60);
 
 	CLEyeCameraGetFrameDimensions(capture_left, width, height);
 
 	pCapBufferLeft=NULL;
 	pCapBufferRight=NULL;
 
-	pCapImageLeft = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 4);
-	pCapImageRight = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 4);
+	pCapImageLeft = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 1);
+	pCapImageRight = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 1);
 
 	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_GAIN,true);
 	CLEyeSetCameraParameter(capture_left,CLEYE_AUTO_EXPOSURE,true);
@@ -132,11 +131,13 @@ inline module_eye::module_eye(cv::String filename_left, cv::String filename_righ
 
 inline module_eye::~module_eye(){
 	if(use_camera){
-#ifdef WIN32
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 		CLEyeCameraStop(capture_left);
 		CLEyeCameraStop(capture_right);
 		CLEyeDestroyCamera(capture_left);
 		CLEyeDestroyCamera(capture_right);
+		cvReleaseImage(&pCapImageLeft);
+		cvReleaseImage(&pCapImageLeft);
 #else
 		capture_left.release();
 		capture_right.release();
@@ -149,16 +150,15 @@ inline module_eye::~module_eye(){
 
 inline void module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
 	if (use_camera){
-#ifdef WIN32
-
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 		CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 50);
 		CLEyeCameraGetFrame(capture_right,	pCapBufferRight, 50);
 
 		cvGetImageRawData(pCapImageLeft, &pCapBufferLeft);
 		cvGetImageRawData(pCapImageRight, &pCapBufferRight);
 
-		cv::cvtColor((cv::Mat)pCapImageLeft,mat_left,cv::COLOR_RGBA2RGB);
-		cv::cvtColor((cv::Mat)pCapImageRight,mat_right,cv::COLOR_RGBA2RGB);
+		cv::cvtColor((cv::Mat)pCapImageLeft,mat_left,cv::COLOR_BayerGR2RGB);
+		cv::cvtColor((cv::Mat)pCapImageRight,mat_right,cv::COLOR_BayerGR2RGB);
 #else
 		capture_left.grab();
 		capture_right.grab();

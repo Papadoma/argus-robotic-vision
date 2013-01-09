@@ -54,7 +54,6 @@ Mat test;
 	//ocl::HOGDescriptor hog;
 	HOGDescriptor hog;
 
-	BackgroundSubtractorMOG2* BSMOG;
 
 	Rect* clearview_mask;
 
@@ -143,14 +142,12 @@ argus_depth::argus_depth()
 
 	//depth_map2=new Mat(clearview_mask->height,clearview_mask->width,CV_8UC1);
 
-	BSMOG=new BackgroundSubtractorMOG2(500,100,true);
+
 
 }
 
 //Destructor
 argus_depth::~argus_depth(){
-	delete(BSMOG);
-
 	destroyAllWindows();
 	//	input_module.~module_eye();
 }
