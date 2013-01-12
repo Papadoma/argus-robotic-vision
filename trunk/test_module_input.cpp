@@ -8,9 +8,11 @@ int main(){
 		int key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
 		test.getFrame(left, right);
-		cv::imshow("left",left);
-		cv::imshow("right",right);
 
+		cv::imshow("right",right);
+		cv::imshow("left",left);
+		cv::imshow("test",left);
+//
 	}
 	return 0;
 }
