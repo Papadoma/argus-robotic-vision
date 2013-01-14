@@ -13,7 +13,7 @@ using namespace cv;
 
 class argus_depth{
 private:
-	module_eye input_module;
+	module_eye* input_module;
 	//module_file input_module;
 
 	Mat cameraMatrix[2], distCoeffs[2];
@@ -96,7 +96,8 @@ argus_depth::argus_depth()
 	//hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
 	hog.setSVMDetector(HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
 
-	Size framesize = input_module.getSize();
+	input_module = new module_eye("left.mpg","right.mpg");
+	Size framesize = input_module->getSize();
 	height=framesize.height;
 	width=framesize.width;
 	human_anchor=Rect(width/2,height/2,10,10);
@@ -125,10 +126,10 @@ argus_depth::argus_depth()
 	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 5;
+	sgbm.SADWindowSize = 1;
 	int cn = 1;
-	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
-	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	//sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	//sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = numberOfDisparities;
 	sgbm.uniquenessRatio = 15;
@@ -149,11 +150,12 @@ argus_depth::argus_depth()
 //Destructor
 argus_depth::~argus_depth(){
 	destroyAllWindows();
+	delete(input_module);
 	//	input_module.~module_eye();
 }
 
 void argus_depth::refresh_frame(){
-	input_module.getFrame(mat_left,mat_right);
+	input_module->getFrame(mat_left,mat_right);
 
 	remap(mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
 	remap(mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
@@ -274,14 +276,13 @@ imshow("debugright",person_right);
 	//sgbm.SADWindowSize = 15;
 	//sgbm(*person_left,*person_right,*depth_map_lowres);
 
-	sgbm.SADWindowSize = 3;
+
 	sgbm(person_left,person_right,depth_map_highres);
 
-	sgbm.SADWindowSize = 11;
 	//sgbm(*person_left,*person_right,*depth_map_lowres);
-	depth_map_lowres=depth_map_highres.clone();
+	//depth_map_lowres=depth_map_highres.clone();
 
-	depth_map_lowres.convertTo(depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
+	//depth_map_lowres.convertTo(depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
 	depth_map_highres.convertTo(depth_map_highres, CV_8UC1, 255/(numberOfDisparities*16.));
 
 	//bilateralFilter(*depth_map_highres, *depth_map_lowres, 9, 30, 30, BORDER_DEFAULT );
@@ -295,7 +296,7 @@ imshow("debugright",person_right);
 
 
 	depth_map_highres=(depth_map_highres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
-	depth_map_lowres=(depth_map_lowres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
+	//depth_map_lowres=(depth_map_lowres)(Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
 
 	//this->smooth_depth_map();
 
@@ -552,9 +553,9 @@ void argus_depth::clustering(){
 	//imshow("cover_depth",cover_depth);
 	bitwise_and(holes1,cover_depth,holes1);	//keep the info for the holes
 
-	//imshow("before",*depth_map2);
+	imshow("before",depth_map2);
 	add(holes1,depth_map2,depth_map2); //cover the holes
-	//imshow("after",*depth_map2);
+	imshow("after",depth_map2);
 
 	//imshow("filtered",*depth_map2);
 
@@ -743,7 +744,7 @@ int main(){
 		eye_stereo->fps = 1/(t/cv::getTickFrequency());//for fps
 		//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms
 		eye_stereo->refresh_window();
-		//eye_stereo->clustering();
+		eye_stereo->clustering();
 		//key_pressed = cvWaitKey(1) & 255;
 
 	}
