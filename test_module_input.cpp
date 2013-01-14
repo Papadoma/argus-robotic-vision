@@ -1,7 +1,7 @@
 #include "module_input.hpp"
 
 int main(){
-	module_eye test;
+	module_eye test("left.mpg","right.mpg");
 	cv::Mat left, right;
 
 	while(1){

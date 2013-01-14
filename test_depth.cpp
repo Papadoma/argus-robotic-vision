@@ -3,51 +3,62 @@
 
 class test_depth{
 private:
-	module_eye input_module;
+	module_eye* input_module;
 	cv::StereoSGBM sgbm;
 
 	cv::Mat cameraMatrix[2], distCoeffs[2];
 	cv::Mat R, T, E, F, Q;
 	cv::Mat R1, R2, P1, P2;
 	cv::Mat rmap[2][2];
-	cv::Rect roi1, roi2;
+	cv::Rect roi1, roi2, *clear_roi;
 	int numberOfDisparities;
+	cv::Mat mat_left,mat_right,rect_mat_left,rect_mat_right;
+	cv::Mat BW_rect_mat_left,BW_rect_mat_right;
 
 public:
 	test_depth();
+	~test_depth();
 	void load_param();
 	void refresh_frame();
 	void refresh_depth();
+	void show_video();
+	void smooth_depth();
 	int width,height;
 
 	cv::Mat depth;
-	cv::Mat BW_rect_mat_left,BW_rect_mat_right;
+
 };
+
+
 test_depth::test_depth(){
-	cv::Size framesize = input_module.getSize();
+	input_module=new module_eye("left.mpg","right.mpg");
+	cv::Size framesize = input_module->getSize();
 	height=framesize.height;
 	width=framesize.width;
 
 
-	this->load_param();
+	numberOfDisparities=32;
 
-	numberOfDisparities=48;
-	sgbm.preFilterCap = 31; //previously 31
-	sgbm.SADWindowSize = 1;
+	sgbm.preFilterCap = 63; //previously 31
+	sgbm.SADWindowSize = 3;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = numberOfDisparities;
-	sgbm.uniquenessRatio = 5;
+	sgbm.uniquenessRatio = 15;
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
-	sgbm.disp12MaxDiff = -1;
-	sgbm.fullDP = true;
+	sgbm.disp12MaxDiff = 2;
+	sgbm.fullDP = false;
 
+	this->load_param();
 
 }
 
+test_depth::~test_depth(){
+	delete(input_module);
+}
 
 void test_depth::load_param(){
 
@@ -93,21 +104,31 @@ void test_depth::load_param(){
 		cv::stereoRectify( cameraMatrix[0], distCoeffs[0], cameraMatrix[1], distCoeffs[1], imageSize, R, T, R1, R2, P1, P2, Q_local, cv::CALIB_ZERO_DISPARITY, -1, imageSize, &roi1, &roi2 );
 		cv::initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
 		cv::initUndistortRectifyMap(cameraMatrix[1], distCoeffs[1], R2, P2, imageSize, CV_16SC2, rmap[1][0], rmap[1][1]);
+		clear_roi=new cv::Rect(numberOfDisparities,0,width,height);
+		*clear_roi = roi1 & roi2 & (*clear_roi);
 	}
 }
 
 void test_depth::refresh_frame(){
-	cv::Mat mat_left,mat_right,rect_mat_left,rect_mat_right;
-	input_module.getFrame(mat_left,mat_right);
+
+	input_module->getFrame(mat_left,mat_right);
 
 	remap(mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
 	remap(mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
 
+	//	BW_rect_mat_left=rect_mat_left;
+	//	BW_rect_mat_right=rect_mat_right;
 	cvtColor(rect_mat_left,BW_rect_mat_left,CV_RGB2GRAY);
 	cvtColor(rect_mat_right,BW_rect_mat_right,CV_RGB2GRAY);
 }
 
+void test_depth::smooth_depth(){
+	cv::Mat depth2,mask;
+	cv::threshold(depth, mask, 0, 255, cv::THRESH_BINARY_INV);
 
+	cv::inpaint(depth, mask, depth2, 1, cv::INPAINT_NS);
+	cv::imshow("test",depth2);
+}
 
 void test_depth::refresh_depth(){
 	//medianBlur(BW_rect_mat_left, BW_rect_mat_left, 5);
@@ -118,7 +139,7 @@ void test_depth::refresh_depth(){
 	//	BW_rect_mat_right.copyTo(local_right);
 	//	bilateralFilter(local_left,BW_rect_mat_left,9,10,10);
 	//	bilateralFilter(local_right,BW_rect_mat_right,9,10,10);
-	sgbm.SADWindowSize = 1;
+
 	sgbm(BW_rect_mat_left,BW_rect_mat_right,depth);
 	depth.convertTo(depth, CV_8UC1, 255/(numberOfDisparities*16.));
 
@@ -127,6 +148,21 @@ void test_depth::refresh_depth(){
 
 	//medianBlur(depth, depth, 5);
 }
+
+void test_depth::show_video(){
+	cv::rectangle(rect_mat_left,*clear_roi,cv::Scalar(0,255,0));
+	cv::rectangle(rect_mat_right,*clear_roi,cv::Scalar(0,255,0));
+	cv::Mat imgResult(height,2*width,CV_8UC3); // Your final image
+	cv::Mat roiImgResult_Left = imgResult(cv::Rect(0,0,width,height));
+	cv::Mat roiImgResult_Right = imgResult(cv::Rect(width,0,width,height));
+	cv::Mat roiImg1 = rect_mat_left(cv::Rect(0,0,width,height));
+	cv::Mat roiImg2 = rect_mat_right(cv::Rect(0,0,width,height));
+	roiImg1.copyTo(roiImgResult_Left);
+	roiImg2.copyTo(roiImgResult_Right);
+
+	cv::imshow("Both",imgResult);
+}
+
 int main(){
 
 	test_depth test;
@@ -134,8 +170,12 @@ int main(){
 		int key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
 		test.refresh_frame();
-		cv::imshow("Left",test.BW_rect_mat_left);
+		//cv::imshow("Left",test.BW_rect_mat_left);
+		//cv::imshow("Right",test.BW_rect_mat_right);
 		test.refresh_depth();
+		test.smooth_depth();
+		test.show_video();
+
 
 		cv::Mat jet_depth_map2(test.height,test.width,CV_8UC3);
 		applyColorMap(test.depth, jet_depth_map2, cv::COLORMAP_JET );

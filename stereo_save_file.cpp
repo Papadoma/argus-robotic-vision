@@ -43,8 +43,8 @@ stereo_save_file::stereo_save_file(){
 	width = framesize.width;
 	height = framesize.height;
 
-	video_left.open("left.mpg",CV_FOURCC('P','I','M','1'),30,framesize,true);
-	video_right.open("right.mpg",CV_FOURCC('P','I','M','1'),30,framesize,true);
+	video_left.open("left.mpg",CV_FOURCC('P','I','M','1'),40,framesize,true);
+	video_right.open("right.mpg",CV_FOURCC('P','I','M','1'),40,framesize,true);
 
 	flag_recording=false;
 
@@ -81,7 +81,7 @@ void stereo_save_file::refresh_window(){
 		putText(imgResult, "Ready...", Point(10,30), FONT_HERSHEY_SIMPLEX, 1, Scalar (0,255,0),2);
 	}
 	imshow( "original_camera", imgResult );
-	imshow( "left", mat_left );
+
 }
 
 void stereo_save_file::saveFrame(){

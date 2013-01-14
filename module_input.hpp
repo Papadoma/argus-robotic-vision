@@ -110,7 +110,7 @@ height(480)
 #endif
 }
 
-inline module_eye::module_eye(cv::String filename_left, cv::String filename_right)
+inline module_eye::module_eye(std::string filename_left, std::string filename_right)
 :EoF(false),
  use_camera(false)
 {
