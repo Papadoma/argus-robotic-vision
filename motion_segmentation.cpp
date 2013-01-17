@@ -23,7 +23,7 @@ public:
 };
 
 motion_segmentation::motion_segmentation(){
-	input_instance = new module_eye();
+	input_instance = new module_eye("left.mpg","right.mpg");
 	cv::Size framesize = input_instance->getSize();
 	prev_frame = cv::Mat::zeros(framesize,CV_8UC1);
 	motion_seg = cv::Mat::zeros(framesize,CV_8UC1);
@@ -45,26 +45,92 @@ void motion_segmentation::get_frame(){
 void motion_segmentation::scene_segmentation(){
 	double timestamp = (double)cv::getTickCount()/cv::getTickFrequency();
 
-	cv::Mat frame_diff;
+	cv::Mat frame_diff, temp1, temp2, temp3;
 	absdiff(frame_grayscale, prev_frame, frame_diff);
 
 
-	threshold( frame_diff, frame_diff, 80, 1, CV_THRESH_BINARY );
-	updateMotionHistory(frame_diff, MHI, timestamp, MHI_DURATION);
-	frame_diff=frame_diff*255;
-	imshow("test",frame_diff);
 
-	imshow("MHI",MHI);
-	//MHI.convertTo(MHI,CV_8UC1,255./MHI_DURATION,(MHI_DURATION - timestamp)*255./MHI_DURATION);
-	cv::Mat segmask;
-	std::vector <cv::Rect> boundingRects;
-	cv::segmentMotion(MHI, segmask, boundingRects, timestamp, MAX_TIME_DELTA);
+	threshold( frame_diff, frame_diff, 30, 1, CV_THRESH_BINARY );
+	frame_diff.copyTo(temp3);
+	temp3=temp3*255;
+	imshow("frame difference",temp3);
+	cv::Mat element = cv::getStructuringElement( cv::MORPH_RECT , cv::Size(5,5), cv::Point( 2, 2 ) );
+	morphologyEx( frame_diff, frame_diff, cv::MORPH_CLOSE  , element);
 
-	int rect_size = boundingRects.size();
-	for(int i = 0; i<rect_size;i++){
-		cv::rectangle(frame_left,boundingRects[i],cv::Scalar((6*i*255/rect_size)%255,8*(255-i*255/rect_size)%255,i*255*10/rect_size%255));
+
+	//	updateMotionHistory(frame_diff, MHI, timestamp, MHI_DURATION);
+	frame_diff.copyTo(temp2);
+	temp2=temp2*255;
+	imshow("frame difference morph",temp2);
+
+	cv::cvtColor(frame_diff,frame_diff,CV_GRAY2RGB);
+	cv::Mat test;
+	cv::bitwise_and(frame_left,frame_diff,test);
+	imshow("test",test);
+
+
+	std::vector<std::vector<cv::Point> > contours;
+	std::vector<cv::Point> joined_contours;
+	std::vector<cv::Vec4i> hierarchy;
+	cv::findContours( temp2, contours, hierarchy,CV_RETR_EXTERNAL , CV_CHAIN_APPROX_NONE );
+	cv::cvtColor(temp2,temp2,CV_GRAY2RGB);
+	for( int idx=0; idx < (int)hierarchy.size(); idx ++)
+	{
+		joined_contours.insert(joined_contours.end(),contours[idx].begin(),contours[idx].end());
+		cv::Scalar color( rand()&255, rand()&255, rand()&255 );
+		drawContours( temp2, contours, idx, color, CV_FILLED, 8, hierarchy );
 	}
-	imshow("Segmentation mask",segmask);
+	//cv::drawContours(temp2, contours, 2, cv::Scalar(0,255,0), CV_FILLED);	//fill any inside holes, if any :P
+
+
+	//cv::rectangle(temp2,bound_rect,cv::Scalar(0,255,255),1);
+	//std::vector<std::vector<cv::Point> > hull (1);
+	//if(!joined_contours.empty()) approxPolyDP(joined_contours, hull[0], 100, true);//convexHull( joined_contours, hull[0], false );
+	//drawContours( temp2, hull, -1, cv::Scalar(0,0,255), 1, 8 );
+	cv::Rect bound_rect;
+	if(!joined_contours.empty()) bound_rect = boundingRect(joined_contours);
+	imshow("contours",temp2);
+	cv::Mat grab_mask,bgdModel,fgdModel;
+	grabCut(frame_left, grab_mask, bound_rect,  bgdModel,  fgdModel, 1, cv::GC_INIT_WITH_RECT  );
+	grab_mask=grab_mask*255/3;
+	imshow("result",grab_mask);
+
+	//	cv::Moments moments;
+	//	std::vector<cv::Point> blobs_center;
+	//	for( int i = 0; i < (int)contours.size(); i ++)
+	//	{
+	//		moments = cv::moments(contours[i]);
+	//		//cv::circle(temp2,cv::Point(moments.m10/moments.m00,moments.m01/moments.m00),2,cv::Scalar(255,255,255));
+	//		blobs_center.push_back(cv::Point(moments.m10/moments.m00,moments.m01/moments.m00));
+	//	}
+	//	imshow("contours",temp2);
+	//
+	//		cv::Mat markers(frame_left.size(),CV_32S);
+	//		for( int i = 0; i < (int)blobs_center.size(); i ++){
+	//			markers.at<double>(blobs_center[i])=i;
+	//
+	//		}
+	//		watershed(frame_left,  markers);
+	//		markers.convertTo(markers,CV_8UC1);
+	//		//markers=markers*255;
+	//		std::cout << markers << std::endl;
+	//		imshow("watershed",markers);
+
+
+	//	//MHI.convertTo(temp2,CV_8UC1,255/(*max));
+	//	imshow("MHI",MHI);
+	//	//MHI.convertTo(MHI,CV_8UC1,255./MHI_DURATION,(MHI_DURATION - timestamp)*255./MHI_DURATION);
+	//	cv::Mat segmask;
+	//	std::vector <cv::Rect> boundingRects;
+	//	cv::segmentMotion(MHI, segmask, boundingRects, timestamp, MAX_TIME_DELTA);
+	//	std::cout<< MHI << std::endl;
+	//	int rect_size = boundingRects.size();
+	//	for(int i = 0; i<rect_size;i++){
+	//		cv::rectangle(frame_left,boundingRects[i],cv::Scalar((6*i*255/rect_size)%255,8*(255-i*255/rect_size)%255,i*255*10/rect_size%255));
+	//	}
+
+
+	//imshow("Segmentation mask",segmask);
 
 
 	frame_grayscale.copyTo(prev_frame);
@@ -74,13 +140,20 @@ void motion_segmentation::scene_segmentation(){
 
 int main(){
 	motion_segmentation test;
-
+	bool loop=false;
 	while(1){
 		int key_pressed = cvWaitKey(1) & 255;
+		do{
+			key_pressed = cvWaitKey(1) & 255;
+			if ( key_pressed == 32 )loop=!loop;
+			if ( key_pressed == 27 ) break;
+		}while (loop);
 		if ( key_pressed == 27 ) break;
+
 		test.get_frame();
 		test.scene_segmentation();
 
 		test.refresh_output();
+		//cvWaitKey(50);
 	}
 }
