@@ -151,8 +151,8 @@ inline module_eye::~module_eye(){
 inline void module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
 	if (use_camera){
 #if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
-		CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 50);
-		CLEyeCameraGetFrame(capture_right,	pCapBufferRight, 50);
+		CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 2000);
+		CLEyeCameraGetFrame(capture_right,	pCapBufferRight, 2000);
 
 		cvGetImageRawData(pCapImageLeft, &pCapBufferLeft);
 		cvGetImageRawData(pCapImageRight, &pCapBufferRight);
