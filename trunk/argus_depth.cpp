@@ -4,9 +4,18 @@
 
 #include "module_input.hpp"
 
+struct human{
+	float movement_perc;
+	cv::Rect bounding_rect;
+	cv::Mat figure_mask;
+	cv::Mat depth;
+};
+
 class argus_depth{
 private:
 	module_eye* input_module;
+
+	std::vector<human> human_group;
 
 	cv::Mat cameraMatrix[2], distCoeffs[2];
 	cv::Mat R, T, E, F, Q;
@@ -19,16 +28,13 @@ private:
 	cv::Mat BW_rect_mat_left;
 	cv::Mat BW_rect_mat_right;
 
-	cv::Mat depth_map_lowres;
-	cv::Mat depth_map_highres;
-
+	cv::Mat depth_map;
 	cv::Mat depth_map2;
-
-	cv::Mat person_left;
-	cv::Mat person_right;
 
 	cv::Mat thres_mask;
 	cv::Mat test;
+
+	cv::Mat prev_frame, frame_diff;
 
 	//ocl::oclMat* left_ocl;
 	//ocl::oclMat* right_ocl;
@@ -53,10 +59,13 @@ private:
 
 	void load_param();
 	void smooth_depth_map();
+	void calculate_motion();
 
 	void lookat(cv::Point3d from, cv::Point3d to, cv::Mat& destR);
 	void eular2rot(double yaw,double pitch, double roll,cv::Mat& dest);
 	void cloud_to_disparity(cv::Mat, cv::Mat);
+
+
 public:
 	double baseline;
 	cv::Point3d viewpoint;
@@ -77,20 +86,23 @@ public:
 	void camera_view(cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat&, cv::Mat&, cv::Mat&, cv::Mat&);
 };
 
+
+
 //Constructor
 argus_depth::argus_depth()
 :
-frame_counter(0)
+				frame_counter(0)
 {
 
 
 	//hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
 	hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
 
-	input_module = new module_eye("left.mpg","right.mpg");
+	input_module = new module_eye("left1.mpg","right1.mpg");
 	cv::Size framesize = input_module->getSize();
 	height = framesize.height;
 	width = framesize.width;
+	prev_frame = cv::Mat::zeros(framesize, CV_8UC1);
 	human_anchor = cv::Rect(width/2,height/2,10,10);
 
 	baseline = 9.5;
@@ -119,8 +131,8 @@ frame_counter(0)
 	sgbm.preFilterCap = 63; //previously 31
 	sgbm.SADWindowSize = 1;
 	int cn = 1;
-	//sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
-	//sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = numberOfDisparities;
 	sgbm.uniquenessRatio = 15;
@@ -139,6 +151,14 @@ argus_depth::~argus_depth(){
 	cv::destroyAllWindows();
 	delete(input_module);
 	//	input_module.~module_eye();
+}
+
+void argus_depth::calculate_motion(){
+	absdiff(BW_rect_mat_left, prev_frame, frame_diff);
+	threshold( frame_diff, frame_diff, 20, 255, CV_THRESH_BINARY );
+	cv::Mat element = cv::getStructuringElement( cv::MORPH_RECT , cv::Size(5,5), cv::Point( 2, 2 ) );
+	morphologyEx( frame_diff, frame_diff, cv::MORPH_CLOSE  , element);
+	BW_rect_mat_left.copyTo(prev_frame);
 }
 
 void argus_depth::refresh_frame(){
@@ -166,9 +186,6 @@ void argus_depth::refresh_frame(){
 }
 
 void argus_depth::refresh_window(){
-	//		imshow( "original_camera_left", *mat_left );
-	//	imshow( "original_camera_right", *mat_right );
-
 	cv::rectangle(rect_mat_left, *clearview_mask, cv::Scalar(255,255,255), 1, 8);
 	cv::rectangle(rect_mat_right, *clearview_mask, cv::Scalar(255,255,255), 1, 8);
 
@@ -185,11 +202,10 @@ void argus_depth::refresh_window(){
 	cv::putText(imgResult, ss.str(), cv::Point (10,20), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2, 8, false );
 
 	imshow( "Camera", imgResult );
-	//imshow( "depth", *depth_map_lowres );
 
-	cv::Mat jet_depth_map2(height,width,CV_8UC3);
-	cv::applyColorMap(depth_map2, jet_depth_map2, cv::COLORMAP_JET );
-	cv::imshow( "depth2", jet_depth_map2 );
+	//	cv::Mat jet_depth_map2(height,width,CV_8UC3);
+	//	cv::applyColorMap(depth_map2, jet_depth_map2, cv::COLORMAP_JET );
+	//	cv::imshow( "depth2", jet_depth_map2 );
 }
 
 
@@ -244,68 +260,43 @@ void argus_depth::load_param(){
 }
 
 void argus_depth::compute_depth(){
-
-	cv::Rect refined_human_anchor=human_anchor;
-	refined_human_anchor.x=human_anchor.x-numberOfDisparities;
-	refined_human_anchor.width=human_anchor.width+numberOfDisparities;
-
-	person_left=(BW_rect_mat_left)(refined_human_anchor);
-	person_right=(BW_rect_mat_right)(refined_human_anchor);
-
-	sgbm(person_left,person_right,depth_map_highres);
-
-	//sgbm(*person_left,*person_right,*depth_map_lowres);
-	//depth_map_lowres=depth_map_highres.clone();
-
-	//depth_map_lowres.convertTo(depth_map_lowres, CV_8UC1, 255/(numberOfDisparities*16.));
-	depth_map_highres.convertTo(depth_map_highres, CV_8UC1, 255/(numberOfDisparities*16.));
-
-	//bilateralFilter(*depth_map_highres, *depth_map_lowres, 9, 30, 30, BORDER_DEFAULT );
-	//blur(*depth_map_highres, *depth_map_lowres, Size(5,5));
-	//medianBlur(*depth_map_highres,*depth_map_lowres, 11);
-
-	//medianBlur(*depth_map_lowres,*depth_map_lowres, 9);
-	//GaussianBlur(*depth_map_lowres, *depth_map_lowres, Size(5,5), 50);
-
-	//Smooth out the depth map
-
-
-	depth_map_highres=(depth_map_highres)(cv::Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
-	//depth_map_lowres=(depth_map_lowres)(cv::Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
-
-	//this->smooth_depth_map();
-
-	depth_map_highres.copyTo(depth_map2);
-
-	//bilateralFilter(*depth_map_lowres, *depth_map2, 5, 30, 30, BORDER_DEFAULT );
-
+	//	cv::Rect refined_human_anchor=human_anchor;
+	//	refined_human_anchor.x=human_anchor.x-numberOfDisparities;
+	//	refined_human_anchor.width=human_anchor.width+numberOfDisparities;
+	//
+	//	person_left=(BW_rect_mat_left)(refined_human_anchor);
+	//	person_right=(BW_rect_mat_right)(refined_human_anchor);
+	//
+	//	sgbm(person_left,person_right,depth_map);
+	//	depth_map.convertTo(depth_map, CV_8UC1, 255/(numberOfDisparities*16.));
+	//
+	//	depth_map = (depth_map)(cv::Rect(numberOfDisparities,0,human_anchor.width,human_anchor.height)).clone();
+	//	//this->smooth_depth_map();
+	//
+	//	depth_map.copyTo(depth_map2);
 }
 
 void argus_depth::smooth_depth_map(){
 	cv::Mat holes;
-	threshold(depth_map_highres,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
-
-	bitwise_and(holes,depth_map_lowres,holes);
-	bitwise_or(holes,depth_map_highres,depth_map2);
-
-	//	Mat kernel(5,5,CV_8U,cv::Scalar(1));
-	//	morphologyEx(*depth_map_highres, *depth_map_lowres, MORPH_CLOSE , kernel);
-
+	threshold(depth_map,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
+	inpaint(depth_map, holes, depth_map, 2.0 , cv::INPAINT_NS );
 }
 
 void argus_depth::detect_human(){
 
+	human_group.clear();
 	//		hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());
 	//		ocl::oclMat img_ocl;
 	//		img_ocl.upload(*BW_rect_mat_left);
 
 	std::vector<cv::Rect> found, found_filtered;
 
-	hog.detectMultiScale(BW_rect_mat_left, found, 0, cv::Size(8,8), cv::Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
+	//hog.detectMultiScale(BW_rect_mat_left, found, 0.5, cv::Size(8,8), cv::Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
+	hog.detectMultiScale(BW_rect_mat_left, found, 0, cv::Size(8,8), cv::Size(32,32), 1.08, 1);
 	//hog.detectMultiScale(img_ocl, found, 0, Size(8,8), Size(0,0), 1.05, 0);
 
+	//filter double detections
 	size_t i, j;
-
 	for( i = 0; i < found.size(); i++ )
 	{
 		cv::Rect r = found[i];
@@ -316,19 +307,40 @@ void argus_depth::detect_human(){
 			found_filtered.push_back(r);
 	}
 
+	this->calculate_motion();
+
+	//Fix rectangles size and calculate area
 	int found_area[found_filtered.size()];
 	for( i = 0; i < found_filtered.size(); i++ )
 	{
 		//found_filtered[i].x += cvRound(r.width*0.1);
 		//found_filtered[i].width = cvRound(r.width*0.8);
-		found_filtered[i].y += cvRound(found_filtered[i].height*0.05);
+		//found_filtered[i].y += cvRound(found_filtered[i].height*0.08);
 		//found_filtered[i].height = cvRound(found_filtered[i].height*1.05);
 		found_area[i] = found_filtered[i].area();
+		found_filtered[i]=(*clearview_mask) & found_filtered[i];
+
+		human candidate;
+		candidate.bounding_rect = found_filtered[i];
+		cv::Mat movement_ROI = frame_diff(found_filtered[i]);
+		candidate.movement_perc =  (float)countNonZero(movement_ROI)/movement_ROI.total();
+		human_group.push_back(candidate);
 	}
 
+	for( int i = 0; i < (int)human_group.size(); i++ )
+	{
+		cv::Rect r = human_group[i].bounding_rect;
+		std::stringstream ss;
+		ss << human_group[i].movement_perc;
+		cv::putText(rect_mat_right, ss.str(), r.tl(), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(0,0,255), 1, 8, false );
+
+		rectangle(rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
+		rectangle(rect_mat_right, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
+	}
 
 	std::vector<cv::Rect> found_person;
 	if(found_filtered.size()>1){
+		//find the biggest human
 		int max = found_area[0];
 		int pos = 0;
 		for( i = 1; i < found_filtered.size(); i++ ){
@@ -337,7 +349,6 @@ void argus_depth::detect_human(){
 				pos = i;
 			}
 		}
-
 
 		cv::Point p1(found_filtered[pos].x+found_filtered[pos].width/2,found_filtered[pos].y+found_filtered[pos].height/2);
 		for( i = 0; i < found_filtered.size(); i++ ){
@@ -352,21 +363,7 @@ void argus_depth::detect_human(){
 		found_person.push_back(found_filtered[0]);
 	}
 
-	for( i = 0; i < found_filtered.size(); i++ )
-	{
-		cv::Rect r = found_filtered[i];
 
-		rectangle(rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
-		rectangle(rect_mat_right, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
-	}
-	//	if(!found_filtered.empty()){
-	//		stringstream ss2;//create a stringstream
-	//		ss2 << found_area[pos];//add number to the stream
-	//		putText(*rect_mat_left, ss2.str(), found_filtered[pos].br(), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(0,0,255), 1, 8, false );
-	//	}
-	//	for( i = 0; i < found_person.size(); i++ ){
-	//		rectangle(*rect_mat_left, found_person[i].tl(), found_person[i].br(), cv::Scalar(255,0,0), 1);
-	//	}
 	std::vector<cv::Point> points_person;
 	for( i = 0; i < found_person.size(); i++ ){
 		rectangle(rect_mat_left, found_person[i].tl(), found_person[i].br(), cv::Scalar(0,255,255), 2);
@@ -397,7 +394,7 @@ void argus_depth::detect_human(){
 void argus_depth::take_snapshot(){
 	std::cout<<"Snapshot taken!" << std::endl;
 	imwrite("depth.png", depth_map2);
-	imwrite("person.png", person_left);
+	//imwrite("person.png", person_left);
 }
 
 void argus_depth::clustering(){
@@ -511,7 +508,7 @@ void argus_depth::clustering(){
 
 	cv::Mat holes1,holes2;
 	threshold(depth_map2,holes1,1,255,cv::THRESH_BINARY_INV); //find the holes of the original depth map
-	threshold(depth_map_highres,holes2,1,255,cv::THRESH_BINARY_INV); //find the holes of the fragmented depth map
+	threshold(depth_map,holes2,1,255,cv::THRESH_BINARY_INV); //find the holes of the fragmented depth map
 	//imshow("holes1",holes1);
 	//imshow("holes2",holes2);
 	bitwise_and(holes2,biggest_blob,holes2); //keep only the holes inside the blob
@@ -520,7 +517,7 @@ void argus_depth::clustering(){
 
 	cv::Mat cover_depth;
 	cv::Mat kernel(9,9,CV_8U,cv::Scalar(1));
-	medianBlur(depth_map_highres,cover_depth, 5);
+	medianBlur(depth_map,cover_depth, 5);
 	morphologyEx(cover_depth, cover_depth, cv::MORPH_CLOSE , kernel);	//Create a depth map free of holes but not sharp
 	//imshow("cover_depth",cover_depth);
 	bitwise_and(holes1,cover_depth,holes1);	//keep the info for the holes
@@ -537,7 +534,7 @@ void argus_depth::clustering(){
 
 	//imshow("test1",depth_map2);
 	cv::Mat point_cloud;
-	reprojectImageTo3D(depth_map_highres, point_cloud, Q, false, -1 );
+	reprojectImageTo3D(depth_map, point_cloud, Q, false, -1 );
 
 	cv::Mat xyz= point_cloud.reshape(3,point_cloud.size().area());
 	cv::Mat R_vec;
@@ -546,7 +543,7 @@ void argus_depth::clustering(){
 	cv::Mat destimage, destdisp, image, disp;
 
 	image = (BW_rect_mat_left)(human_anchor).clone();
-	disp=depth_map_highres.clone();
+	disp = depth_map.clone();
 
 	//image.convertTo(image,CV_8UC1);
 	//disp.convertTo(disp,CV_8UC1);
@@ -711,12 +708,12 @@ int main(){
 		eye_stereo->refresh_frame();
 		eye_stereo->detect_human();
 
-		eye_stereo->compute_depth();
+		//eye_stereo->compute_depth();
 		t = (double)cv::getTickCount() - t;
 		eye_stereo->fps = 1/(t/cv::getTickFrequency());//for fps
 		//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms
 		eye_stereo->refresh_window();
-		eye_stereo->clustering();
+		//eye_stereo->clustering();
 		//key_pressed = cvWaitKey(1) & 255;
 
 	}
