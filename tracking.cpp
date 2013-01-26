@@ -1,4 +1,5 @@
 #include "module_input.hpp"
+#include "module_single_cam.hpp"
 
 struct tracking_objects{
 	bool on_tracking;
@@ -10,7 +11,7 @@ struct tracking_objects{
 
 class tracking{
 private:
-	module_eye test;
+	module_cam test;
 	std::vector<cv::Point> mask_points;
 	cv::Mat left,right;
 	cv::Mat mask_frame,tracking_view;
@@ -49,12 +50,14 @@ tracking::tracking(){
 }
 void tracking::threshold_image(){
 	cvtColor(left, mask_frame, CV_BGR2HSV);
-	cv::inRange(mask_frame, cv::Scalar(0, 80, 50), cv::Scalar(10, 255, 255), mask_frame);
+	//cv::inRange(mask_frame, cv::Scalar(0, 80, 50), cv::Scalar(10, 255, 255), mask_frame); //RED COLOR
+	cv::inRange(mask_frame, cv::Scalar(0, 58, 60), cv::Scalar(50, 173, 255), mask_frame); //SKIN COLOR
+	imshow("test", mask_frame);
 	cv::Mat element = cv::getStructuringElement( cv::MORPH_ELLIPSE , cv::Size(7,7), cv::Point( 3, 3 ) );
 	//morphologyEx( mask_frame, mask_frame, cv::MORPH_CLOSE  , element);
 	//imshow("mask_frame",mask_frame);
 	cv::erode(mask_frame,mask_frame,cv::Mat(),cv::Point(),2);
-	cv::dilate(mask_frame,mask_frame,cv::Mat(),cv::Point(),10);
+	cv::dilate(mask_frame,mask_frame,cv::Mat(),cv::Point(),15);
 }
 
 void tracking::find_blob(){
@@ -125,12 +128,18 @@ void tracking::track_blob(){
 		cv::RotatedRect detected_rect;
 		cv::calcBackProject( &hsv, 1, channels, objects[i].hist, backproj, ranges, 1, true );
 
-imshow("backproj",backproj);
-		//detected_rect = CamShift(backproj, objects[i].bounding_rect, cv::TermCriteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 1, 1 ));
-		//objects[i].bounding_rect=detected_rect.boundingRect();
-		meanShift(backproj, objects[i].bounding_rect, cv::TermCriteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 ));
-		 ellipse( tracking_view, detected_rect, cv::Scalar(0,0,255), 3, CV_AA );
+		imshow("backproj",backproj);
 
+		//std::cout << i << std::endl;
+		//std::cout << objects[i].bounding_rect << std::endl;
+		//detected_rect = CamShift(backproj, objects[i].bounding_rect, cv::TermCriteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 5, 1 ));
+		//objects[i].bounding_rect = objects[i].bounding_rect & cv::Rect(0,0,width,height);
+		//std::cout << objects[i].bounding_rect << std::endl;
+		//detected_rect.boundingRect() = detected_rect.boundingRect() & cv::Rect(0,0,width,height);
+		//std::cout << detected_rect.boundingRect() << std::endl;
+		//objects[i].bounding_rect = detected_rect.boundingRect();
+		meanShift(backproj, objects[i].bounding_rect, cv::TermCriteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 ));
+		//ellipse( tracking_view, detected_rect, cv::Scalar(0,0,255), 3, CV_AA );
 	}
 }
 
@@ -142,7 +151,9 @@ void tracking::draw_ROI(){
 		cv::Mat dest = tracking_view(objects[i].bounding_rect);
 		cv::Mat color_mask = objects[i].mask.clone();
 		cv::cvtColor(color_mask,color_mask,CV_GRAY2BGR);
-		add(dest,  color_mask, dest);
+		//std::cout<<"hi"<<std::endl;
+		//add(dest,  color_mask, dest);
+		//std::cout<<"bye"<<std::endl;
 		rectangle(tracking_view,objects[i].bounding_rect, cv::Scalar(0,255,0), 2);
 		//cv::Point center2d = cv::Point(objects[i].center.x,objects[i].center.y);
 		//circle(tracking_view, center2d, 2, cv::Scalar(0,255,0),-1);
@@ -150,21 +161,23 @@ void tracking::draw_ROI(){
 }
 
 void tracking::refresh_frame(){
-	test.getFrame(left, right);
+	//test.getFrame(left, right);
+	test.getFrame(left);
 	tracking_view = left.clone();
 	draw_ROI();
 }
 
 void tracking::refresh_window(){
-	cv::Mat imgResult(height,2*width,CV_8UC3); // Your final imageasd
-	cv::Mat roiImgResult_Left = imgResult(cv::Rect(0,0,left.cols,left.rows));
-	cv::Mat roiImgResult_Right = imgResult(cv::Rect(right.cols,0,right.cols,right.rows));
-	cv::Mat roiImg1 = (left)(cv::Rect(0,0,left.cols,left.rows));
-	cv::Mat roiImg2 = (right)(cv::Rect(0,0,right.cols,right.rows));
-	roiImg1.copyTo(roiImgResult_Left);
-	roiImg2.copyTo(roiImgResult_Right);
-
-	imshow( "Camera", imgResult );
+	//	cv::Mat imgResult(height,2*width,CV_8UC3); // Your final imageasd
+	//	cv::Mat roiImgResult_Left = imgResult(cv::Rect(0,0,left.cols,left.rows));
+	//	cv::Mat roiImgResult_Right = imgResult(cv::Rect(right.cols,0,right.cols,right.rows));
+	//	cv::Mat roiImg1 = (left)(cv::Rect(0,0,left.cols,left.rows));
+	//	cv::Mat roiImg2 = (right)(cv::Rect(0,0,right.cols,right.rows));
+	//	roiImg1.copyTo(roiImgResult_Left);
+	//	roiImg2.copyTo(roiImgResult_Right);
+	//
+	//	imshow( "Camera", imgResult );
+	imshow( "Camera", left );
 	imshow("tracking red",tracking_view);
 
 }
@@ -174,7 +187,7 @@ void tracking::refresh_window(){
 
 int main(){
 	tracking inst;
-
+	//cv::imshow("test",cv::Mat(10,10,CV_8UC1));
 	while(1){
 
 		inst.refresh_frame();
@@ -184,7 +197,7 @@ int main(){
 		int key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;
 		if ( key_pressed == 13 ) inst.find_blob();
-		//
+
 	}
 	return 0;
 }
