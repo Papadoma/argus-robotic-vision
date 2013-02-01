@@ -1,5 +1,7 @@
 #include <opencv.hpp>
 #include <stdio.h>
+#include <GL/glut.h>
+#include <glm/glm.hpp>
 
 #include <OGRE/OgreCamera.h>
 #include <OGRE/OgreEntity.h>
@@ -15,8 +17,8 @@
 //#include <OGRE/SdkTrays.h>
 //#include <OGRE/SdkCameraMan.h>
 
-using namespace std;
-using namespace Ogre;
+cv::Mat img(480, 640, CV_8UC3);
+
 
 class ogre_model{
 private:
@@ -37,10 +39,11 @@ public:
 	void setup();
 	void render();
 	void move_model(int);
+	void get_opencv_snap();
 };
 
 ogre_model::ogre_model(){
-	root = new Ogre::Root();
+	root = new Ogre::Root("plugins_d.cfg");
 
 }
 
@@ -52,7 +55,7 @@ void ogre_model::setupResources(void)
 {
 
 	// Load resource paths from config file
-	ConfigFile cf;
+	Ogre::ConfigFile cf;
 #if OGRE_DEBUG_MODE
 	cf.load("resources_d.cfg");
 #else
@@ -60,19 +63,19 @@ void ogre_model::setupResources(void)
 #endif
 
 	// Go through all sections & settings in the file
-	ConfigFile::SectionIterator seci = cf.getSectionIterator();
+	Ogre::ConfigFile::SectionIterator seci = cf.getSectionIterator();
 
-	String secName, typeName, archName;
+	Ogre::String secName, typeName, archName;
 	while (seci.hasMoreElements())
 	{
 		secName = seci.peekNextKey();
-		ConfigFile::SettingsMultiMap *settings = seci.getNext();
-		ConfigFile::SettingsMultiMap::iterator i;
+		Ogre::ConfigFile::SettingsMultiMap *settings = seci.getNext();
+		Ogre::ConfigFile::SettingsMultiMap::iterator i;
 		for (i = settings->begin(); i != settings->end(); ++i)
 		{
 			typeName = i->first;
 			archName = i->second;
-			ResourceGroupManager::getSingleton().addResourceLocation(
+			Ogre::ResourceGroupManager::getSingleton().addResourceLocation(
 					archName, typeName, secName);
 
 		}
@@ -80,7 +83,8 @@ void ogre_model::setupResources(void)
 }
 
 void ogre_model::setupPlugins(void){
-	root->loadPlugin("D:/ogre3d_repos/built/ogre-sdk/bin/debug/RenderSystem_GL_d");
+	//root->loadPlugin("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/debug/RenderSystem_GL_d");
+	//root->loadPlugin("C:/Users/papadoma/Ogre3D/built/ogre-sdk/bin/debug/Plugin_ParticleFX_d");
 	const Ogre::RenderSystemList& lRenderSystemList = root->getAvailableRenderers();
 	if( lRenderSystemList.size() == 0 )
 	{
@@ -129,7 +133,7 @@ void ogre_model::setup(){
 	// add viewport
 	vp = Window->addViewport(camera);
 
-	ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
+	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 
 
 
@@ -154,18 +158,6 @@ void ogre_model::setup(){
 	//pointLight->setPosition(Ogre::Vector3(0, 150, 250));
 	pointLight->setDiffuseColour(0.9, 0.9, 0.9);
 	pointLight->setSpecularColour(0.9, 0.0, 0.0);
-
-	MaterialPtr material = MaterialManager::getSingleton().getByName("DoF_DepthDebug");
-	material->getTechnique(0)->getPass(0)->getTextureUnitState(0)->setTextureName("DoF_DepthDebug");
-ogre->setMaterial(material);
-
-	Ogre::ResourceManager::ResourceMapIterator materialIterator = Ogre::MaterialManager::getSingleton().getResourceIterator();
-	while (materialIterator.hasMoreElements())
-	{
-		cout<< (static_cast<Ogre::MaterialPtr>(materialIterator.peekNextValue()))->getName()<<"\n";
-		materialIterator.moveNext();
-		//count++;
-	}
 
 }
 void ogre_model::createDepthRenderTexture(){
@@ -211,6 +203,47 @@ void ogre_model::move_model(int deg){
 
 }
 
+void ogre_model::get_opencv_snap(){
+//
+//	//use fast 4-byte alignment (default anyway) if possible
+//	glPixelStorei(GL_PACK_ALIGNMENT, (img.step & 3) ? 1 : 4);
+//
+//	//set length of one complete row in destination data (doesn't need to equal img.cols)
+//	glPixelStorei(GL_PACK_ROW_LENGTH, img.step/img.elemSize());
+//
+//	glReadPixels(0, 0, img.cols, img.rows, GL_RGB, GL_UNSIGNED_BYTE, img.data);
+//
+//	cv::flip(img, img, 0);
+//std::cout<<img;
+
+	int left, top, width, height;
+	vp->getActualDimensions(left, top, width, height);
+
+	Ogre::PixelFormat format = Ogre::PF_BYTE_RGBA;
+	int outWidth = width;
+	int outHeight = height;
+	int outBytesPerPixel = Ogre::PixelUtil::getNumElemBytes(format);
+
+	printf("Left %d, Top %d, Width: %d, Height: %d\n", left, top, width, height);
+
+	unsigned char *data = new unsigned char [outWidth*outHeight*outBytesPerPixel];
+	//Ogre::PixelBox box = Ogre::PixelBox(outWidth, outHeight, 1, format, data);
+	//m_pOgreRenderWnd->copyContentsToMemory(box);
+
+	//Ogre::uchar *data = OGRE_ALLOC_T(Ogre::uchar, width * height * outBytesPerPixel, Ogre::MEMCATEGORY_RENDERSYS);
+	Ogre::Box extents(left, top, left + width, top + height);
+	Ogre::PixelBox pb(extents, format, data);
+
+	//printf("PixelBox: %d, %d, w: %d, h: %d\n", pb.left, pb.right, pb.getWidth(), pb.getHeight());
+
+	Window->copyContentsToMemory(pb);
+
+	 unsigned char* pDest = static_cast<unsigned char*>(pb.data);
+
+	std::cout<<(int)pDest[300]<<std::endl;
+	delete(data);
+}
+
 int main(){
 	ogre_model model;
 	model.setup();
@@ -221,7 +254,12 @@ int main(){
 		model.move_model(1);
 
 		model.render();
-		//cout<<"fps="<<fps<<"\n";
+
+		//int key_pressed = cvWaitKey(1) & 255;
+		//if ( key_pressed == 32 )model.get_opencv_snap();
+		model.get_opencv_snap();
+		//imshow("opencv",img);
+		std::cout<<"fps="<<fps<< std::endl;
 		//cout<<"fps="<<fps<<"\n";
 		Ogre::WindowEventUtilities::messagePump();
 	}
