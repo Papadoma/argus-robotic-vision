@@ -10,19 +10,23 @@ class ogre_model{
 private:
 	Ogre::ConfigFile cf;
 	Ogre::Root *root;
-	Ogre::Camera* camera;
-	Ogre::SceneManager* SceneMgr;
+	Ogre::Camera* mCamera;
+	Ogre::SceneManager* mSceneMgr;
 	Ogre::SceneNode* modelNode;
 	Ogre::Viewport *vp;
 
-	Ogre::TexturePtr mRenderToTexture;
+
 	Ogre::TexturePtr depthTexture;
-	Ogre::RenderTexture *renderTexture;
+
+	Ogre::Technique* mDepthTechnique;
+	Ogre::RenderTexture *depthTarget;
+
 	Ogre::Entity* body;
 
 	void setupResources(void);
 	void setupRenderer(void);
 	void createDepthRenderTexture();
+	void createScene(void);
 
 	cv::Mat image_rgb;
 	unsigned char *data;
@@ -31,12 +35,13 @@ private:
 	int left, top, width, height;
 	int render_width, render_height;
 public:
-	Ogre::RenderWindow* Window;
+	Ogre::RenderWindow* mWindow;
+
 	ogre_model();
 	~ogre_model();
 	void setup();
 	void render();
-	void move_model(int);
+	void move_model();
 	void get_opencv_snap();
 	cv::Mat* get_rgb();
 };
@@ -110,21 +115,19 @@ void ogre_model::setup(){
 	root->initialise(false);
 
 	// create main window
-	Window = root->createRenderWindow("Main",640,480,false);
+	mWindow = root->createRenderWindow("Main",640,480,false);
 	// create the scene
-	SceneMgr = root->createSceneManager(Ogre::ST_GENERIC);
+	mSceneMgr = root->createSceneManager(Ogre::ST_GENERIC);
 	// add a camera
-	camera = SceneMgr->createCamera("MainCam");
-	camera->setNearClipDistance(1);
-	camera->setFarClipDistance(1000);
-	// add viewport
-	vp = Window->addViewport(camera);
+	mCamera = mSceneMgr->createCamera("MainCam");
+	mCamera->setNearClipDistance(1);
+	mCamera->setFarClipDistance(1000);
 
 	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 
-	modelNode = SceneMgr->getRootSceneNode()->createChildSceneNode("OgreNode");
+	modelNode = mSceneMgr->getRootSceneNode()->createChildSceneNode("OgreNode");
 
-	body = SceneMgr->createEntity("ogre", "ninja.mesh");
+	body = mSceneMgr->createEntity("ogre", "ninja.mesh");
 	body->setCastShadows(false);
 	//body->setMaterialName("DoF_Depth");
 
@@ -144,9 +147,8 @@ void ogre_model::setup(){
 
 
 	//set the light
-	SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
 
-	//		Ogre::Light* pointLight = SceneMgr->createLight("pointLight");
+	//		Ogre::Light* pointLight = mSceneMgr->createLight("pointLight");
 	//		pointLight->setType(Ogre::Light::LT_POINT);
 	//		//pointLight->setPosition(Ogre::Vector3(0, 150, 250));
 	//		pointLight->setDiffuseColour(0.9, 0.9, 0.9);
@@ -157,48 +159,102 @@ void ogre_model::setup(){
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
 			Ogre::Plane(Ogre::Vector3(0.0f, 1.0f, 0.0f), 1.0f),
 			500.0, 500.0, 100, 100, true, 1, 1, 1, Ogre::Vector3::NEGATIVE_UNIT_Z);
-	Ogre::Entity* pPlaneEntity = SceneMgr->createEntity("PlaneEntity", "Plane");
-	//Ogre::SceneNode* pSceneNodePlane = mSceneMgr->getRootSceneNode()->createChildSceneNode("PlaneNode");
+	Ogre::Entity* pPlaneEntity = mSceneMgr->createEntity("PlaneEntity", "Plane");
+	//Ogre::SceneNode* pSceneNodePlane = mmSceneMgr->getRootSceneNode()->createChildSceneNode("PlaneNode");
 	pPlaneEntity->setMaterialName("Examples/GrassFloor");
 	//pPlaneEntity->setMaterialName("DoF_Depth");
 	modelNode->attachObject(pPlaneEntity);
 
-	vp->getActualDimensions(left, top, width, height);
+}
 
-	mRenderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
+void ogre_model::createScene(void)
+{
+	Ogre::Viewport *vp = mCamera->getViewport();
+	mCamera->getViewport()->setDimensions(0.0, 0.0, 0.5, 1.0);
+	vp->setBackgroundColour(Ogre::ColourValue(1.0, 0.0, 0.0));
+	vp = mWindow->addViewport(mCamera, 1, 0.5, 0.0, 0.5, 1.0);
+	vp->setBackgroundColour(Ogre::ColourValue(1.0, 1.0, 0.0));
+
+	createDepthRenderTexture();
+	Ogre::CompositorInstance* pCompositor = Ogre::CompositorManager::getSingleton().addCompositor(mWindow->getViewport(1), "DepthMap");
+	Ogre::CompositorManager::getSingleton().setCompositorEnabled(mWindow->getViewport(1), "DepthMap", true);
+	pCompositor->getTechnique()->getTargetPass(0)->setInputMode(Ogre::CompositionTargetPass::IM_PREVIOUS);
+
+	// light creation, irrelevant
+	mSceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
+
+	// Create the scene node
+	Ogre::SceneNode* node = mSceneMgr->getRootSceneNode()->createChildSceneNode("CamNode1", Ogre::Vector3(0, 0, 0));
+	node->attachObject(mCamera);
+
+	Ogre::MeshPtr pMesh = Ogre::MeshManager::getSingleton().createPlane("Plane",
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+			Ogre::Plane(Ogre::Vector3(0.0f, 1.0f, 0.0f), 0.0f),
+			500.0, 500.0, 100, 100, true, 1, 1, 1, Ogre::Vector3::NEGATIVE_UNIT_Z);
+	Ogre::Entity* pPlaneEntity = mSceneMgr->createEntity("PlaneEntity", "Plane");
+	Ogre::SceneNode* pSceneNodePlane = mSceneMgr->getRootSceneNode()->createChildSceneNode("PlaneNode");
+	pSceneNodePlane->attachObject(pPlaneEntity);
+	pPlaneEntity->setMaterialName("Document");
+
+	Ogre::Entity* pSphereEntity = mSceneMgr->createEntity("SphereEntity", Ogre::SceneManager::PT_SPHERE);
+	Ogre::SceneNode* pSceneNodeSphere = mSceneMgr->getRootSceneNode()->createChildSceneNode("SphereNode");
+	pSceneNodeSphere->attachObject(pSphereEntity);
+	pSceneNodeSphere->translate(0.0f, 60.0f, 0.0f);
+	pSphereEntity->setMaterialName("PlanetMap");
+}
+
+void ogre_model::createDepthRenderTexture()
+{
+	// Create the depth render texture
+	Ogre::TexturePtr depthTexture = Ogre::TextureManager::getSingleton().createManual(
+			"NinjaDepthMap",
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
 			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
+			mCamera->getViewport()->getActualWidth(),
+			mCamera->getViewport()->getActualHeight(),
 			0,
-			Ogre::PF_R8G8B8,		//Ogre::PF_R8G8B8
-			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
+			Ogre::PF_FLOAT16_R,
+			Ogre::TU_RENDERTARGET);
 
-	renderTexture = mRenderToTexture->getBuffer()->getRenderTarget();
-	renderTexture->addViewport(camera);
-	renderTexture->getViewport(0)->setClearEveryFrame(true);
-	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::Black);
-	renderTexture->getViewport(0)->setOverlaysEnabled(true);
-	renderTexture->getViewport(0)->setShadowsEnabled(false);
+	// Get its render target and add a viewport to it
+	depthTarget = depthTexture->getBuffer()->getRenderTarget();
+	Ogre::Viewport* depthViewport = depthTarget->addViewport(mCamera, 40);
+	depthViewport->setBackgroundColour(Ogre::ColourValue::Black);
+
+	// Register 'this' as a render target listener
+	//depthTarget->addListener(this);
+
+	// Get the technique to use when rendering the depth render texture
+	Ogre::MaterialPtr mDepthMaterial = Ogre::MaterialManager::getSingleton().getByName("DepthMap");
+	mDepthMaterial->load(); // needs to be loaded manually
+	mDepthTechnique = mDepthMaterial->getBestTechnique();
+
+	// Create a custom render queue invocation sequence for the depth render texture
+	Ogre::RenderQueueInvocationSequence* invocationSequence = Ogre::Root::getSingleton().createRenderQueueInvocationSequence("DepthMap");
+
+	// Add a render queue invocation to the sequence, and disable shadows for it
+	Ogre::RenderQueueInvocation* invocation = invocationSequence->add(Ogre::RENDER_QUEUE_MAIN, "main");
+	invocation->setSuppressShadows(true);
+
+	// Set the render queue invocation sequence for the depth render texture viewport
+	depthViewport->setRenderQueueInvocationSequenceName("DepthMap");
+	//depthViewport2->setRenderQueueInvocationSequenceName("DepthMap");
 }
 
 inline void ogre_model::render(){
 	root->renderOneFrame();
 }
 
-inline void ogre_model::move_model(int deg){
-
-
+inline void ogre_model::move_model(){
 	modelNode->yaw(Ogre::Radian(Ogre::Degree(0.2)),Ogre::Node::TS_WORLD);
-
 }
 
 inline void ogre_model::get_opencv_snap(){
 
-	mRenderToTexture->getBuffer()->getRenderTarget()->update();
-	mRenderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+	depthTexture->getBuffer()->getRenderTarget()->update();
+	depthTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
 	//renderTexture->writeContentsToFile("start.png");
-	std::cout<<"texture fps="<<mRenderToTexture->getBuffer()->getRenderTarget()->getAverageFPS()<< std::endl;
+	std::cout<<"texture fps="<<depthTexture->getBuffer()->getRenderTarget()->getAverageFPS()<< std::endl;
 
 }
 
@@ -210,10 +266,10 @@ int main(){
 	ogre_model model;
 	model.setup();
 
-	while(!model.Window->isClosed())
+	while(!model.mWindow->isClosed())
 	{
 		//float fps = model.Window->getLastFPS();
-		model.move_model(10);
+		model.move_model();
 
 		model.render();
 
