@@ -6,23 +6,19 @@
 #include <OGRE/Ogre.h>
 #include <iostream>
 
+#define DEBUG true
+#define FLOAT false
+
 class ogre_model{
 private:
-	Ogre::ConfigFile cf;
 	Ogre::Root *root;
-	Ogre::Camera* camera;
-	Ogre::SceneManager* SceneMgr;
-	Ogre::SceneNode* modelNode;
-	Ogre::Viewport *vp;
 
 	Ogre::TexturePtr renderToTexture;
 
-	Ogre::RenderTexture *renderTexture;
+	Ogre::SceneNode* modelNode;
 	Ogre::Entity* body;
 
-	Ogre::MaterialPtr mDepthMaterial;
 	Ogre::Technique* mDepthTechnique;
-
 	Ogre::SkeletonInstance *modelSkeleton;
 
 	void setupResources(void);
@@ -30,10 +26,15 @@ private:
 	void setMaxMinDepth();
 
 	cv::Mat image_rgb;
+
+#if FLOAT
 	float *data;
+#else
+	char *data;
+#endif
+
 	Ogre::PixelBox pb;
 
-	int left, top, width, height;
 	int render_width, render_height;
 public:
 	Ogre::RenderWindow* Window;
@@ -46,22 +47,23 @@ public:
 	cv::Mat* get_rgb(){	return &image_rgb;};
 };
 
-ogre_model::ogre_model(){
+ogre_model::ogre_model()
+:render_width(640),
+ render_height(480)
+{
 	root = new Ogre::Root("plugins_d.cfg");
 
-	render_width = 800;
-	render_height = 600;
-
 	cv::namedWindow("test");
-
-	Ogre::PixelFormat format = Ogre::PF_FLOAT32_R;
-	int outBytesPerPixel = Ogre::PixelUtil::getNumElemBytes(format);
-	std::cout<<outBytesPerPixel<<std::endl;
-	data = new float [render_width*render_height*outBytesPerPixel];
 	Ogre::Box extents(0, 0, render_width, render_height);
-	pb = Ogre::PixelBox(extents, format, data);
-
+#if float
+	data = new float [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_FLOAT32_R)];
+	pb = Ogre::PixelBox(extents, Ogre::PF_FLOAT32_R, data);
 	image_rgb = cv::Mat(render_height, render_width, CV_32FC1, data);
+#else
+	data = new char [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_L8)];
+	pb = Ogre::PixelBox(extents, Ogre::PF_L8, data);
+	image_rgb = cv::Mat(render_height, render_width, CV_8UC1, data);
+#endif
 }
 
 ogre_model::~ogre_model(){
@@ -104,7 +106,7 @@ void ogre_model::setupRenderer(void){
 	{
 		Ogre::LogManager::getSingleton().logMessage("Sorry, no rendersystem was found.");
 	}
-	Ogre::RenderSystem *lRenderSystem = lRenderSystemList[0];
+	Ogre::RenderSystem *lRenderSystem = lRenderSystemList[0]; //Set first renderer, using only OpenGL
 	root->setRenderSystem(lRenderSystem);
 }
 
@@ -118,110 +120,97 @@ void ogre_model::setup(){
 	// create main window
 	Window = root->createRenderWindow("Main",render_width,render_height,false);
 	// create the scene
-	SceneMgr = root->createSceneManager(Ogre::ST_GENERIC);
+	Ogre::SceneManager* SceneMgr = root->createSceneManager(Ogre::ST_GENERIC);
 	// add a camera
-	camera = SceneMgr->createCamera("MainCam");
+	Ogre::Camera* camera = SceneMgr->createCamera("MainCam");
+	camera->yaw(Ogre::Radian(Ogre::Degree(180)));	//Rotate camera because it faces negative z
 	camera->setNearClipDistance(1);
 	camera->setFarClipDistance(1000);
 	// add viewport
-	vp = Window->addViewport(camera);
+	Ogre::Viewport* vp = Window->addViewport(camera);
 
 	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 
 	modelNode = SceneMgr->getRootSceneNode()->createChildSceneNode("OgreNode");
 
-	body = SceneMgr->createEntity("ogre", "ninja.mesh");
+	body = SceneMgr->createEntity("ogre", "human_model.mesh");
 	body->setCastShadows(false);
-	//body->setMaterialName("DoF_Depth");
 
 	modelSkeleton = body->getSkeleton();
-	Ogre::Bone *pBone = modelSkeleton->getBone( "Joint9" );
 
-		pBone->setManuallyControlled(true);
-	//	pBone->_getDerivedPosition();
+	Ogre::Bone *pBone = modelSkeleton->getBone( "Left_Arm" );
+	pBone->setManuallyControlled(true);
+	//pBone->_getDerivedPosition();
 	//pBone->setPosition( Ogre::Vector3( 400, 0, 0 ) ); //move it UP
-	pBone->roll(Ogre::Radian(Ogre::Degree(90)),Ogre::Node::TS_WORLD);
+	pBone->yaw(Ogre::Radian(Ogre::Degree(-90)),Ogre::Node::TS_LOCAL);
 
 	modelNode->attachObject(body);
-	modelNode->showBoundingBox(true);
+	//modelNode->showBoundingBox(true);
 
 	// I move the SceneNode so that it is visible to the camera.
-	modelNode->translate(0, -100, -300.0f);
+	modelNode->translate(0, 0, 300.0f);
+	modelNode->yaw(Ogre::Radian(Ogre::Degree(180)),Ogre::Node::TS_WORLD);
+	modelNode->setScale(100,100,100);
 
 	//set the light
-	SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
+	//SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
 
-	//make a plane just for fun
-	Ogre::MeshPtr pMesh = Ogre::MeshManager::getSingleton().createPlane("Plane",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::Plane(Ogre::Vector3(0.0f, 1.0f, 0.0f), 1.0f),
-			500.0, 500.0, 100, 100, true, 1, 1, 1, Ogre::Vector3::NEGATIVE_UNIT_Z);
-	Ogre::Entity* pPlaneEntity = SceneMgr->createEntity("PlaneEntity", "Plane");
-
-	//pPlaneEntity->setMaterialName("Examples/GrassFloor");
-	pPlaneEntity->setMaterialName("DoF_Depth");
-	//modelNode->attachObject(pPlaneEntity);
-
-	vp->getActualDimensions(left, top, width, height);
-
+#if FLOAT
 	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
 			Ogre::TEX_TYPE_2D,
 			render_width,
 			render_height,
 			0,
-			Ogre::PF_FLOAT32_RGB,		//Ogre::PF_R8G8B8
+			Ogre::PF_FLOAT32_RGB,
 			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
+#else
+	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+			Ogre::TEX_TYPE_2D,
+			render_width,
+			render_height,
+			0,
+			Ogre::PF_R8G8B8,
+			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
+#endif
 
-	renderTexture = renderToTexture->getBuffer()->getRenderTarget();
+	Ogre::RenderTexture* renderTexture = renderToTexture->getBuffer()->getRenderTarget();
 	renderTexture->addViewport(camera);
 	renderTexture->getViewport(0)->setClearEveryFrame(true);
-	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::Black);
 	renderTexture->getViewport(0)->setOverlaysEnabled(false);
 	renderTexture->getViewport(0)->setShadowsEnabled(false);
 
-//	float mNearDepth = 200.0;
-//	float mFocalDepth = 300.0;
-//	float mFarDepth = 400.0;
-//	float mFarBlurCutoff = 1.0;
-
-	mDepthMaterial = Ogre::MaterialManager::getSingleton().getByName("DoF_Depth");
+	Ogre::MaterialPtr mDepthMaterial = Ogre::MaterialManager::getSingleton().getByName("DoF_Depth");
 	mDepthMaterial->load(); // needs to be loaded manually
 	mDepthTechnique = mDepthMaterial->getBestTechnique();
 	body->setMaterial(mDepthMaterial);
-
-
-	//Ogre::GpuProgramParametersSharedPtr fragParams = mDepthTechnique->getPass(0)->getFragmentProgramParameters();
-	//fragParams->setNamedConstant("dofParams",Ogre::Vector4(mNearDepth, mFocalDepth, mFarDepth, mFarBlurCutoff));
-
-}
-
-void ogre_model::setMaxMinDepth(){
-	const Ogre::AxisAlignedBox& axisAlignedBox = body->getWorldBoundingBox();
-
-	Ogre::Vector3 max_values = axisAlignedBox.getMaximum();
-	Ogre::Vector3 min_values = axisAlignedBox.getMinimum();
-
-	float max = ceil(fabs(max_values.z));
-	float min = floor(fabs(min_values.z));
-
-	std::cout<<"max = "<<fabs(max_values.z)<<" normal"<<max<<" min = "<<fabs(min_values.z)<<" normal "<<min<<std::endl;
-	std::cout<<"mean="<<min+(max-min)/2<<std::endl;
-
-	Ogre::GpuProgramParametersSharedPtr fragParams = mDepthTechnique->getPass(0)->getFragmentProgramParameters();
-	fragParams->setNamedConstant("dofParams",Ogre::Vector4(min, min+(max-min)/2, max, 1.0));
 }
 
 inline void ogre_model::move_model(){
-	modelNode->yaw(Ogre::Radian(Ogre::Degree(0.2)),Ogre::Node::TS_WORLD);
+	modelNode->yaw(Ogre::Radian(Ogre::Degree(0.2)),Ogre::Node::TS_LOCAL);
 }
 
 inline void ogre_model::get_opencv_snap(){
+	setMaxMinDepth();
 	renderToTexture->getBuffer()->getRenderTarget()->update();
 	renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
-	setMaxMinDepth();
-	//renderTexture->writeContentsToFile("start.png");
-	std::cout<<"texture fps="<<renderToTexture->getBuffer()->getRenderTarget()->getAverageFPS()<< std::endl;
+
+	if(DEBUG)std::cout<<"texture fps="<<renderToTexture->getBuffer()->getRenderTarget()->getAverageFPS()<< std::endl;
+}
+
+inline void ogre_model::setMaxMinDepth(){
+	const Ogre::Sphere& bodySphere = body->getWorldBoundingSphere();
+	Ogre::Vector3 SphereCenter = bodySphere.getCenter();
+	Ogre::Real SphereRadius = bodySphere.getRadius();
+
+	float max = ceil(SphereCenter.z+SphereRadius);
+	float min = floor(SphereCenter.z-SphereRadius);
+	float center = SphereCenter.z;
+
+	Ogre::GpuProgramParametersSharedPtr fragParams = mDepthTechnique->getPass(0)->getFragmentProgramParameters();
+	fragParams->setNamedConstant("dofParams",Ogre::Vector4(min, center, max, 1.0));
 }
 
 int main(){
