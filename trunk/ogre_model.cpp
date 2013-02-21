@@ -6,45 +6,54 @@
 #include <OGRE/Ogre.h>
 #include <iostream>
 
-#define DEBUG true
-#define FLOAT false
+#define DEBUG_CONSOLE true
+#define DEBUG_WINDOW false
+#define FLOAT_DEPTH false
+
+struct skeleton_struct{
+	Ogre::Bone*	Head;
+	Ogre::Bone*	Torso[6];
+	Ogre::Bone*	Right_Arm[3];
+	Ogre::Bone* Left_Arm[3];
+	Ogre::Bone*	Right_Leg[3];
+	Ogre::Bone*	Left_Leg[3];
+}model_skeleton;
 
 class ogre_model{
 private:
 	Ogre::Root *root;
-
 	Ogre::TexturePtr renderToTexture;
-
 	Ogre::SceneNode* modelNode;
 	Ogre::Entity* body;
-
 	Ogre::Technique* mDepthTechnique;
 	Ogre::SkeletonInstance *modelSkeleton;
+	Ogre::PixelBox pb;
+	Ogre::RenderWindow* Window;
+	cv::Mat image_depth;
 
 	void setupResources(void);
 	void setupRenderer(void);
+	void setup_bones();
 	void setMaxMinDepth();
+	void render_window(){	root->renderOneFrame();};
+	void setup();
 
-	cv::Mat image_rgb;
+	int render_width, render_height;
 
-#if FLOAT
+#if FLOAT_DEPTH
 	float *data;
 #else
 	char *data;
 #endif
 
-	Ogre::PixelBox pb;
-
-	int render_width, render_height;
 public:
-	Ogre::RenderWindow* Window;
 	ogre_model();
 	~ogre_model();
-	void setup();
-	void render(){	root->renderOneFrame();};
+
 	void move_model();
+	void move_bones();
 	void get_opencv_snap();
-	cv::Mat* get_rgb(){	return &image_rgb;};
+	cv::Mat* get_depth();
 };
 
 ogre_model::ogre_model()
@@ -52,18 +61,20 @@ ogre_model::ogre_model()
  render_height(480)
 {
 	root = new Ogre::Root("plugins_d.cfg");
-
 	cv::namedWindow("test");
 	Ogre::Box extents(0, 0, render_width, render_height);
-#if float
+
+#if FLOAT_DEPTH
 	data = new float [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_FLOAT32_R)];
 	pb = Ogre::PixelBox(extents, Ogre::PF_FLOAT32_R, data);
-	image_rgb = cv::Mat(render_height, render_width, CV_32FC1, data);
+	image_depth = cv::Mat(render_height, render_width, CV_32FC1, data);
 #else
 	data = new char [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_L8)];
 	pb = Ogre::PixelBox(extents, Ogre::PF_L8, data);
-	image_rgb = cv::Mat(render_height, render_width, CV_8UC1, data);
+	image_depth = cv::Mat(render_height, render_width, CV_8UC1, data);
 #endif
+
+	setup();
 }
 
 ogre_model::~ogre_model(){
@@ -108,6 +119,44 @@ void ogre_model::setupRenderer(void){
 	}
 	Ogre::RenderSystem *lRenderSystem = lRenderSystemList[0]; //Set first renderer, using only OpenGL
 	root->setRenderSystem(lRenderSystem);
+
+}
+
+void ogre_model::setup_bones(){
+	model_skeleton.Head = modelSkeleton->getBone( "Head" );
+	model_skeleton.Torso[0] = modelSkeleton->getBone( "Upper_Torso" );
+	model_skeleton.Torso[1] = modelSkeleton->getBone( "Lower_Torso" );
+	model_skeleton.Torso[2] = modelSkeleton->getBone( "Right_Shoulder" );
+	model_skeleton.Torso[3] = modelSkeleton->getBone( "Left_Shoulder" );
+	model_skeleton.Torso[4] = modelSkeleton->getBone( "Right_Hip" );
+	model_skeleton.Torso[5] = modelSkeleton->getBone( "Left_Hip" );
+
+	model_skeleton.Right_Arm[0] = modelSkeleton->getBone( "Right_Arm" );
+	model_skeleton.Right_Arm[1] = modelSkeleton->getBone( "Right_Forearm" );
+	model_skeleton.Right_Arm[2] = modelSkeleton->getBone( "Right_Hand" );
+
+	model_skeleton.Left_Arm[0] = modelSkeleton->getBone( "Left_Arm" );
+	model_skeleton.Left_Arm[1] = modelSkeleton->getBone( "Left_Forearm" );
+	model_skeleton.Left_Arm[2] = modelSkeleton->getBone( "Left_Hand" );
+
+	model_skeleton.Right_Leg[0] = modelSkeleton->getBone( "Right_Thigh" );
+	model_skeleton.Right_Leg[1] = modelSkeleton->getBone( "Right_Calf" );
+	model_skeleton.Right_Leg[2] = modelSkeleton->getBone( "Right_Foot" );
+
+	model_skeleton.Left_Leg[0] = modelSkeleton->getBone( "Left_Thigh" );
+	model_skeleton.Left_Leg[1] = modelSkeleton->getBone( "Left_Calf" );
+	model_skeleton.Left_Leg[2] = modelSkeleton->getBone( "Left_Foot" );
+
+	model_skeleton.Head->setManuallyControlled(true);
+	for(int i=0;i<6;i++){
+		model_skeleton.Torso[i]->setManuallyControlled(true);
+	}
+	for(int i=0;i<3;i++){
+		model_skeleton.Right_Arm[i]->setManuallyControlled(true);
+		model_skeleton.Left_Arm[i]->setManuallyControlled(true);
+		model_skeleton.Right_Leg[i]->setManuallyControlled(true);
+		model_skeleton.Left_Leg[i]->setManuallyControlled(true);
+	}
 }
 
 void ogre_model::setup(){
@@ -118,7 +167,13 @@ void ogre_model::setup(){
 	root->initialise(false);
 
 	// create main window
+#if DEBUG_WINDOW
 	Window = root->createRenderWindow("Main",render_width,render_height,false);
+#else
+	Window = root->createRenderWindow("Main",1,1,false);
+	Window->setHidden(true);
+#endif
+
 	// create the scene
 	Ogre::SceneManager* SceneMgr = root->createSceneManager(Ogre::ST_GENERIC);
 	// add a camera
@@ -126,8 +181,11 @@ void ogre_model::setup(){
 	camera->yaw(Ogre::Radian(Ogre::Degree(180)));	//Rotate camera because it faces negative z
 	camera->setNearClipDistance(1);
 	camera->setFarClipDistance(1000);
+
 	// add viewport
-	Ogre::Viewport* vp = Window->addViewport(camera);
+#if DEBUG_WINDOW
+	Window->addViewport(camera);
+#endif
 
 	Ogre::ResourceGroupManager::getSingleton().initialiseAllResourceGroups();
 
@@ -135,14 +193,14 @@ void ogre_model::setup(){
 
 	body = SceneMgr->createEntity("ogre", "human_model.mesh");
 	body->setCastShadows(false);
-
 	modelSkeleton = body->getSkeleton();
+	setup_bones();
 
-	Ogre::Bone *pBone = modelSkeleton->getBone( "Left_Arm" );
-	pBone->setManuallyControlled(true);
-	//pBone->_getDerivedPosition();
-	//pBone->setPosition( Ogre::Vector3( 400, 0, 0 ) ); //move it UP
-	pBone->yaw(Ogre::Radian(Ogre::Degree(-90)),Ogre::Node::TS_LOCAL);
+	//	Ogre::Bone *pBone = modelSkeleton->getBone( "Left_Arm" );
+	//	pBone->setManuallyControlled(true);
+	//	//pBone->_getDerivedPosition();
+	//	//pBone->setPosition( Ogre::Vector3( 400, 0, 0 ) ); //move it UP
+	//	pBone->yaw(Ogre::Radian(Ogre::Degree(-90)),Ogre::Node::TS_LOCAL);
 
 	modelNode->attachObject(body);
 	//modelNode->showBoundingBox(true);
@@ -155,7 +213,7 @@ void ogre_model::setup(){
 	//set the light
 	//SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
 
-#if FLOAT
+#if FLOAT_DEPTH
 	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
 			Ogre::TEX_TYPE_2D,
@@ -171,7 +229,7 @@ void ogre_model::setup(){
 			render_width,
 			render_height,
 			0,
-			Ogre::PF_R8G8B8,
+			Ogre::PF_L8,
 			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
 #endif
 
@@ -192,12 +250,31 @@ inline void ogre_model::move_model(){
 	modelNode->yaw(Ogre::Radian(Ogre::Degree(0.2)),Ogre::Node::TS_LOCAL);
 }
 
+inline void ogre_model::move_bones(){
+
+	model_skeleton.Left_Arm[0]->roll(Ogre::Radian(Ogre::Degree(0.1)),Ogre::Node::TS_LOCAL);
+	model_skeleton.Left_Arm[0]->pitch(Ogre::Radian(Ogre::Degree(0.05)),Ogre::Node::TS_LOCAL);
+	model_skeleton.Left_Arm[1]->pitch(Ogre::Radian(Ogre::Degree(0.1)),Ogre::Node::TS_LOCAL);
+	model_skeleton.Left_Arm[2]->yaw(Ogre::Radian(Ogre::Degree(0.1)),Ogre::Node::TS_LOCAL);
+}
+
 inline void ogre_model::get_opencv_snap(){
-	setMaxMinDepth();
+
 	renderToTexture->getBuffer()->getRenderTarget()->update();
+	setMaxMinDepth();
 	renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
 
-	if(DEBUG)std::cout<<"texture fps="<<renderToTexture->getBuffer()->getRenderTarget()->getAverageFPS()<< std::endl;
+#if DEBUG_WINDOW
+	render_window();
+	std::cout << "[Modeler] Main window fps"<<Window->getLastFPS()<<std::endl;
+#endif
+	//if(DEBUG_CONSOLE)std::cout<<"[Modeler] texture fps="<<renderToTexture->getBuffer()->getRenderTarget()->getAverageFPS()<< std::endl;
+}
+
+inline cv::Mat* ogre_model::get_depth(){
+	image_depth = 255 - image_depth;
+	threshold(image_depth, image_depth, 254, 255, cv::THRESH_TOZERO_INV);
+	return &image_depth;
 }
 
 inline void ogre_model::setMaxMinDepth(){
@@ -213,24 +290,39 @@ inline void ogre_model::setMaxMinDepth(){
 	fragParams->setNamedConstant("dofParams",Ogre::Vector4(min, center, max, 1.0));
 }
 
+void write_file(std::ofstream& fn, float data){
+	fn << (int)data <<std::endl;
+}
+
+
+
 int main(){
 	ogre_model model;
-	model.setup();
+	std::ofstream fn ("file_name.xls");
 
-	while(!model.Window->isClosed())
+	while(1)
 	{
-		//float fps = model.Window->getLastFPS();
 		model.move_model();
-
-		model.render();
+		model.move_bones();
+		double t = (double)cv::getTickCount();
 
 		model.get_opencv_snap();
-		imshow("test",*model.get_rgb());
-		//std::cout<< *model.get_rgb() << std::endl;
+
+		t = (double)cv::getTickCount() - t;
+
+		float fps = 1/(t/cv::getTickFrequency());
+		std::cout << "[Modeler] Total fps" << fps << std::endl;//for fps
+
+		write_file(fn, fps);
+
+		imshow("test",*model.get_depth());
 
 		Ogre::WindowEventUtilities::messagePump();
+
 	}
-	std::cout<<"end of program";
+
+	fn.close();
+	if(DEBUG_CONSOLE)std::cout<<"[Modeler] end of program"<<std::endl;
 	return 1;
 }
 
