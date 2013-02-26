@@ -1,4 +1,4 @@
-#include <opencv.hpp>
+#include <opencv2/opencv.hpp>
 #include <stdio.h>
 #include <GL/glut.h>
 #include <glm/glm.hpp>
@@ -24,6 +24,7 @@ private:
 	Ogre::Root *root;
 	Ogre::TexturePtr renderToTexture;
 	Ogre::SceneNode* modelNode;
+	Ogre::Camera* camera;
 	Ogre::Entity* body;
 	Ogre::Technique* mDepthTechnique;
 	Ogre::SkeletonInstance *modelSkeleton;
@@ -34,11 +35,15 @@ private:
 	void setupResources(void);
 	void setupRenderer(void);
 	void setup_bones();
+	void reset_bones();
 	void setMaxMinDepth();
 	void render_window(){	root->renderOneFrame();};
 	void setup();
+	void get_opencv_snap();
+
 
 	int render_width, render_height;
+	float min,max,center; //depth limits
 
 #if FLOAT_DEPTH
 	float *data;
@@ -47,21 +52,25 @@ private:
 #endif
 
 public:
-	ogre_model();
+	ogre_model(int, int);
 	~ogre_model();
 
-	void move_model();
-	void move_bones();
-	void get_opencv_snap();
+	void set_depth_limits(float min_set, float center_set, float max_set);
+
+	void reset_model();
+	void move_model(cv::Point3f position, cv::Point3f rot_vector, float angle_w);
+	void rotate_bones(cv::Mat);
+
+	cv::Mat get_2D_pos();
 	cv::Mat* get_depth();
 };
 
-ogre_model::ogre_model()
-:render_width(640),
- render_height(480)
+ogre_model::ogre_model(int render_width, int render_height)
+:render_width(render_width),
+ render_height(render_height)
 {
 	root = new Ogre::Root("plugins_d.cfg");
-	cv::namedWindow("test");
+
 	Ogre::Box extents(0, 0, render_width, render_height);
 
 #if FLOAT_DEPTH
@@ -157,6 +166,7 @@ void ogre_model::setup_bones(){
 		model_skeleton.Right_Leg[i]->setManuallyControlled(true);
 		model_skeleton.Left_Leg[i]->setManuallyControlled(true);
 	}
+
 }
 
 void ogre_model::setup(){
@@ -177,7 +187,7 @@ void ogre_model::setup(){
 	// create the scene
 	Ogre::SceneManager* SceneMgr = root->createSceneManager(Ogre::ST_GENERIC);
 	// add a camera
-	Ogre::Camera* camera = SceneMgr->createCamera("MainCam");
+	camera = SceneMgr->createCamera("MainCam");
 	camera->yaw(Ogre::Radian(Ogre::Degree(180)));	//Rotate camera because it faces negative z
 	camera->setNearClipDistance(1);
 	camera->setFarClipDistance(1000);
@@ -196,19 +206,14 @@ void ogre_model::setup(){
 	modelSkeleton = body->getSkeleton();
 	setup_bones();
 
-	//	Ogre::Bone *pBone = modelSkeleton->getBone( "Left_Arm" );
-	//	pBone->setManuallyControlled(true);
-	//	//pBone->_getDerivedPosition();
-	//	//pBone->setPosition( Ogre::Vector3( 400, 0, 0 ) ); //move it UP
-	//	pBone->yaw(Ogre::Radian(Ogre::Degree(-90)),Ogre::Node::TS_LOCAL);
-
 	modelNode->attachObject(body);
 	//modelNode->showBoundingBox(true);
 
 	// I move the SceneNode so that it is visible to the camera.
-	modelNode->translate(0, 0, 300.0f);
+	modelNode->setPosition(0, 0, 300.0f);
 	modelNode->yaw(Ogre::Radian(Ogre::Degree(180)),Ogre::Node::TS_WORLD);
 	modelNode->setScale(100,100,100);
+	modelNode->setInitialState();
 
 	//set the light
 	//SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
@@ -244,18 +249,149 @@ void ogre_model::setup(){
 	mDepthMaterial->load(); // needs to be loaded manually
 	mDepthTechnique = mDepthMaterial->getBestTechnique();
 	body->setMaterial(mDepthMaterial);
+
+	renderToTexture->getBuffer()->getRenderTarget()->update();
+	set_depth_limits(-1,-1,-1);
 }
 
-inline void ogre_model::move_model(){
-	modelNode->yaw(Ogre::Radian(Ogre::Degree(0.2)),Ogre::Node::TS_LOCAL);
+inline void ogre_model::reset_bones(){
+	model_skeleton.Head->reset();
+	for(int i=0;i<6;i++){
+		model_skeleton.Torso[i]->reset();
+	}
+	for(int i=0;i<3;i++){
+		model_skeleton.Right_Arm[i]->reset();
+		model_skeleton.Left_Arm[i]->reset();
+		model_skeleton.Right_Leg[i]->reset();
+		model_skeleton.Left_Leg[i]->reset();
+	}
 }
 
-inline void ogre_model::move_bones(){
+inline void ogre_model::reset_model(){
+	reset_bones();
+	modelNode->resetToInitialState();
+}
 
-	model_skeleton.Left_Arm[0]->roll(Ogre::Radian(Ogre::Degree(0.1)),Ogre::Node::TS_LOCAL);
-	model_skeleton.Left_Arm[0]->pitch(Ogre::Radian(Ogre::Degree(0.05)),Ogre::Node::TS_LOCAL);
-	model_skeleton.Left_Arm[1]->pitch(Ogre::Radian(Ogre::Degree(0.1)),Ogre::Node::TS_LOCAL);
-	model_skeleton.Left_Arm[2]->yaw(Ogre::Radian(Ogre::Degree(0.1)),Ogre::Node::TS_LOCAL);
+inline void ogre_model::move_model(cv::Point3f position = cv::Point3f(0,0,300.0f), cv::Point3f rotation = cv::Point3f(0,0,0), float scale = 100){
+	modelNode->resetToInitialState();
+	modelNode->setPosition(position.x, position.y, position.z);
+	modelNode->yaw(Ogre::Radian(Ogre::Degree(rotation.x)),Ogre::Node::TS_LOCAL);
+	modelNode->pitch(Ogre::Radian(Ogre::Degree(rotation.y)),Ogre::Node::TS_LOCAL);
+	modelNode->roll(Ogre::Radian(Ogre::Degree(rotation.z)),Ogre::Node::TS_LOCAL);
+	modelNode->setScale(scale,scale,scale);
+	//modelNode->setOrientation(angle_w, rot_vector.x, rot_vector.y, rot_vector.z);
+	//modelNode->yaw(Ogre::Radian(Ogre::Degree(0.15)),Ogre::Node::TS_LOCAL);
+}
+
+inline void ogre_model::rotate_bones(cv::Mat bones_rotation){
+	reset_bones();
+
+	model_skeleton.Head -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(0,0))),Ogre::Node::TS_LOCAL);//Head
+	model_skeleton.Head -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(0,1))),Ogre::Node::TS_LOCAL);//Head
+	model_skeleton.Head -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(0,2))),Ogre::Node::TS_LOCAL);//Head
+
+	model_skeleton.Torso[0] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(1,0))),Ogre::Node::TS_LOCAL); //Upper_Torso
+	model_skeleton.Torso[0] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(1,1))),Ogre::Node::TS_LOCAL); //Upper_Torso
+	model_skeleton.Torso[0] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(1,2))),Ogre::Node::TS_LOCAL); //Upper_Torso
+
+	model_skeleton.Torso[1] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(2,0))),Ogre::Node::TS_LOCAL);//Lower_Torso
+	model_skeleton.Torso[1] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(2,1))),Ogre::Node::TS_LOCAL);//Lower_Torso
+	model_skeleton.Torso[1] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(2,2))),Ogre::Node::TS_LOCAL);//Lower_Torso
+
+	model_skeleton.Torso[2] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(3,0))),Ogre::Node::TS_LOCAL);//Right_Shoulder
+	model_skeleton.Torso[2] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(3,1))),Ogre::Node::TS_LOCAL);//Right_Shoulder
+	model_skeleton.Torso[2] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(3,2))),Ogre::Node::TS_LOCAL);//Right_Shoulder
+
+	model_skeleton.Torso[3] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(4,0))),Ogre::Node::TS_LOCAL);//Left_Shoulder
+	model_skeleton.Torso[3] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(4,1))),Ogre::Node::TS_LOCAL);//Left_Shoulder
+	model_skeleton.Torso[3] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(4,2))),Ogre::Node::TS_LOCAL);//Left_Shoulder
+
+	model_skeleton.Torso[4] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(5,0))),Ogre::Node::TS_LOCAL);//Right_Hip
+	model_skeleton.Torso[4] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(5,1))),Ogre::Node::TS_LOCAL);//Right_Hip
+	model_skeleton.Torso[4] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(5,2))),Ogre::Node::TS_LOCAL);//Right_Hip
+
+	model_skeleton.Torso[5] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(6,0))),Ogre::Node::TS_LOCAL);//Left_Hip
+	model_skeleton.Torso[5] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(6,1))),Ogre::Node::TS_LOCAL);//Left_Hip
+	model_skeleton.Torso[5] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(6,2))),Ogre::Node::TS_LOCAL);//Left_Hip
+
+	model_skeleton.Right_Arm[0] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(7,0))),Ogre::Node::TS_LOCAL);//Right_Arm
+	model_skeleton.Right_Arm[0] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(7,1))),Ogre::Node::TS_LOCAL);//Right_Arm
+	model_skeleton.Right_Arm[0] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(7,2))),Ogre::Node::TS_LOCAL);//Right_Arm
+
+	model_skeleton.Right_Arm[1] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(8,0))),Ogre::Node::TS_LOCAL);//Right_Forearm
+	model_skeleton.Right_Arm[1] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(8,1))),Ogre::Node::TS_LOCAL);//Right_Forearm
+	model_skeleton.Right_Arm[1] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(8,2))),Ogre::Node::TS_LOCAL);//Right_Forearm
+
+	model_skeleton.Right_Arm[2] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(9,0))),Ogre::Node::TS_LOCAL);//Right_Hand
+	model_skeleton.Right_Arm[2] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(9,1))),Ogre::Node::TS_LOCAL);//Right_Hand
+	model_skeleton.Right_Arm[2] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(9,2))),Ogre::Node::TS_LOCAL);//Right_Hand
+
+	model_skeleton.Left_Arm[0] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(10,0))),Ogre::Node::TS_LOCAL);//Left_Arm
+	model_skeleton.Left_Arm[0] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(10,1))),Ogre::Node::TS_LOCAL);//Left_Arm
+	model_skeleton.Left_Arm[0] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(10,2))),Ogre::Node::TS_LOCAL);//Left_Arm
+
+	model_skeleton.Left_Arm[1] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(11,0))),Ogre::Node::TS_LOCAL);//Left_Forearm
+	model_skeleton.Left_Arm[1] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(11,1))),Ogre::Node::TS_LOCAL);//Left_Forearm
+	model_skeleton.Left_Arm[1] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(11,2))),Ogre::Node::TS_LOCAL);//Left_Forearm
+
+	model_skeleton.Left_Arm[2] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(12,0))),Ogre::Node::TS_LOCAL);//Left_Hand
+	model_skeleton.Left_Arm[2] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(12,1))),Ogre::Node::TS_LOCAL);//Left_Hand
+	model_skeleton.Left_Arm[2] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(12,2))),Ogre::Node::TS_LOCAL);//Left_Hand
+
+	model_skeleton.Right_Leg[0] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(13,0))),Ogre::Node::TS_LOCAL);//Right_Thigh
+	model_skeleton.Right_Leg[0] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(13,1))),Ogre::Node::TS_LOCAL);//Right_Thigh
+	model_skeleton.Right_Leg[0] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(13,2))),Ogre::Node::TS_LOCAL);//Right_Thigh
+
+	model_skeleton.Right_Leg[1] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(14,0))),Ogre::Node::TS_LOCAL);//Right_Calf
+	model_skeleton.Right_Leg[1] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(14,1))),Ogre::Node::TS_LOCAL);//Right_Calf
+	model_skeleton.Right_Leg[1] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(14,2))),Ogre::Node::TS_LOCAL);//Right_Calf
+
+	model_skeleton.Right_Leg[2] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(15,0))),Ogre::Node::TS_LOCAL);//Right_Foot
+	model_skeleton.Right_Leg[2] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(15,1))),Ogre::Node::TS_LOCAL);//Right_Foot
+	model_skeleton.Right_Leg[2] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(15,2))),Ogre::Node::TS_LOCAL);//Right_Foot
+
+	model_skeleton.Left_Leg[0] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(16,0))),Ogre::Node::TS_LOCAL);//Left_Thigh
+	model_skeleton.Left_Leg[0] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(16,1))),Ogre::Node::TS_LOCAL);//Left_Thigh
+	model_skeleton.Left_Leg[0] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(16,2))),Ogre::Node::TS_LOCAL);//Left_Thigh
+
+	model_skeleton.Left_Leg[1] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(17,0))),Ogre::Node::TS_LOCAL);//Left_Calf
+	model_skeleton.Left_Leg[1] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(17,1))),Ogre::Node::TS_LOCAL);//Left_Calf
+	model_skeleton.Left_Leg[1] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(17,2))),Ogre::Node::TS_LOCAL);//Left_Calf
+
+	model_skeleton.Left_Leg[2] -> yaw(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(18,0))),Ogre::Node::TS_LOCAL);//Left_Foot
+	model_skeleton.Left_Leg[2] -> pitch(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(18,1))),Ogre::Node::TS_LOCAL);//Left_Foot
+	model_skeleton.Left_Leg[2] -> roll(Ogre::Radian(Ogre::Degree(bones_rotation.at<float>(18,2))),Ogre::Node::TS_LOCAL);//Left_Foot
+
+}
+
+inline cv::Mat ogre_model::get_2D_pos(){
+	cv::Mat pos2D = cv::Mat::zeros(5,2,CV_16UC1);
+
+	Ogre::Vector3 head2d = modelNode->_getDerivedPosition() +  modelNode->_getDerivedOrientation() * model_skeleton.Head->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 handL2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Arm[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 handR2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Arm[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 footL2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Leg[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 footR2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Leg[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+
+
+	head2d = camera->getProjectionMatrix()*camera->getViewMatrix()*head2d;
+	handL2d = camera->getProjectionMatrix()*camera->getViewMatrix()*handL2d;
+	handR2d = camera->getProjectionMatrix()*camera->getViewMatrix()*handR2d;
+	footL2d = camera->getProjectionMatrix()*camera->getViewMatrix()*footL2d;
+	footR2d = camera->getProjectionMatrix()*camera->getViewMatrix()*footR2d;
+
+	pos2D.at<ushort>(0,0) = (0.5 + head2d.x/2)*render_width;
+	pos2D.at<ushort>(0,1) = (0.5 - head2d.y/2)*render_height;
+	pos2D.at<ushort>(1,0) = (0.5 + handR2d.x/2)*render_width;
+	pos2D.at<ushort>(1,1) = (0.5 - handR2d.y/2)*render_height;
+	pos2D.at<ushort>(2,0) = (0.5 + handL2d.x/2)*render_width;
+	pos2D.at<ushort>(2,1) = (0.5 - handL2d.y/2)*render_height;
+	pos2D.at<ushort>(3,0) = (0.5 + footR2d.x/2)*render_width;
+	pos2D.at<ushort>(3,1) = (0.5 - footR2d.y/2)*render_height;
+	pos2D.at<ushort>(4,0) = (0.5 + footL2d.x/2)*render_width;
+	pos2D.at<ushort>(4,1) = (0.5 - footL2d.y/2)*render_height;
+
+	return pos2D;
 }
 
 inline void ogre_model::get_opencv_snap(){
@@ -272,20 +408,30 @@ inline void ogre_model::get_opencv_snap(){
 }
 
 inline cv::Mat* ogre_model::get_depth(){
+	get_opencv_snap();
 	image_depth = 255 - image_depth;
 	threshold(image_depth, image_depth, 254, 255, cv::THRESH_TOZERO_INV);
 	return &image_depth;
 }
 
-inline void ogre_model::setMaxMinDepth(){
+void ogre_model::set_depth_limits(float min_set = -1, float center_set = -1, float max_set = -1){
 	const Ogre::Sphere& bodySphere = body->getWorldBoundingSphere();
 	Ogre::Vector3 SphereCenter = bodySphere.getCenter();
 	Ogre::Real SphereRadius = bodySphere.getRadius();
 
-	float max = ceil(SphereCenter.z+SphereRadius);
-	float min = floor(SphereCenter.z-SphereRadius);
-	float center = SphereCenter.z;
+	if(min_set==-1 || center_set==-1 || max_set==-1){
+		max = ceil(SphereCenter.z+SphereRadius);
+		min = floor(SphereCenter.z-SphereRadius);
+		center = SphereCenter.z;
+	}else{
+		max = ceil(max_set);
+		min = floor(min_set);
+		center = round(center_set);
+	}
+}
 
+inline void ogre_model::setMaxMinDepth(){
+	//std::cout<< min<<" "<< center<<" "<< max<<std::endl;
 	Ogre::GpuProgramParametersSharedPtr fragParams = mDepthTechnique->getPass(0)->getFragmentProgramParameters();
 	fragParams->setNamedConstant("dofParams",Ogre::Vector4(min, center, max, 1.0));
 }
@@ -293,36 +439,3 @@ inline void ogre_model::setMaxMinDepth(){
 void write_file(std::ofstream& fn, float data){
 	fn << (int)data <<std::endl;
 }
-
-
-
-int main(){
-	ogre_model model;
-	std::ofstream fn ("file_name.xls");
-
-	while(1)
-	{
-		model.move_model();
-		model.move_bones();
-		double t = (double)cv::getTickCount();
-
-		model.get_opencv_snap();
-
-		t = (double)cv::getTickCount() - t;
-
-		float fps = 1/(t/cv::getTickFrequency());
-		std::cout << "[Modeler] Total fps" << fps << std::endl;//for fps
-
-		write_file(fn, fps);
-
-		imshow("test",*model.get_depth());
-
-		Ogre::WindowEventUtilities::messagePump();
-
-	}
-
-	fn.close();
-	if(DEBUG_CONSOLE)std::cout<<"[Modeler] end of program"<<std::endl;
-	return 1;
-}
-
