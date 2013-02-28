@@ -56,10 +56,13 @@ public:
 	~ogre_model();
 
 	void set_depth_limits(float min_set, float center_set, float max_set);
+	void set_camera_clip(float, float);
+	cv::Mat_<cv::Point3f> get_camera_viewspace();
 
 	void reset_model();
 	void move_model(cv::Point3f position, cv::Point3f rot_vector, float angle_w);
 	void rotate_bones(cv::Mat);
+
 
 	cv::Mat get_2D_pos();
 	cv::Mat* get_depth();
@@ -189,8 +192,8 @@ void ogre_model::setup(){
 	// add a camera
 	camera = SceneMgr->createCamera("MainCam");
 	camera->yaw(Ogre::Radian(Ogre::Degree(180)));	//Rotate camera because it faces negative z
-	camera->setNearClipDistance(1);
-	camera->setFarClipDistance(1000);
+	camera->setNearClipDistance(1000);
+	camera->setFarClipDistance(10000);
 
 	// add viewport
 #if DEBUG_WINDOW
@@ -430,12 +433,25 @@ void ogre_model::set_depth_limits(float min_set = -1, float center_set = -1, flo
 	}
 }
 
+inline void ogre_model::set_camera_clip(float near_dist,float far_dist){
+	camera->setNearClipDistance(near_dist);
+	camera->setFarClipDistance(far_dist);
+}
+
 inline void ogre_model::setMaxMinDepth(){
 	//std::cout<< min<<" "<< center<<" "<< max<<std::endl;
 	Ogre::GpuProgramParametersSharedPtr fragParams = mDepthTechnique->getPass(0)->getFragmentProgramParameters();
 	fragParams->setNamedConstant("dofParams",Ogre::Vector4(min, center, max, 1.0));
 }
 
-void write_file(std::ofstream& fn, float data){
-	fn << (int)data <<std::endl;
+inline cv::Mat_<cv::Point3f> ogre_model::get_camera_viewspace(){
+	const Ogre::Vector3* coords = camera->getWorldSpaceCorners();
+	cv::Mat_<cv::Point3f> coordsCV(8,1);
+	for (int i=0 ; i<8 ; i++){
+		coordsCV(i,0).x = coords[i].x;
+		coordsCV(i,0).y = coords[i].y;
+		coordsCV(i,0).z = coords[i].z;
+	}
+
+	return coordsCV;
 }
