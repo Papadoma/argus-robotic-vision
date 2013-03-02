@@ -8,15 +8,16 @@ void make_sliders(){
 	cv::createTrackbar("Roll", "sliders", & angles[2],300);
 }
 
+
+
 int main(){
 	ogre_model model(800,600);
 
 	cv::namedWindow("test");
 	cv::namedWindow("sliders");
 
-	cv::Point3f position = cv::Point3f(0,0,300);
+	cv::Point3f position = cv::Point3f(0,0,2000);
 	cv::Point3f rot_vector = cv::Point3f(0,-1,0);
-	float angle_w = 0;
 
 	cv::Mat bones_rotation;
 
@@ -27,6 +28,9 @@ int main(){
 	make_sliders();
 	int pos = 0;
 
+
+	model.set_depth_limits(1000, 2000, 20000);
+	model.set_camera_clip(1000, 20000);
 	while(1)
 	{
 		bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
@@ -62,17 +66,15 @@ int main(){
 		bones_rotation.at<float>(pos,1) = angles[1]-150;
 		bones_rotation.at<float>(pos,2) = angles[2]-150;
 
-		model.move_model(position, rot_vector, angle_w);
+		model.move_model(position, rot_vector, 700);
 		model.rotate_bones(bones_rotation);
 
 		double t = (double)cv::getTickCount();
-		model.get_opencv_snap();
-		t = (double)cv::getTickCount() - t;
-
-		float fps = 1/(t/cv::getTickFrequency());
-		std::cout << "[Modeler] Total fps" << fps << std::endl;//for fps
-
 		cv::Mat output = model.get_depth()->clone();
+		t = (double)cv::getTickCount() - t;
+		float fps = 1/(t/cv::getTickFrequency());
+		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total fps "<< fps << std::endl;//for fps
+
 		cv::cvtColor(output,output,CV_GRAY2RGB);
 
 		std::ostringstream str;

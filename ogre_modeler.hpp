@@ -8,7 +8,7 @@
 
 #define DEBUG_CONSOLE true
 #define DEBUG_WINDOW false
-#define FLOAT_DEPTH false
+#define DEPTH_MODE 1		//1: 1 byte, 2: 2 byte, 3: 4 byte
 
 struct skeleton_struct{
 	Ogre::Bone*	Head;
@@ -45,10 +45,13 @@ private:
 	int render_width, render_height;
 	float min,max,center; //depth limits
 
-#if FLOAT_DEPTH
-	float *data;
-#else
+#if DEPTH_MODE == 1
 	char *data;
+
+#elif DEPTH_MODE == 2
+	unsigned short *data;
+#else
+	float *data;
 #endif
 
 public:
@@ -63,6 +66,7 @@ public:
 	void move_model(cv::Point3f position, cv::Point3f rot_vector, float angle_w);
 	void rotate_bones(cv::Mat);
 
+	float get_fps();
 
 	cv::Mat get_2D_pos();
 	cv::Mat* get_depth();
@@ -76,14 +80,19 @@ ogre_model::ogre_model(int render_width, int render_height)
 
 	Ogre::Box extents(0, 0, render_width, render_height);
 
-#if FLOAT_DEPTH
-	data = new float [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_FLOAT32_R)];
-	pb = Ogre::PixelBox(extents, Ogre::PF_FLOAT32_R, data);
-	image_depth = cv::Mat(render_height, render_width, CV_32FC1, data);
-#else
+#if DEPTH_MODE == 1
 	data = new char [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_L8)];
 	pb = Ogre::PixelBox(extents, Ogre::PF_L8, data);
 	image_depth = cv::Mat(render_height, render_width, CV_8UC1, data);
+#elif DEPTH_MODE == 2
+	data = new unsigned short [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_L16)];
+	pb = Ogre::PixelBox(extents, Ogre::PF_L16, data);
+	image_depth = cv::Mat(render_height, render_width, CV_16UC1, data);
+#else
+	data = new float [render_width * render_height * Ogre::PixelUtil::getNumElemBytes(Ogre::PF_FLOAT32_R)];
+	pb = Ogre::PixelBox(extents, Ogre::PF_FLOAT32_R, data);
+	image_depth = cv::Mat(render_height, render_width, CV_32FC1, data);
+
 #endif
 
 	setup();
@@ -186,6 +195,7 @@ void ogre_model::setup(){
 	Window = root->createRenderWindow("Main",1,1,false);
 	Window->setHidden(true);
 #endif
+	Window->setVSyncEnabled(false);
 
 	// create the scene
 	Ogre::SceneManager* SceneMgr = root->createSceneManager(Ogre::ST_GENERIC);
@@ -221,14 +231,23 @@ void ogre_model::setup(){
 	//set the light
 	//SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
 
-#if FLOAT_DEPTH
+#if DEPTH_MODE == 1
 	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
 			Ogre::TEX_TYPE_2D,
 			render_width,
 			render_height,
 			0,
-			Ogre::PF_FLOAT32_RGB,
+			Ogre::PF_L8,
+			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
+#elif DEPTH_MODE == 2
+	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+			Ogre::TEX_TYPE_2D,
+			render_width,
+			render_height,
+			0,
+			Ogre::PF_FLOAT16_RGB,
 			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
 #else
 	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
@@ -237,7 +256,7 @@ void ogre_model::setup(){
 			render_width,
 			render_height,
 			0,
-			Ogre::PF_L8,
+			Ogre::PF_FLOAT32_RGB,
 			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
 #endif
 
@@ -412,11 +431,25 @@ inline void ogre_model::get_opencv_snap(){
 
 inline cv::Mat* ogre_model::get_depth(){
 	get_opencv_snap();
+#if DEPTH_MODE == 1
 	image_depth = 255 - image_depth;
 	threshold(image_depth, image_depth, 254, 255, cv::THRESH_TOZERO_INV);
+#elif DEPTH_MODE == 2
+	cv::Mat temp;
+	image_depth = 65535 - image_depth;
+	image_depth.convertTo(temp, CV_32FC1);
+	threshold(temp, temp, 65534, 65535, cv::THRESH_TOZERO_INV);
+	temp.convertTo(image_depth, CV_16UC1);
+#else
+	image_depth = 1 - image_depth;
+	threshold(image_depth, image_depth, 0.99, 1, cv::THRESH_TOZERO_INV);
+#endif
 	return &image_depth;
 }
 
+inline float ogre_model::get_fps(){
+	return renderToTexture->getBuffer()->getRenderTarget()->getAverageFPS();
+}
 void ogre_model::set_depth_limits(float min_set = -1, float center_set = -1, float max_set = -1){
 	const Ogre::Sphere& bodySphere = body->getWorldBoundingSphere();
 	Ogre::Vector3 SphereCenter = bodySphere.getCenter();
