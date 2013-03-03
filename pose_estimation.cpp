@@ -2,19 +2,19 @@
 #include <math.h>
 #include <opencv2/opencv.hpp>
 
+
 #define rand_num ((double) rand() / (RAND_MAX))
-#define rand_num_less ((double) rand() / (RAND_MAX))
 
 const float w = 0.5;
 const float c1 = 1.5;
 const float c2 = 1.5;
 
-cv::Point input_head(202,60);
-cv::Point input_hand_r(156,31);
-cv::Point input_hand_l(239,175);
-cv::Point input_foot_r(162,372);
-cv::Point input_foot_l(214,373);
-bool enable = true;
+cv::Point input_head(140,120);
+cv::Point input_hand_r(55,137);
+cv::Point input_hand_l(224,122);
+cv::Point input_foot_r(117,288);
+cv::Point input_foot_l(166,282);
+bool enable_bones = true;
 
 const int swarm_size = 50;
 
@@ -29,6 +29,7 @@ struct particle{
 	int id;
 	cv::Mat particle_silhouette;
 	cv::Mat particle_depth;
+	cv::Mat extremas;
 	cv::Mat violation;
 
 	particle_position current_position;
@@ -39,25 +40,30 @@ struct particle{
 
 class pose_estimator{
 private:
+	cv::RNG rand_gen;
 
 	void load_param();
 	void set_modeler_depth();
 	cv::Mat calculate_depth_limit();
 
+	cv::Point3f estimate_starting_position();
 	void calc_next_position(particle&);
 	float calc_score(particle&);
 	void paint_particle(particle&);
 
 	cv::Mat get_random_bones_rot();
-	cv::Point3f get_random_model_position();
+	cv::Point3f get_random_model_position(float, float);
 	cv::Point3f get_random_model_rot();
 
 	particle swarm[swarm_size];
 	particle_position best_global_position;
-	float best_global_score;
+
 
 	cv::Mat cameraMatrix, Q;
 	cv::Mat bone_max, bone_min;
+
+	cv::Point3f human_position;		//At first, the estimated human position;
+
 	int startX, startY, endX, endY;		//2D search space for positioning the model
 	int frame_width, frame_height;
 
@@ -66,6 +72,7 @@ private:
 	cv::Mat best_global_silhouette;
 	cv::Mat best_global_depth;
 public:
+	float best_global_score;
 	ogre_model* model;
 	cv::Mat input_frame;
 	cv::Mat input_silhouette;
@@ -98,7 +105,7 @@ pose_estimator::pose_estimator(int frame_width, int frame_height)
 
 	input_frame.copyTo(input_depth);
 	threshold(input_frame,input_silhouette,1,255,cv::THRESH_BINARY);
-	//input_frame.convertTo(input_depth, CV_16UC1,16*32./255);
+
 
 	input_head+= cv::Point(startX,startY);
 	input_hand_r+=cv::Point(startX,startY);
@@ -214,23 +221,28 @@ cv::Mat pose_estimator::calculate_depth_limit(){
 void pose_estimator::init_particles(){
 	std::cout << "[Pose Estimator] Initializing particles"<< std::endl;
 	srand(time(0));
+	cv::theRNG().state = time(0);
+
+	human_position = estimate_starting_position();
+	std::cout<< "[Pose Estimator] estimated starting position" << human_position <<std::endl;
+
 	for(int i = 0; i<swarm_size; i++){
 		swarm[i].id = i;
 		swarm[i].current_position.bones_rotation = get_random_bones_rot();
-		swarm[i].current_position.model_position = get_random_model_position();
+		swarm[i].current_position.model_position = cv::Point3f(0,0,human_position.z);
 		swarm[i].current_position.model_rotation = get_random_model_rot();
 		swarm[i].current_position.scale = round(100 + rand_num*(1000));
 		//swarm[i].current_position.scale = 700;
 
 		swarm[i].next_position.bones_rotation = get_random_bones_rot();
-		swarm[i].next_position.model_position = get_random_model_position();
+		swarm[i].next_position.model_position = get_random_model_position(human_position.z*0.9,human_position.z*1.1);
 		swarm[i].next_position.model_rotation = get_random_model_rot();
 		swarm[i].next_position.scale = round(100 + rand_num*(1000));
 		//swarm[i].next_position.scale = 700;
 
 		swarm[i].best_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
-		swarm[i].best_position.model_position = get_random_model_position();
-		swarm[i].best_position.model_rotation =  get_random_model_rot();
+		swarm[i].best_position.model_position = cv::Point3f(0,0,human_position.z);
+		swarm[i].best_position.model_rotation =  cv::Point3f(0,0,0);
 		swarm[i].best_position.scale = round(100 + rand_num*(1000));
 		//swarm[i].best_position.scale = 700;
 
@@ -238,12 +250,22 @@ void pose_estimator::init_particles(){
 		swarm[i].violation = cv::Mat::ones(19,3,CV_32FC1);
 	}
 	best_global_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
-	best_global_position.model_position = cv::Point3f(0,0,2000);
+	best_global_position.model_position = cv::Point3f(0,0,human_position.z);
 	best_global_position.model_rotation = cv::Point3f(0,0,0);
-
 	best_global_position.scale = 700;
 
 	best_global_score = 0;
+}
+
+/**
+ * Estimate where the human is relative to the camera
+ */
+cv::Point3f pose_estimator::estimate_starting_position(){
+	cv::Mat result, disparity;
+	input_frame.convertTo(disparity, CV_32FC1,32./255);
+	cv::reprojectImageTo3D(disparity, result, Q);
+	cv::Scalar mean_depth = mean(result, input_silhouette);
+	return cv::Point3f(mean_depth.val[0], mean_depth.val[1], mean_depth.val[2]);
 }
 
 /**
@@ -251,14 +273,19 @@ void pose_estimator::init_particles(){
  * restrictions.
  */
 inline cv::Mat pose_estimator::get_random_bones_rot(){
-	if(enable){
+	if(enable_bones){
 		cv::Mat result = cv::Mat::ones(19,3,CV_32FC1);
 		for(int i=0 ; i<19 ; i++){
 			for(int j=0 ; j<3 ; j++){
-				result.at<float>(i,j) = rand_num * result.at<float>(i,j);
+				float random_number =  rand_gen.gaussian(0.01);
+				random_number < 0 ? random_number = 0 : random_number;
+				random_number > 1 ? random_number = 1 : random_number;
+				result.at<float>(i,j) = random_number * result.at<float>(i,j);
+				//std::cout<< random_number <<std::endl;
+				//result.at<float>(i,j) = rand_num * result.at<float>(i,j);		//uniform distribution
 			}
 		}
-		result = bone_max.mul(result)+bone_min.mul((1-result));
+		result = bone_max.mul(result) + bone_min.mul((1-result));
 		return result;
 	}else{
 		return cv::Mat::zeros(19,3,CV_32FC1);
@@ -268,10 +295,14 @@ inline cv::Mat pose_estimator::get_random_bones_rot(){
 /**
  * Calculates random values for model position
  */
-inline cv::Point3f pose_estimator::get_random_model_position(){
+inline cv::Point3f pose_estimator::get_random_model_position(float min_z = 0 ,float max_z = 0){
+
+	if(min_z == 0 || max_z == 0){
+		min_z=camera_viewspace(0,0).z;
+		max_z=camera_viewspace(4,0).z;
+	}
+
 	cv::Point3f position;
-	float min_z = camera_viewspace(0,0).z ;
-	float max_z = camera_viewspace(4,0).z;
 	position.z = min_z+500 + rand_num * (max_z - min_z);
 	//std::cout<<camera_viewspace<<std::endl;
 	//std::cout<<"random Z "<<position.z<<std::endl;
@@ -283,8 +314,11 @@ inline cv::Point3f pose_estimator::get_random_model_position(){
 	float max_y = (camera_viewspace(5,0).y - camera_viewspace(1,0).y)/(max_z-min_z)*position.z + (camera_viewspace(1,0).y*max_z - min_z*camera_viewspace(5,0).y)/(max_z-min_z);
 	//std::cout << " minX " << min_x << " max_x "<< max_x << " min_y " << min_y<< " max_y "<< max_y << std::endl;
 
-	position.x = min_x + rand_num * (max_x - min_x);
-	position.y = min_y + rand_num * (max_y - min_y);
+	//position.x = min_x + rand_num * (max_x - min_x);	//uniform distribution
+	//position.y = min_y + rand_num * (max_y - min_y);
+	position.x = rand_gen.gaussian(0.1) * (max_x - min_x);	//uniform distribution
+	position.y = rand_gen.gaussian(0.1) * (max_y - min_y);
+
 	return position;
 }
 
@@ -292,9 +326,15 @@ inline cv::Point3f pose_estimator::get_random_model_position(){
  * Calculates random values for model global rotation
  */
 inline cv::Point3f pose_estimator::get_random_model_rot(){
-	float yaw = 0 + rand_num*(180);
-	float pitch = 0 + rand_num*(360);
-	float roll = 0 + rand_num*(360);
+	//	float yaw = 0 + rand_num*(180);
+	//	float pitch = 0 + rand_num*(360);
+	//	float roll = 0 + rand_num*(360);
+
+	float yaw = rand_gen.gaussian(0.3)*(180);
+	float pitch = rand_gen.gaussian(0.3)*(180);
+	float roll = rand_gen.gaussian(0.3)*(180);
+
+
 	return cv::Point3f(yaw, pitch, roll);
 }
 
@@ -311,9 +351,9 @@ void pose_estimator::calc_evolution(){
 			swarm[i].best_score = score;
 			swarm[i].best_position = swarm[i].current_position;
 		}
-		if(score > best_global_score){
-			best_global_score = score;
-			best_global_position = swarm[i].current_position;
+		if(swarm[i].best_score > best_global_score){
+			best_global_score = swarm[i].best_score;
+			best_global_position = swarm[i].best_position;
 		}
 	}
 	for(int i=0;i<swarm_size;i++){
@@ -324,6 +364,7 @@ void pose_estimator::calc_evolution(){
 inline void pose_estimator::paint_particle(particle& particle_inst){
 	model->move_model(particle_inst.current_position.model_position,particle_inst.current_position.model_rotation, particle_inst.current_position.scale);
 	model->rotate_bones(particle_inst.current_position.bones_rotation);
+	particle_inst.extremas = model->get_2D_pos();
 	particle_inst.particle_depth = model->get_depth()->clone();
 	threshold(particle_inst.particle_depth,particle_inst.particle_silhouette,1,255,cv::THRESH_BINARY);
 
@@ -334,34 +375,33 @@ inline void pose_estimator::paint_particle(particle& particle_inst){
  *random movement, its best position and the global best one
  */
 void pose_estimator::calc_next_position(particle& particle_inst){
-	particle_inst.next_position.model_position = w*particle_inst.next_position.model_position + c1*rand_num_less*(particle_inst.best_position.model_position-particle_inst.current_position.model_position) + c2*rand_num_less*(best_global_position.model_position-particle_inst.current_position.model_position);
-	particle_inst.next_position.model_rotation = w*particle_inst.next_position.model_rotation + c1*rand_num_less*(particle_inst.best_position.model_rotation-particle_inst.current_position.model_rotation) + c2*rand_num_less*(best_global_position.model_rotation-particle_inst.current_position.model_rotation);
-	if(enable)particle_inst.next_position.bones_rotation = w*particle_inst.next_position.bones_rotation.mul(particle_inst.violation) + c1*rand_num_less*(particle_inst.best_position.bones_rotation-particle_inst.current_position.bones_rotation) + c2*rand_num_less*(best_global_position.bones_rotation-particle_inst.current_position.bones_rotation);
-	particle_inst.next_position.scale = w*particle_inst.next_position.scale + c1*rand_num_less*(particle_inst.best_position.scale-particle_inst.current_position.scale) + c2*rand_num_less*(best_global_position.scale-particle_inst.current_position.scale);
+	if(!enable_bones)particle_inst.next_position.model_position = w*particle_inst.next_position.model_position + c1*rand_num*(particle_inst.best_position.model_position-particle_inst.current_position.model_position) + c2*rand_num*(best_global_position.model_position-particle_inst.current_position.model_position);
+	particle_inst.next_position.model_rotation = w*particle_inst.next_position.model_rotation + c1*rand_num*(particle_inst.best_position.model_rotation-particle_inst.current_position.model_rotation) + c2*rand_num*(best_global_position.model_rotation-particle_inst.current_position.model_rotation);
+	if(enable_bones)particle_inst.next_position.bones_rotation = w*particle_inst.next_position.bones_rotation.mul(particle_inst.violation) + c1*rand_num*(particle_inst.best_position.bones_rotation-particle_inst.current_position.bones_rotation) + c2*rand_num*(best_global_position.bones_rotation-particle_inst.current_position.bones_rotation);
+	if(!enable_bones)particle_inst.next_position.scale = w*particle_inst.next_position.scale + c1*rand_num*(particle_inst.best_position.scale-particle_inst.current_position.scale) + c2*rand_num*(best_global_position.scale-particle_inst.current_position.scale);
 
-	particle_inst.current_position.model_position += particle_inst.next_position.model_position;
+	if(!enable_bones)particle_inst.current_position.model_position += particle_inst.next_position.model_position;
 	particle_inst.current_position.model_rotation += particle_inst.next_position.model_rotation;
-	if(enable)particle_inst.current_position.bones_rotation += particle_inst.next_position.bones_rotation;
-	particle_inst.current_position.scale += particle_inst.next_position.scale;
+	if(enable_bones)particle_inst.current_position.bones_rotation += particle_inst.next_position.bones_rotation;
+	if(!enable_bones)particle_inst.current_position.scale += particle_inst.next_position.scale;
 
 
-	//Place the new position within limits
+	//Place the new bones rotation within limits
 	cv::Mat result = particle_inst.current_position.bones_rotation.clone();
 	cv::min(particle_inst.current_position.bones_rotation,bone_max,particle_inst.current_position.bones_rotation);
 	cv::max(particle_inst.current_position.bones_rotation,bone_min,particle_inst.current_position.bones_rotation);
-	particle_inst.violation = result == particle_inst.current_position.bones_rotation;
+	particle_inst.violation = result == particle_inst.current_position.bones_rotation;	//Check if before and after limiting
 	particle_inst.violation.convertTo(particle_inst.violation, CV_32FC1,(float)1/255);
 	if (57-cv::countNonZero(particle_inst.violation)){
-		std::cout << "[Pose Estimator]: Violation fixed: "<<particle_inst.id<<" "<< 57-cv::countNonZero(particle_inst.violation)<<std::endl;
+		std::cout << "[Pose Estimator]: Violation fixed on particle: "<<particle_inst.id<<" for No of values: "<< 57-cv::countNonZero(particle_inst.violation)<<std::endl;
 	}
-
 }
 
 /**
  *Calculates fitness score
  */
 float pose_estimator::calc_score(particle& particle_inst){
-	cv::Mat result_xor,result_and, extremas;
+	cv::Mat result_xor,result_and;
 	//bitwise_xor(input_frame, particle_inst.particle_silhouette, result_xor);
 	bitwise_and(input_silhouette, particle_inst.particle_silhouette, result_and);
 
@@ -369,21 +409,21 @@ float pose_estimator::calc_score(particle& particle_inst){
 	cv::absdiff(particle_inst.particle_depth,input_depth,result);
 	cv::bitwise_and(particle_inst.particle_silhouette,result,result);
 	cv::bitwise_and(input_silhouette,result,result);
-//imshow("123",result);
+	//imshow("123",result);
 
 	//	particle_inst.particle_depth.convertTo(temp,CV_16UC1,16*32/255);
 	//	cv::absdiff(temp,input_depth,result);
 
-std::cout<<1./(1+mean(result).val[0])<<std::endl;
-	//extremas = model->get_2D_pos();
-	//	float dist1 = 1 - sqrt(pow((extremas.at<ushort>(0,0)-input_head.x),2) + pow((extremas.at<ushort>(0,1)-input_head.y),2))/10000;
-	//	float dist2 = 1 - sqrt(pow((extremas.at<ushort>(1,0)-input_hand_r.x),2) + pow((extremas.at<ushort>(1,1)-input_hand_r.y),2))/10000;
-	//	float dist3 = 1 - sqrt(pow((extremas.at<ushort>(2,0)-input_hand_l.x),2) + pow((extremas.at<ushort>(2,1)-input_hand_l.y),2))/10000;
-	//	float dist4 = 1 - sqrt(pow((extremas.at<ushort>(3,0)-input_foot_r.x),2) + pow((extremas.at<ushort>(3,1)-input_foot_r.y),2))/10000;
-	//	float dist5 = 1 - sqrt(pow((extremas.at<ushort>(4,0)-input_foot_l.x),2) + pow((extremas.at<ushort>(4,1)-input_foot_l.y),2))/10000;
-	//	std::cout<< "Distances! "<<dist1<<" "<<dist2<<" "<<dist3<<" "<<dist4<<" "<<dist5<<" "<<std::endl;
+	//std::cout<< "[Pose Estimator]: percentage of difference between input and estimation depth " <<1./(1+mean(result).val[0])<<std::endl;
+
+	float dist1 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(0,0)-input_head.x),2) + pow((particle_inst.extremas.at<ushort>(0,1)-input_head.y),2)));
+	float dist2 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(1,0)-input_hand_r.x),2) + pow((particle_inst.extremas.at<ushort>(1,1)-input_hand_r.y),2)));
+	float dist3 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(2,0)-input_hand_l.x),2) + pow((particle_inst.extremas.at<ushort>(2,1)-input_hand_l.y),2)));
+	float dist4 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(3,0)-input_foot_r.x),2) + pow((particle_inst.extremas.at<ushort>(3,1)-input_foot_r.y),2)));
+	float dist5 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(4,0)-input_foot_l.x),2) + pow((particle_inst.extremas.at<ushort>(4,1)-input_foot_l.y),2)));
+	//std::cout<< "Distances! "<<dist1<<" "<<dist2<<" "<<dist3<<" "<<dist4<<" "<<dist5<<" "<<std::endl;
 	//return 1*(0.2*dist1+ 0.2*dist2+ 0.2*dist3+ 0.2*dist4+ 0.2*dist5) + 0*countNonZero(result_and)/fmaxf(countNonZero(input_frame),countNonZero(particle_inst.particle_silhouette));
-	return 1./(1+mean(result).val[0]) * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
+	return (dist1 + dist2 + dist3 + dist4 + dist5)/5 * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
 }
 
 void pose_estimator::show_best_solution(){
@@ -394,7 +434,7 @@ void pose_estimator::show_best_solution(){
 
 
 	threshold(best_global_depth,best_global_silhouette,1,255,cv::THRESH_BINARY);
-	cv::Mat result, resullt2 = cv::Mat::zeros(800,600,CV_8UC1);
+	cv::Mat result, resullt2 = cv::Mat::zeros(640,480,CV_8UC1);
 	bitwise_xor(input_silhouette, best_global_silhouette, result);
 	imshow("best global silhouette", best_global_silhouette);
 	cv::Mat jet_depth_map2;
@@ -402,7 +442,8 @@ void pose_estimator::show_best_solution(){
 
 	cv::Mat extremas = model->get_2D_pos();
 	for(int i=0;i<5;i++){
-		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),3,cv::Scalar(0,255,0),2);
+		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),3,cv::Scalar(0,255,255),2);
+		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),1,cv::Scalar(0,0,255),2);
 	}
 
 	imshow("best global depth", jet_depth_map2);
@@ -412,7 +453,7 @@ void pose_estimator::show_best_solution(){
 	//std::cout<< cv::countNonZero(resullt2)<< std::endl;
 	//imshow("123",resullt2);
 
-	std::cout<< "[Pose Estimator] best global score" <<best_global_score <<std::endl;
+	std::cout<< "[Pose Estimator] best global score: " <<best_global_score <<std::endl;
 }
 
 void pose_estimator::randomize_bones(){
@@ -426,39 +467,41 @@ void pose_estimator::randomize_bones(){
 }
 
 int main(){
-	pose_estimator instance(800,600);
+	pose_estimator instance(640,480);
 	cv::namedWindow("input frame");
 	cv::namedWindow("best global silhouette");
 	cv::namedWindow("best global depth");
 	cv::namedWindow("best global diff");
-	cv::namedWindow("123");
+
 	imshow("input frame", instance.input_frame);
+
+
 
 	while(1)
 	{
 		int key = cv::waitKey(1) & 255;;
 		if ( key == 27 ) break;	//Esc
 		if ( key == 114 ) {
-			enable=true;
+			instance.best_global_score = 0;
 			instance.init_particles();
 		}
 		if ( key == 116 ){
-			enable=true;
+			enable_bones = !enable_bones;
 			instance.randomize_bones();
 		}
 
 		cv::Mat test = instance.input_frame.clone();
-		//		cv::circle(test,input_head,3,cv::Scalar(127),2);
-		//		cv::circle(test,input_hand_r,3,cv::Scalar(127),2);
-		//		cv::circle(test,input_hand_l,3,cv::Scalar(127),2);
-		//		cv::circle(test,input_foot_r,3,cv::Scalar(127),2);
-		//		cv::circle(test,input_foot_l,3,cv::Scalar(127),2);
+		cv::cvtColor(test,test,CV_GRAY2RGB);
+		cv::circle(test,input_head,3,cv::Scalar(0,0,255),2);
+		cv::circle(test,input_hand_r,3,cv::Scalar(0,0,255),2);
+		cv::circle(test,input_hand_l,3,cv::Scalar(0,0,255),2);
+		cv::circle(test,input_foot_r,3,cv::Scalar(0,0,255),2);
+		cv::circle(test,input_foot_l,3,cv::Scalar(0,0,255),2);
 		imshow("input frame", test);
 
 		instance.show_best_solution();
 
 		instance.calc_evolution();
-
 	}
 }
 
