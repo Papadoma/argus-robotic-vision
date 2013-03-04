@@ -14,7 +14,7 @@ cv::Point input_hand_r(55,137);
 cv::Point input_hand_l(224,122);
 cv::Point input_foot_r(117,288);
 cv::Point input_foot_l(166,282);
-bool enable_bones = true;
+bool enable_bones = false;
 
 const int swarm_size = 50;
 
@@ -316,8 +316,8 @@ inline cv::Point3f pose_estimator::get_random_model_position(float min_z = 0 ,fl
 
 	//position.x = min_x + rand_num * (max_x - min_x);	//uniform distribution
 	//position.y = min_y + rand_num * (max_y - min_y);
-	position.x = rand_gen.gaussian(0.1) * (max_x - min_x);	//uniform distribution
-	position.y = rand_gen.gaussian(0.1) * (max_y - min_y);
+	position.x = rand_gen.gaussian(0.3) * 0.5 * (max_x - min_x);	//uniform distribution
+	position.y = rand_gen.gaussian(0.3) * 0.5 * (max_y - min_y);
 
 	return position;
 }
@@ -405,16 +405,24 @@ float pose_estimator::calc_score(particle& particle_inst){
 	//bitwise_xor(input_frame, particle_inst.particle_silhouette, result_xor);
 	bitwise_and(input_silhouette, particle_inst.particle_silhouette, result_and);
 
-	cv::Mat temp, result;
+	cv::Mat result;
 	cv::absdiff(particle_inst.particle_depth,input_depth,result);
-	cv::bitwise_and(particle_inst.particle_silhouette,result,result);
-	cv::bitwise_and(input_silhouette,result,result);
+
+	if(countNonZero(result_and)){
+		cv::bitwise_and(result_and,result,result);
+		//std::cout<< "[Pose Estimator]: percentage of difference between input and estimation depth " <<1./(1+mean(result).val[0])<<std::endl;
+		//return 0.7 * 1./(1+mean(result).val[0]) + 0.3 * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
+		return 1./(1+mean(result).val[0]);
+	}else{
+		return 0;
+	}
+
 	//imshow("123",result);
 
 	//	particle_inst.particle_depth.convertTo(temp,CV_16UC1,16*32/255);
 	//	cv::absdiff(temp,input_depth,result);
 
-	//std::cout<< "[Pose Estimator]: percentage of difference between input and estimation depth " <<1./(1+mean(result).val[0])<<std::endl;
+
 
 	float dist1 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(0,0)-input_head.x),2) + pow((particle_inst.extremas.at<ushort>(0,1)-input_head.y),2)));
 	float dist2 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(1,0)-input_hand_r.x),2) + pow((particle_inst.extremas.at<ushort>(1,1)-input_hand_r.y),2)));
@@ -422,8 +430,8 @@ float pose_estimator::calc_score(particle& particle_inst){
 	float dist4 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(3,0)-input_foot_r.x),2) + pow((particle_inst.extremas.at<ushort>(3,1)-input_foot_r.y),2)));
 	float dist5 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(4,0)-input_foot_l.x),2) + pow((particle_inst.extremas.at<ushort>(4,1)-input_foot_l.y),2)));
 	//std::cout<< "Distances! "<<dist1<<" "<<dist2<<" "<<dist3<<" "<<dist4<<" "<<dist5<<" "<<std::endl;
-	//return 1*(0.2*dist1+ 0.2*dist2+ 0.2*dist3+ 0.2*dist4+ 0.2*dist5) + 0*countNonZero(result_and)/fmaxf(countNonZero(input_frame),countNonZero(particle_inst.particle_silhouette));
-	return (dist1 + dist2 + dist3 + dist4 + dist5)/5 * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
+	//return (dist1 + dist2 + dist3 + dist4 + dist5)/5 * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
+	//return countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
 }
 
 void pose_estimator::show_best_solution(){
@@ -453,7 +461,8 @@ void pose_estimator::show_best_solution(){
 	//std::cout<< cv::countNonZero(resullt2)<< std::endl;
 	//imshow("123",resullt2);
 
-	std::cout<< "[Pose Estimator] best global score: " <<best_global_score <<std::endl;
+	std::cout<< "[Pose Estimator] best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
+
 }
 
 void pose_estimator::randomize_bones(){
