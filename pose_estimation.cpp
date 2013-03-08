@@ -51,7 +51,7 @@ private:
 	float calc_score(particle&);
 	void paint_particle(particle&);
 
-	cv::Mat get_random_bones_rot();
+	cv::Mat get_random_bones_rot(bool);
 	cv::Point3f get_random_model_position(float, float);
 	cv::Point3f get_random_model_rot();
 
@@ -95,6 +95,7 @@ pose_estimator::pose_estimator(int frame_width, int frame_height)
 
 	input_frame = cv::Mat::zeros(frame_height, frame_width, CV_8UC1);
 	cv::Mat input_frameROI = cv::imread("woman_dancing.png",0);
+	//cv::Mat input_frameROI = cv::imread("man_standing.png",0);
 
 	//Fix the input_frame size to the pose_estimator's size
 	startX = (frame_width - input_frameROI.cols)/2;
@@ -228,13 +229,14 @@ void pose_estimator::init_particles(){
 
 	for(int i = 0; i<swarm_size; i++){
 		swarm[i].id = i;
-		swarm[i].current_position.bones_rotation = get_random_bones_rot();
+		//swarm[i].current_position.bones_rotation = get_random_bones_rot(true);
+		swarm[i].current_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
 		swarm[i].current_position.model_position = cv::Point3f(0,0,human_position.z);
 		swarm[i].current_position.model_rotation = get_random_model_rot();
 		swarm[i].current_position.scale = round(100 + rand_num*(1000));
 		//swarm[i].current_position.scale = 700;
 
-		swarm[i].next_position.bones_rotation = get_random_bones_rot();
+		swarm[i].next_position.bones_rotation = get_random_bones_rot(false);
 		swarm[i].next_position.model_position = get_random_model_position(human_position.z*0.9,human_position.z*1.1);
 		swarm[i].next_position.model_rotation = get_random_model_rot();
 		swarm[i].next_position.scale = round(100 + rand_num*(1000));
@@ -272,20 +274,26 @@ cv::Point3f pose_estimator::estimate_starting_position(){
  * Calculates random values for the bones based on loaded movement
  * restrictions.
  */
-inline cv::Mat pose_estimator::get_random_bones_rot(){
+inline cv::Mat pose_estimator::get_random_bones_rot(bool initial){
 	if(enable_bones){
 		cv::Mat result = cv::Mat::ones(19,3,CV_32FC1);
 		for(int i=0 ; i<19 ; i++){
 			for(int j=0 ; j<3 ; j++){
-				float random_number =  rand_gen.gaussian(0.01);
-				random_number < 0 ? random_number = 0 : random_number;
-				random_number > 1 ? random_number = 1 : random_number;
+				float random_number =  rand_gen.gaussian(0.3);
+				if(initial){
+					random_number < 0 ? random_number = 0 : random_number;
+					random_number > 1 ? random_number = 1 : random_number;
+				}
 				result.at<float>(i,j) = random_number * result.at<float>(i,j);
 				//std::cout<< random_number <<std::endl;
 				//result.at<float>(i,j) = rand_num * result.at<float>(i,j);		//uniform distribution
 			}
 		}
-		result = bone_max.mul(result) + bone_min.mul((1-result));
+		if(initial){
+			result = bone_max.mul(result) + bone_min.mul((1-result));
+		}else{
+			result = result*1;
+		}
 		return result;
 	}else{
 		return cv::Mat::zeros(19,3,CV_32FC1);
@@ -409,10 +417,10 @@ float pose_estimator::calc_score(particle& particle_inst){
 	cv::absdiff(particle_inst.particle_depth,input_depth,result);
 
 	if(countNonZero(result_and)){
-		cv::bitwise_and(result_and,result,result);
+		//cv::bitwise_and(result_and,result,result);
 		//std::cout<< "[Pose Estimator]: percentage of difference between input and estimation depth " <<1./(1+mean(result).val[0])<<std::endl;
-		//return 0.7 * 1./(1+mean(result).val[0]) + 0.3 * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
-		return 1./(1+mean(result).val[0]);
+		return 0.5 * 1./(1+mean(result).val[0]) + 0.5 * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
+		//return 1./(1+mean(result).val[0]);
 	}else{
 		return 0;
 	}
@@ -467,10 +475,10 @@ void pose_estimator::show_best_solution(){
 
 void pose_estimator::randomize_bones(){
 	for(int i = 0; i<swarm_size; i++){
-		swarm[i].current_position.bones_rotation = get_random_bones_rot();
-		swarm[i].next_position.bones_rotation = get_random_bones_rot();
-		swarm[i].best_position.bones_rotation = get_random_bones_rot();
-		swarm[i].best_score=0;
+		swarm[i].current_position.bones_rotation = get_random_bones_rot(true);
+		swarm[i].next_position.bones_rotation = get_random_bones_rot(false);
+		//swarm[i].best_position.bones_rotation =  cv::Mat::zeros(19,3,CV_32FC1);
+		//swarm[i].best_score=0;
 	}
 	//best_global_score = 0;
 }
@@ -490,11 +498,10 @@ int main(){
 	{
 		int key = cv::waitKey(1) & 255;;
 		if ( key == 27 ) break;	//Esc
-		if ( key == 114 ) {
-			instance.best_global_score = 0;
+		if ( key == 114 ) { //R
 			instance.init_particles();
 		}
-		if ( key == 116 ){
+		if ( key == 116 ){ //T
 			enable_bones = !enable_bones;
 			instance.randomize_bones();
 		}
