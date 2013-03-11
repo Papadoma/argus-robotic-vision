@@ -17,7 +17,7 @@ int main(){
 	cv::namedWindow("sliders");
 
 	cv::Point3f position = cv::Point3f(0,0,2000);
-	cv::Point3f rot_vector = cv::Point3f(0,-1,0);
+	cv::Point3f rot_vector = cv::Point3f(0,0,90);
 
 	cv::Mat bones_rotation;
 
