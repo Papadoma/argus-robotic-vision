@@ -36,7 +36,7 @@ private:
 
 public:
 	module_eye();
-	module_eye(cv::String, cv::String);
+	module_eye(std::string, std::string);
 	~module_eye();
 	void getFrame(cv::Mat&, cv::Mat&);
 	cv::Size getSize();

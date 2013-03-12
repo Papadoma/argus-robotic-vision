@@ -1,4 +1,4 @@
-#include <opencv.hpp>
+#include <opencv2/opencv.hpp>
 #include "module_input.hpp"
 
 class test_depth{
@@ -23,6 +23,7 @@ public:
 	void refresh_depth();
 	void show_video();
 	void smooth_depth();
+	void take_snapshot();
 	int width,height;
 
 	cv::Mat depth;
@@ -31,7 +32,7 @@ public:
 
 
 test_depth::test_depth(){
-	input_module=new module_eye("left.mpg","right.mpg");
+	input_module=new module_eye("left1.mpg","right1.mpg");
 	cv::Size framesize = input_module->getSize();
 	height=framesize.height;
 	width=framesize.width;
@@ -40,7 +41,7 @@ test_depth::test_depth(){
 	numberOfDisparities=32;
 
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 3;
+	sgbm.SADWindowSize = 1;
 	int cn = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
@@ -50,7 +51,7 @@ test_depth::test_depth(){
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
-	sgbm.fullDP = false;
+	sgbm.fullDP = true;
 
 	this->load_param();
 
@@ -163,17 +164,31 @@ void test_depth::show_video(){
 	cv::imshow("Both",imgResult);
 }
 
-int main(){
+void test_depth::take_snapshot(){
+	std::cout<<"Snapshot taken!" << std::endl;
+	imwrite("snap_depth.png", depth);
+	imwrite("snap_color.png", rect_mat_left);
+	//imwrite("person.png", person_left);
+}
 
+int main(){
+	int key_pressed = 255;
+	bool loop=false;
 	test_depth test;
 	while(1){
-		int key_pressed = cvWaitKey(1) & 255;
+		do{
+			key_pressed = cvWaitKey(1) & 255;
+			if ( key_pressed == 32 )loop=!loop;
+			if ( key_pressed == 115 )test.take_snapshot();
+			if ( key_pressed == 27 ) break;
+		}while (loop);
+
 		if ( key_pressed == 27 ) break;
 		test.refresh_frame();
 		//cv::imshow("Left",test.BW_rect_mat_left);
 		//cv::imshow("Right",test.BW_rect_mat_right);
 		test.refresh_depth();
-		test.smooth_depth();
+		//test.smooth_depth();
 		test.show_video();
 
 
