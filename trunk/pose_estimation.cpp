@@ -104,7 +104,8 @@ pose_estimator::pose_estimator(int frame_width, int frame_height)
 	load_param();
 
 	input_frame = cv::Mat::zeros(frame_height, frame_width, CV_8UC1);
-	cv::Mat input_frameROI = cv::imread("woman_dancing.png",0);
+	//cv::Mat input_frameROI = cv::imread("woman_dancing.png",0);
+	cv::Mat input_frameROI = cv::imread("snap_depth2.png",0);
 	//cv::Mat input_frameROI = cv::imread("man_standing.png",0);
 
 	//Fix the input_frame size to the pose_estimator's size
@@ -542,10 +543,10 @@ float pose_estimator::calc_score(particle& particle_inst){
 
 
 	if(countNonZero(result_and)){
-		//cv::bitwise_and(result_and,result,result);
+		cv::bitwise_and(result_and,result,result);
 		//std::cout<< "[Pose Estimator]: percentage of difference between input and estimation depth " <<1./(1+mean(result).val[0])<<std::endl;
-		return 0.4* (0.2*dist1 + 0.2*dist2 + 0.2*dist3 + 0.2*dist4 + 0.2*dist5) + 0.6 * 1./(1+mean(result).val[0])  * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
-		//return 1./(1+mean(result).val[0]);
+		//return 0.4* (0.2*dist1 + 0.2*dist2 + 0.2*dist3 + 0.2*dist4 + 0.2*dist5) + 0.6 * 1./(1+mean(result).val[0])  * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
+		return 1./(1+mean(result).val[0]);
 	}else{
 		return 0;
 	}
