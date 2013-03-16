@@ -83,28 +83,28 @@ height(480)
 	CLEyeSetCameraParameter(capture_right,CLEYE_AUTO_WHITEBALANCE,true);
 
 	if(CLEyeCameraStart(capture_left)){
-		std::cout << "Left Camera initiated recording" << std::endl;
+		std::cout << "[Module Input] Left Camera initiated recording" << std::endl;
 	}else{
-		std::cout << "Left Camera failed" << std::endl;
+		std::cout << "[Module Input] Left Camera failed" << std::endl;
 	}
 	if(CLEyeCameraStart(capture_right)){
-		std::cout << "Right Camera initiated recording" << std::endl;
+		std::cout << "[Module Input] Right Camera initiated recording" << std::endl;
 	}else{
-		std::cout << "Right Camera failed" << std::endl;
+		std::cout << "[Module Input] Right Camera failed" << std::endl;
 	}
 #else
 	capture_left.open(0);
 	capture_right.open(1);
 	if(capture_left.isOpened()){
-		std::cout << "Right Camera initiated recording" << std::endl;
+		std::cout << "[Module Input] Right Camera initiated recording" << std::endl;
 	}else{
-		std::cout << "Right Camera failed" << std::endl;
+		std::cout << "[Module Input] Right Camera failed" << std::endl;
 		exit(1);
 	}
 	if(capture_right.isOpened()){
-		std::cout<<"Left Camera initiated recording" << std::endl;
+		std::cout<<"[Module Input] Left Camera initiated recording" << std::endl;
 	}else{
-		std::cout<<"Left Camera failed" << std::endl;
+		std::cout<<"[Module Input] Left Camera failed" << std::endl;
 		exit(1);
 	}
 #endif
@@ -114,14 +114,14 @@ inline module_eye::module_eye(std::string filename_left, std::string filename_ri
 :EoF(false),
  use_camera(false)
 {
-	std::cout << "Opening video files" << std::endl;
+	std::cout << "[Module Input] Opening video files" << std::endl;
 	file_left.open(filename_left);
 	file_right.open(filename_right);
 
 	if((file_left.isOpened())&&(file_right.isOpened())){
-		std::cout << "Video files opened!" << std::endl;
+		std::cout << "[Module Input] Video files opened!" << std::endl;
 	}else{
-		std::cout << "Video files could not be opened/not found..." << std::endl;
+		std::cout << "[Module Input] Video files could not be opened/not found..." << std::endl;
 		exit(1);
 	}
 

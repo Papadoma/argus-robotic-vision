@@ -32,7 +32,7 @@ public:
 
 
 test_depth::test_depth(){
-	input_module=new module_eye("left1.mpg","right1.mpg");
+	input_module=new module_eye("left.mpg","right.mpg");
 	cv::Size framesize = input_module->getSize();
 	height=framesize.height;
 	width=framesize.width;
