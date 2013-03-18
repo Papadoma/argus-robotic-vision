@@ -1,14 +1,23 @@
-#ifndef module_cam_HPP
-#define module_cam_HPP
+#ifndef MODULE_EYE_HPP
+#define MODULE_EYE_HPP
+
 
 #include <opencv2/opencv.hpp>
 #include <opencv/cv.h>
 
-class module_cam{
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#include <CLEyeMulticam.h>
+#endif
+
+class module_eye{
 private:
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+	typedef CLEyeCameraInstance capture_type;
+#else
+	typedef cv::VideoCapture capture_type;
+#endif
 
-	cv::VideoCapture capture;
-
+	capture_type capture;
 	bool EoF;
 	bool use_camera;
 	int width;	//Frame width
@@ -16,41 +25,81 @@ private:
 
 	cv::VideoCapture file;
 
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+	PBYTE pCapBuffer;
+	IplImage *pCapImage;
+#endif
+
 public:
-	module_cam();
-	module_cam(cv::String);
-	~module_cam();
+	module_eye();
+	module_eye(std::string);
+	~module_eye();
 	void getFrame(cv::Mat&);
 	cv::Size getSize();
 
 };
 
-inline module_cam::module_cam()
+inline module_eye::module_eye()
 :use_camera(true)
-{
-	capture.open(0);
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+,
+width(640),
+height(480)
+#endif
 
-	if(capture.isOpened()){
-		std::cout << "Camera initiated recording" << std::endl;
-	}else{
-		std::cout << "Camera failed" << std::endl;
+{
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+	int numCams = CLEyeGetCameraCount();
+	if(numCams == 0)
+	{
+		printf("No PS3Eye camera detected\n");
 		exit(1);
 	}
-	width = capture.get(CV_CAP_PROP_FRAME_WIDTH);
-	height = capture.get(CV_CAP_PROP_FRAME_HEIGHT);
+	printf("Found %d cameras\n", numCams);
+	GUID right_id=CLEyeGetCameraUUID(0);
+
+	capture = CLEyeCreateCamera(right_id, CLEYE_BAYER_RAW , CLEYE_VGA, (float)60);
+
+	CLEyeCameraGetFrameDimensions(capture, width, height);
+
+	pCapBuffer=NULL;
+
+	pCapImage = cvCreateImage(cvSize(width, height), IPL_DEPTH_8U   , 1);
+
+
+	CLEyeSetCameraParameter(capture,CLEYE_AUTO_GAIN,true);
+	CLEyeSetCameraParameter(capture,CLEYE_AUTO_EXPOSURE,true);
+	CLEyeSetCameraParameter(capture,CLEYE_AUTO_WHITEBALANCE,true);
+
+	if(CLEyeCameraStart(capture)){
+		std::cout << "[Module Input] Left Camera initiated recording" << std::endl;
+	}else{
+		std::cout << "[Module Input] Left Camera failed" << std::endl;
+	}
+
+#else
+	capture.open(0);
+	if(capture.isOpened()){
+		std::cout<<"[Module Input] Left Camera initiated recording" << std::endl;
+	}else{
+		std::cout<<"[Module Input] Left Camera failed" << std::endl;
+		exit(1);
+	}
+#endif
 }
 
-inline module_cam::module_cam(std::string filename)
+inline module_eye::module_eye(std::string filename)
 :EoF(false),
  use_camera(false)
 {
-	std::cout << "Opening video files" << std::endl;
+	std::cout << "[Module Input] Opening video files" << std::endl;
 	file.open(filename);
 
-	if((file.isOpened())){
-		std::cout << "Video files opened!" << std::endl;
+
+	if(file.isOpened()){
+		std::cout << "[Module Input] Video files opened!" << std::endl;
 	}else{
-		std::cout << "Video files could not be opened/not found..." << std::endl;
+		std::cout << "[Module Input] Video files could not be opened/not found..." << std::endl;
 		exit(1);
 	}
 
@@ -58,27 +107,42 @@ inline module_cam::module_cam(std::string filename)
 	height = file.get(CV_CAP_PROP_FRAME_HEIGHT);
 }
 
-inline module_cam::~module_cam(){
+inline module_eye::~module_eye(){
 	if(use_camera){
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+		CLEyeCameraStop(capture);
+		CLEyeDestroyCamera(capture);
+		cvReleaseImage(&pCapImage);
+#else
 		capture.release();
+#endif
 	}else{
 		file.release();
 	}
 }
 
-inline void module_cam::getFrame(cv::Mat& mat_frame){
+inline void module_eye::getFrame(cv::Mat& mat){
 	if (use_camera){
+#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+		CLEyeCameraGetFrame(capture,	pCapBuffer, 2000);
+
+		cvGetImageRawData(pCapImage, &pCapBuffer);
+
+		cv::cvtColor((cv::Mat)pCapImage,mat,cv::COLOR_BayerGR2RGB);
+#else
 		capture.grab();
-		capture.retrieve(mat_frame);
+		capture.retrieve(mat);
+#endif
 	}else{
 		if(!file.grab())EoF=true;
+
 		if(EoF==false){
-			file.retrieve(mat_frame,3);
+			file.retrieve(mat,3);
 		}
 	}
 }
 
-inline cv::Size module_cam::getSize()
+inline cv::Size module_eye::getSize()
 {
 	return cv::Size(width,height);
 }
