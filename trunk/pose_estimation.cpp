@@ -1,5 +1,6 @@
 #include "ogre_modeler.hpp"
 #include <math.h>
+#include <stdlib.h>
 #include <opencv2/opencv.hpp>
 
 
@@ -92,13 +93,15 @@ private:
 	void get_instructions();
 	void show_best_solution();
 	void randomize_bones();
-	void init_single_particle(particle&, int key );
+	void init_single_particle(particle&, int, bool);
+	cv::Rect bounding_box(cv::Mat);
 
 public:
 	float best_global_score;
 	ogre_model* model;
 	cv::Mat input_frame;
 	cv::Mat input_silhouette;
+	cv::Rect input_boundingbox;
 	cv::Mat input_depth;
 
 	pose_estimator(int, int);
@@ -120,16 +123,18 @@ pose_estimator::pose_estimator(int frame_width, int frame_height)
 
 	input_frame = cv::Mat::zeros(frame_height, frame_width, CV_8UC1);
 	//cv::Mat input_frameROI = cv::imread("woman_dancing.png",0);
-	//cv::Mat input_frameROI = cv::imread("snap_depth2.png",0);
-	cv::Mat input_frameROI = cv::imread("depth4.png",0);
+	cv::Mat input_frameROI = cv::imread("snap_depth2.png",0);
+	//cv::Mat input_frameROI = cv::imread("depth4.png",0);
 	//cv::Mat input_frameROI = cv::imread("man_standing.png",0);
 
 	//Fix the input_frame size to the pose_estimator's size
 	startX = (frame_width - input_frameROI.cols)/2;
 	startY = (frame_height - input_frameROI.rows)/2;
-	//endX = startX + input_frameROI.cols;
-	//endY = startY + input_frameROI.rows;
-	input_frameROI.copyTo(input_frame(cv::Rect(startX,startY,input_frameROI.cols,input_frameROI.rows)));
+	//	endX = startX + input_frameROI.cols;
+	//	endY = startY + input_frameROI.rows;
+	input_boundingbox = cv::Rect(startX,startY,input_frameROI.cols,input_frameROI.rows);
+std::cout<<startX<<startY<<input_frameROI.cols<<std::endl;
+	input_frameROI.copyTo(input_frame(input_boundingbox));
 
 	input_frame.copyTo(input_depth);
 	threshold(input_frame,input_silhouette,1,255,cv::THRESH_BINARY);
@@ -266,7 +271,7 @@ void pose_estimator::init_particles()
 
 	for(int i = 0; i<swarm_size; i++){
 		swarm[i].id = i;
-		init_single_particle(swarm[i], ALL);
+		init_single_particle(swarm[i], ALL, false);
 	}
 	best_global_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
 	best_global_position.model_position = cv::Point3f(0,0,human_position.z);
@@ -280,39 +285,36 @@ void pose_estimator::init_particles()
  * Initializes a single particle. Usefull when initializing for the first time
  * or reseting individual particles
  */
-void pose_estimator::init_single_particle(particle& singleParticle, int key)
+void pose_estimator::init_single_particle(particle& singleParticle, int key, bool fine)
 {
 	singleParticle.x=0;
 	if( key==POSITION || key==ALL ){
-		singleParticle.current_position.model_position = get_random_model_position(false, human_position.z*0.9,human_position.z*1.1);
+		if(!fine)singleParticle.current_position.model_position = get_random_model_position(false, human_position.z*0.9,human_position.z*1.1);
 		singleParticle.next_position.model_position = get_random_model_position(true, human_position.z*0.9,human_position.z*1.1);
-		singleParticle.best_position.model_position = singleParticle.current_position.model_position;
+		if(!fine)singleParticle.best_position.model_position = singleParticle.current_position.model_position;
 		singleParticle.position_violation = cv::Mat::ones(3,1,CV_32FC1);
 	}
 
 	if( key==ROTATION || key==ALL ){
-		singleParticle.current_position.model_rotation = get_random_model_rot(false);
+		if(!fine)singleParticle.current_position.model_rotation = get_random_model_rot(false);
 		singleParticle.next_position.model_rotation = get_random_model_rot(true);
-		singleParticle.best_position.model_rotation =  singleParticle.current_position.model_rotation;
+		if(!fine)singleParticle.best_position.model_rotation =  singleParticle.current_position.model_rotation;
 		singleParticle.rotation_violation = cv::Mat::ones(3,1,CV_32FC1);
 	}
 
 	if( key==BONES || key==ALL ){
-		singleParticle.current_position.bones_rotation = get_random_bones_rot(false);
-		//singleParticle.current_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
+		if(!fine)singleParticle.current_position.bones_rotation = get_random_bones_rot(false);
 		singleParticle.next_position.bones_rotation = get_random_bones_rot(true);
-		//singleParticle.best_position.bones_rotation = singleParticle.current_position.bones_rotation;
-		singleParticle.best_position.bones_rotation = singleParticle.current_position.bones_rotation;
-
+		if(!fine)singleParticle.best_position.bones_rotation = singleParticle.current_position.bones_rotation;
 		singleParticle.bones_violation = cv::Mat::ones(19,3,CV_32FC1);
 	}
 
 	if( key==SCALE || key==ALL ){
-		singleParticle.current_position.scale = round(100 + rand_num*(1000));
+		if(!fine)singleParticle.current_position.scale = round(100 + rand_num*(1000));
 		singleParticle.next_position.scale = round(-10 + rand_num*(20));
-		singleParticle.best_position.scale = singleParticle.current_position.scale;
+		if(!fine)singleParticle.best_position.scale = singleParticle.current_position.scale;
 	}
-	if( key==ALL ){
+	if( key==ALL || !fine){
 		singleParticle.best_score = 0;
 	}
 }
@@ -439,7 +441,12 @@ void pose_estimator::calc_evolution(){
 			float score = calc_score(swarm[i]);
 			if(score > swarm[i].best_score){
 				swarm[i].best_score = score;
-				swarm[i].best_position = swarm[i].current_position;
+				//swarm[i].best_position = swarm[i].current_position;
+				if(enable_bones)swarm[i].best_position.bones_rotation = swarm[i].current_position.bones_rotation.clone();
+				swarm[i].best_position.model_position = swarm[i].current_position.model_position;
+				swarm[i].best_position.model_rotation = swarm[i].current_position.model_rotation;
+				swarm[i].best_position.scale = swarm[i].current_position.scale;
+
 			}
 			if(swarm[i].best_score > best_global_score){
 				prev_best_global_score = best_global_score;
@@ -479,11 +486,7 @@ inline void pose_estimator::paint_particle(particle& particle_inst){
  */
 void pose_estimator::calc_next_position(particle& particle_inst){
 	float w1 = A/exp(particle_inst.x);
-	if(particle_inst.x<log(10*A)){
-		particle_inst.x+=log(10*A)/N;
-	}else{
-		//std::cout<<"Ended"<<std::endl;
-	}
+
 
 	//cv::Mat a = cv::Mat(particle_inst.next_position.model_position).mul(particle_inst.position_violation);
 	//cv::Mat b = cv::Mat(particle_inst.next_position.model_rotation).mul(particle_inst.rotation_violation);
@@ -491,12 +494,12 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 	//particle_inst.next_position.model_rotation = w1*cv::Point3f(b) + c1*rand_num*(particle_inst.best_position.model_rotation-particle_inst.current_position.model_rotation) + c2*rand_num*(best_global_position.model_rotation-particle_inst.current_position.model_rotation);
 	//if(enable_bones)particle_inst.next_position.bones_rotation = w1*particle_inst.next_position.bones_rotation.mul(particle_inst.bones_violation) + c1*rand_num*(particle_inst.best_position.bones_rotation-particle_inst.current_position.bones_rotation) + c2*rand_num*(best_global_position.bones_rotation-particle_inst.current_position.bones_rotation);
 
-	particle_inst.next_position.model_position = w1*particle_inst.next_position.model_position + c1*rand_num*(particle_inst.best_position.model_position-particle_inst.current_position.model_position) + c2*rand_num*(best_global_position.model_position-particle_inst.current_position.model_position);
+	if(!enable_bones)particle_inst.next_position.model_position = w1*particle_inst.next_position.model_position + c1*rand_num*(particle_inst.best_position.model_position-particle_inst.current_position.model_position) + c2*rand_num*(best_global_position.model_position-particle_inst.current_position.model_position);
 	particle_inst.next_position.model_rotation = w1*particle_inst.next_position.model_rotation + c1*rand_num*(particle_inst.best_position.model_rotation-particle_inst.current_position.model_rotation) + c2*rand_num*(best_global_position.model_rotation-particle_inst.current_position.model_rotation);
 	if(enable_bones)particle_inst.next_position.bones_rotation = w1*particle_inst.next_position.bones_rotation + c1*rand_num*(particle_inst.best_position.bones_rotation-particle_inst.current_position.bones_rotation) + c2*rand_num*(best_global_position.bones_rotation-particle_inst.current_position.bones_rotation);
 	particle_inst.next_position.scale = w1*particle_inst.next_position.scale + c1*rand_num*(particle_inst.best_position.scale-particle_inst.current_position.scale) + c2*rand_num*(best_global_position.scale-particle_inst.current_position.scale);
 
-	particle_inst.current_position.model_position += particle_inst.next_position.model_position;
+	if(!enable_bones)particle_inst.current_position.model_position += particle_inst.next_position.model_position;
 	particle_inst.current_position.model_rotation += particle_inst.next_position.model_rotation;
 	if(enable_bones)particle_inst.current_position.bones_rotation += particle_inst.next_position.bones_rotation;
 	particle_inst.current_position.scale += particle_inst.next_position.scale;
@@ -505,22 +508,22 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 	cv::Mat minmax_XY = get_MinMax_XY(particle_inst.current_position.model_position.z);
 	if(particle_inst.current_position.model_position.x < minmax_XY.at<float>(0,0)){
 		particle_inst.current_position.model_position.x = minmax_XY.at<float>(0,0);
-		particle_inst.next_position.model_position.x = -0.6*particle_inst.next_position.model_position.x;
+		particle_inst.next_position.model_position.x = -0.4*particle_inst.next_position.model_position.x;
 		particle_inst.position_violation.at<float>(0,0) = 0;
 	}else if(particle_inst.current_position.model_position.x > minmax_XY.at<float>(1,0)){
 		particle_inst.current_position.model_position.x = minmax_XY.at<float>(1,0);
-		particle_inst.next_position.model_position.x = -0.6*particle_inst.next_position.model_position.x;
+		particle_inst.next_position.model_position.x = -0.4*particle_inst.next_position.model_position.x;
 		particle_inst.position_violation.at<float>(0,0) = 0;
 	}else{
 		particle_inst.position_violation.at<float>(0,0) = 1;
 	}
 	if(particle_inst.current_position.model_position.y < minmax_XY.at<float>(2,0)){
 		particle_inst.current_position.model_position.y = minmax_XY.at<float>(2,0);
-		particle_inst.next_position.model_position.y = -0.6*particle_inst.next_position.model_position.y;
+		particle_inst.next_position.model_position.y = -0.4*particle_inst.next_position.model_position.y;
 		particle_inst.position_violation.at<float>(1,0) = 0;
 	}else if(particle_inst.current_position.model_position.y > minmax_XY.at<float>(3,0)){
 		particle_inst.current_position.model_position.y = minmax_XY.at<float>(3,0);
-		particle_inst.next_position.model_position.y = -0.6*particle_inst.next_position.model_position.y;
+		particle_inst.next_position.model_position.y = -0.4*particle_inst.next_position.model_position.y;
 		particle_inst.position_violation.at<float>(1,0) = 0;
 	}else{
 		particle_inst.position_violation.at<float>(1,0) = 1;
@@ -528,11 +531,11 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 
 	if(particle_inst.current_position.model_position.z < z_min){
 		particle_inst.current_position.model_position.z = z_min;
-		particle_inst.next_position.model_position.z = -0.6*particle_inst.next_position.model_position.z;
+		particle_inst.next_position.model_position.z = -0.4*particle_inst.next_position.model_position.z;
 		particle_inst.position_violation.at<float>(2,0) = 0;
 	}else if(particle_inst.current_position.model_position.z > z_max){
 		particle_inst.current_position.model_position.z = z_max;
-		particle_inst.next_position.model_position.z = -0.6*particle_inst.next_position.model_position.z;
+		particle_inst.next_position.model_position.z = -0.4*particle_inst.next_position.model_position.z;
 		particle_inst.position_violation.at<float>(2,0) = 0;
 	}else{
 		particle_inst.position_violation.at<float>(2,0) = 1;
@@ -541,11 +544,11 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 	//Place the new rotation within limits
 	if(particle_inst.current_position.model_rotation.x > rotation_max.x){	//yaw
 		particle_inst.current_position.model_rotation.x = rotation_max.x;
-		particle_inst.next_position.model_rotation.x = -0.6*particle_inst.next_position.model_rotation.x;
+		particle_inst.next_position.model_rotation.x = -0.4*particle_inst.next_position.model_rotation.x;
 		particle_inst.rotation_violation.at<float>(0,0) = 0;
 	}else if(particle_inst.current_position.model_rotation.x < rotation_min.x){
 		particle_inst.current_position.model_rotation.x = rotation_min.x;
-		particle_inst.next_position.model_rotation.x = -0.6*particle_inst.next_position.model_rotation.x;
+		particle_inst.next_position.model_rotation.x = -0.4*particle_inst.next_position.model_rotation.x;
 		particle_inst.rotation_violation.at<float>(0,0) = 0;
 	}else{
 		particle_inst.rotation_violation.at<float>(0,0) = 1;
@@ -553,11 +556,11 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 
 	if(particle_inst.current_position.model_rotation.y > rotation_max.y){	//pitch
 		particle_inst.current_position.model_rotation.y = rotation_max.y;
-		particle_inst.next_position.model_rotation.y = -0.6*particle_inst.next_position.model_rotation.y;
+		particle_inst.next_position.model_rotation.y = -0.4*particle_inst.next_position.model_rotation.y;
 		particle_inst.rotation_violation.at<float>(1,0) = 0;
 	}else if(particle_inst.current_position.model_rotation.y < rotation_min.y){
 		particle_inst.current_position.model_rotation.y = rotation_min.y;
-		particle_inst.next_position.model_rotation.y = -0.6*particle_inst.next_position.model_rotation.y;
+		particle_inst.next_position.model_rotation.y = -0.4*particle_inst.next_position.model_rotation.y;
 		particle_inst.rotation_violation.at<float>(1,0) = 0;
 	}else{
 		particle_inst.rotation_violation.at<float>(1,0) = 1;
@@ -565,11 +568,11 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 
 	if(particle_inst.current_position.model_rotation.z > rotation_max.z){	//roll
 		particle_inst.current_position.model_rotation.z = rotation_max.z;
-		particle_inst.next_position.model_rotation.z = -0.6*particle_inst.next_position.model_rotation.z;
+		particle_inst.next_position.model_rotation.z = -0.4*particle_inst.next_position.model_rotation.z;
 		particle_inst.rotation_violation.at<float>(2,0) = 0;
 	}else if(particle_inst.current_position.model_rotation.z < rotation_min.z){
 		particle_inst.current_position.model_rotation.z = rotation_min.z;
-		particle_inst.next_position.model_rotation.z = -0.6*particle_inst.next_position.model_rotation.z;
+		particle_inst.next_position.model_rotation.z = -0.4*particle_inst.next_position.model_rotation.z;
 		particle_inst.rotation_violation.at<float>(2,0) = 0;
 	}else{
 		particle_inst.rotation_violation.at<float>(2,0) = 1;
@@ -598,21 +601,27 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 	particle_inst.next_position.bones_rotation = particle_inst.next_position.bones_rotation.mul(particle_inst.bones_violation);
 
 	//Reset particles, if they have settled on some dimensions and on the best_global_position
-	if(!enable_bones && particle_inst.current_position.model_position == best_global_position.model_position){
+	if( particle_inst.current_position.model_position == best_global_position.model_position){
 		std::cout<< "Particle " << particle_inst.id <<" resets: POSITION"<< std::endl;
-		init_single_particle(particle_inst,POSITION);
+		init_single_particle(particle_inst,POSITION,true);
 	}
-	if(!enable_bones && particle_inst.current_position.model_rotation == best_global_position.model_rotation){
+	if( particle_inst.current_position.model_rotation == best_global_position.model_rotation){
 		std::cout<< "Particle " << particle_inst.id <<" resets: ROTATION"<< std::endl;
-		init_single_particle(particle_inst,ROTATION);
+		init_single_particle(particle_inst,ROTATION,true);
 	}
-	if(enable_bones && !(57-cv::countNonZero(particle_inst.current_position.bones_rotation == best_global_position.bones_rotation))){
+	if(enable_bones && (cv::countNonZero(particle_inst.current_position.bones_rotation == best_global_position.bones_rotation))){
 		std::cout<< "Particle " << particle_inst.id <<" resets: BONES"<< std::endl;
-		init_single_particle(particle_inst,BONES);
+		init_single_particle(particle_inst,BONES,true);
 	}
-	if(!enable_bones && particle_inst.current_position.scale == best_global_position.scale){
+	if( particle_inst.current_position.scale == best_global_position.scale){
 		std::cout<< "Particle " << particle_inst.id <<" resets: SCALE"<< std::endl;
-		init_single_particle(particle_inst,SCALE);
+		init_single_particle(particle_inst,SCALE,true);
+	}
+
+	if(particle_inst.x<log(10*A)){
+		particle_inst.x+=log(10*A)/N;
+	}else{
+		init_single_particle(particle_inst,ALL,true);
 	}
 }
 
@@ -620,9 +629,10 @@ void pose_estimator::calc_next_position(particle& particle_inst){
  *Calculates fitness score
  */
 float pose_estimator::calc_score(particle& particle_inst){
-	cv::Mat result_or,result_and;
+	cv::Mat result_or,result_and,result_xor;
 	bitwise_and(input_silhouette, particle_inst.particle_silhouette, result_and);
 	bitwise_or(input_silhouette, particle_inst.particle_silhouette, result_or);
+	bitwise_xor(input_silhouette, particle_inst.particle_silhouette, result_xor);
 
 	cv::Mat result;
 	cv::absdiff(particle_inst.particle_depth,input_depth,result);
@@ -634,19 +644,50 @@ float pose_estimator::calc_score(particle& particle_inst){
 	//		float dist5 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(4,0)-input_foot_l.x),2) + pow((particle_inst.extremas.at<ushort>(4,1)-input_foot_l.y),2)));
 
 	if(countNonZero(result_and)){
+		cv::Mat A1_A2 ;
+		cv::Mat A1 = cv::Mat::zeros(frame_height,frame_width,CV_8UC1);
+		cv::Mat A2 = cv::Mat::zeros(frame_height,frame_width,CV_8UC1);
+		cv::rectangle(A1,input_boundingbox,cv::Scalar(255),CV_FILLED);
+		cv::rectangle(A2,bounding_box(particle_inst.particle_silhouette),cv::Scalar(255),CV_FILLED);
+		cv::bitwise_xor(A1,A2,A1_A2);
+
+//		imshow("A1",A1);
+//		imshow("A2",A2);
+//		cv::waitKey(0);
 		cv::Scalar mean,stddev;
 		meanStdDev(result, mean, stddev);
-		//cv::bitwise_and(result_and,result,result);
+		cv::bitwise_and(result_and,result,result);
 		//return 0.4* (0.2*dist1 + 0.2*dist2 + 0.2*dist3 + 0.2*dist4 + 0.2*dist5) + 0.6 * 1./(1+cv::mean(result).val[0])  * countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
 		//return 0.5* 1./(1+cv::mean(result).val[0])+ 0.5* (float)countNonZero(result_and)/countNonZero(result_or);
 		//return (float)countNonZero(result_and)/countNonZero(result_or);
 		//return 0.5* 1./(1+cv::mean(result).val[0])+ 0.5* (float)countNonZero(result_and)/fmaxf(countNonZero(input_silhouette),countNonZero(particle_inst.particle_silhouette));
-		return 1./(1+cv::mean(result).val[0]);
+
+		return 1./(1+countNonZero(A1_A2))*1./((1+stddev.val[0]));
+
+		//return 1./(1+cv::mean(result).val[0]);
+		cv::Mat silhouette_diff;
+
+		//cv::absdiff(result_and,input_silhouette,result);
+		//return  (float)countNonZero(result_or)/countNonZero(particle_inst.particle_silhouette);
+		//return 0.5*1./(1+cv::mean(result).val[0]) + 0.5* 1./(1-countNonZero(result_xor));
+
 		//return 1./((1+mean.val[0])*(1+stddev.val[0]));
 		//return (float)countNonZero(result_and)/countNonZero(result_or) * 1./((1+mean.val[0])*(1+stddev.val[0]));
 	}else{
 		return 0;
 	}
+}
+/**
+ * Returns the bounding box of a silhouette.
+ */
+cv::Rect pose_estimator::bounding_box(cv::Mat input){
+	cv::Rect result;
+	std::vector<std::vector<cv::Point> > contours;
+	std::vector<cv::Vec4i> hierarchy;
+	cv::Mat local = input.clone();
+	findContours(local, contours, hierarchy, CV_RETR_EXTERNAL,  CV_CHAIN_APPROX_SIMPLE);
+	result= cv::boundingRect( cv::Mat(contours[0]) );
+	return result;
 }
 
 void pose_estimator::show_best_solution(){
@@ -669,7 +710,8 @@ void pose_estimator::show_best_solution(){
 		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),1,cv::Scalar(0,0,255),2);
 	}
 
-	imshow("best global depth", jet_depth_map2);
+	imshow("best global depth", best_global_depth);
+	cv::rectangle(result,bounding_box(best_global_silhouette),cv::Scalar(255),1);
 	imshow("best global diff", result);
 	//if(!swarm[0].particle_silhouette.empty())imshow("test",swarm[0].particle_silhouette);
 
@@ -682,12 +724,12 @@ void pose_estimator::show_best_solution(){
 
 void pose_estimator::randomize_bones(){
 	for(int i = 0; i<swarm_size; i++){
-//		swarm[i].current_position.bones_rotation =  get_random_bones_rot(false);
-//		swarm[i].next_position.bones_rotation = get_random_bones_rot(true);
-//		swarm[i].best_position.bones_rotation =  cv::Mat::zeros(19,3,CV_32FC1);
-		init_single_particle(swarm[i], BONES);
+		//		swarm[i].current_position.bones_rotation =  get_random_bones_rot(false);
+		//		swarm[i].next_position.bones_rotation = get_random_bones_rot(true);
+		//		swarm[i].best_position.bones_rotation =  cv::Mat::zeros(19,3,CV_32FC1);
+		init_single_particle(swarm[i], BONES, false);
 		//swarm[i].best_score=0;
-//		swarm[i].x=0;
+		//		swarm[i].x=0;
 	}
 	best_global_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
 	//best_global_score = 0;
