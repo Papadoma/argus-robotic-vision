@@ -1,21 +1,28 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
-//#include "opencv2/ocl/ocl.hpp"
+#include <opencv2/ocl/ocl.hpp>
+#define USE_GPU true
+#define DEBUG_MODE true
 
 #include "module_input.hpp"
 
 struct human{
 	float movement_perc;
+	float propability;
+
 	cv::Rect bounding_rect;
-	cv::Mat figure_mask;
-	cv::Mat depth;
+	cv::Point human_center;
+
+	cv::Rect head_rect;
+	cv::Point head_center;
+
 };
 
 class argus_depth{
 private:
 	module_eye* input_module;
 
-	std::vector<human> human_group;
+
 
 	cv::Mat cameraMatrix[2], distCoeffs[2];
 	cv::Mat R, T, E, F, Q;
@@ -45,12 +52,19 @@ private:
 	cv::Mat rmap[2][2];
 
 	cv::StereoSGBM sgbm;
-
-	//ocl::HOGDescriptor hog;
+	cv::CascadeClassifier cas_cla;
+#if USE_GPU
+	cv::ocl::HOGDescriptor hog;
+	cv::ocl::oclMat  frame_ocl;
+#else
 	cv::HOGDescriptor hog;
+	cv::CascadeClassifier cas_cla;
+#endif
 
 
-	cv::Rect* clearview_mask;
+
+
+	cv::Rect clearview_mask;
 
 	int numberOfDisparities;
 	int width;
@@ -59,13 +73,15 @@ private:
 
 	void load_param();
 	void smooth_depth_map();
-	void calculate_motion();
 
 	void lookat(cv::Point3d from, cv::Point3d to, cv::Mat& destR);
 	void eular2rot(double yaw,double pitch, double roll,cv::Mat& dest);
 	void cloud_to_disparity(cv::Mat, cv::Mat);
 
+	unsigned int fast_distance(cv::Point, cv::Point);
+	cv::Mat find_skin(cv::Mat);
 
+	void debug_detected_human(std::vector<human>);
 public:
 	double baseline;
 	cv::Point3d viewpoint;
@@ -90,18 +106,25 @@ public:
 
 //Constructor
 argus_depth::argus_depth()
-:
-				frame_counter(0)
+:frame_counter(0)
 {
+	cas_cla.load("haarcascade_frontalface_alt.xml");
+#if USE_GPU
+	hog = cv::ocl::HOGDescriptor(cv::Size(48, 96));
+	hog.setSVMDetector(cv::ocl::HOGDescriptor::getPeopleDetector48x96());//getPeopleDetector48x96, getPeopleDetector64x128 or getDefaultPeopleDetector
+#else
+	hog = cv::HOGDescriptor(cv::Size(48, 96));
+	hog.setSVMDetector(cv::HOGDescriptor::getPeopleDetector48x96());//getPeopleDetector48x96, getPeopleDetector64x128 or getDefaultPeopleDetector
+#endif
 
 
-	//hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
-	hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());//getPeopleDetector64x128 or getDefaultPeopleDetector
+
 
 	input_module = new module_eye("left1.mpg","right1.mpg");
 	cv::Size framesize = input_module->getSize();
 	height = framesize.height;
 	width = framesize.width;
+
 	prev_frame = cv::Mat::zeros(framesize, CV_8UC1);
 	human_anchor = cv::Rect(width/2,height/2,10,10);
 
@@ -109,20 +132,16 @@ argus_depth::argus_depth()
 	viewpoint = cv::Point3d(0.0,0.0,baseline*10);
 	lookatpoint = cv::Point3d(0.0,0.0,-baseline*10.0);
 
-	//left_ocl=new ocl::oclMat(height,width,CV_8UC1);
-	//right_ocl=new ocl::oclMat(height,width,CV_8UC1);
-	//depth_ocl=new ocl::oclMat(height,width,CV_8UC1);
-
-	//	printf("Begin creating ocl context...\n");
-	//	//std::vector<ocl::Info> oclinfo;
-	//	//int devnums = ocl::getDevice(oclinfo);
-	//	vector<Info> ocl_info;
-	//	int devnums=getDevice(ocl_info);
-	//	printf("End creating ocl context...\n");
-	//
-	//	if(devnums<1){
-	//		std::cout << "no OPENCL device found\n";
-	//	}
+#if USE_GPU
+	std::cout << "Begin creating ocl context..." << std::endl;
+	std::vector<cv::ocl::Info> ocl_info;
+	int devnums=getDevice(ocl_info);
+	std::cout << "End creating ocl context...\n" << std::endl;
+	if(devnums<1){
+		std::cout << "no OPENCL device found\n";
+	}
+	frame_ocl = cv::ocl::oclMat(height,width,CV_8UC1);
+#endif
 
 	this->load_param();
 
@@ -141,53 +160,64 @@ argus_depth::argus_depth()
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = true;
 
-	clearview_mask=new cv::Rect(numberOfDisparities,0,width,height);
-	*clearview_mask = roi1 & roi2 & (*clearview_mask);
-
+	clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
+	clearview_mask = roi1 & roi2 & clearview_mask;
 }
 
 //Destructor
 argus_depth::~argus_depth(){
 	cv::destroyAllWindows();
 	delete(input_module);
-	//	input_module.~module_eye();
 }
 
-void argus_depth::calculate_motion(){
-	absdiff(BW_rect_mat_left, prev_frame, frame_diff);
-	threshold( frame_diff, frame_diff, 20, 255, CV_THRESH_BINARY );
-	cv::Mat element = cv::getStructuringElement( cv::MORPH_RECT , cv::Size(5,5), cv::Point( 2, 2 ) );
-	morphologyEx( frame_diff, frame_diff, cv::MORPH_CLOSE  , element);
-	BW_rect_mat_left.copyTo(prev_frame);
+inline unsigned int argus_depth::fast_distance(cv::Point P1, cv::Point P2){
+	unsigned int a,b;
+	unsigned x = pow((P1.x - P2.x),2) + pow((P1.y - P2.y),2);
+	b     = x;
+	a = x = 0x3f;
+	x     = b/x;
+	a = x = (x+a)>>1;
+	x     = b/x;
+	a = x = (x+a)>>1;
+	x     = b/x;
+	x     = (x+a)>>1;
+	return(x);
 }
 
-void argus_depth::refresh_frame(){
+inline void argus_depth::debug_detected_human(std::vector<human> list){
+	for( int i = 0; i < (int)list.size(); i++ )
+	{
+		cv::Scalar color = cv::Scalar((6*i*255/list.size())%255,8*(255-i*255/list.size())%255,i*10/list.size()%255);
+		rectangle(rect_mat_left, list[i].bounding_rect.tl(), list[i].bounding_rect.br(), color, 2);
+		if(list[i].head_rect != cv::Rect())rectangle(rect_mat_left, list[i].head_rect.tl(), list[i].head_rect.br(), color, 2);
+		std::stringstream ss;
+		ss<<list[i].propability;
+		cv::putText(rect_mat_left, ss.str(),list[i].human_center,0,0.5,cv::Scalar(255,255,255));
+	}
+
+}
+
+inline void argus_depth::refresh_frame(){
 	input_module->getFrame(mat_left,mat_right);
 
 	remap(mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
 	remap(mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
 
-	cvtColor(rect_mat_left,BW_rect_mat_left,CV_RGB2GRAY);
-	cvtColor(rect_mat_right,BW_rect_mat_right,CV_RGB2GRAY);
+	cvtColor(rect_mat_left,BW_rect_mat_left,CV_BGR2GRAY);
+	cvtColor(rect_mat_right,BW_rect_mat_right,CV_BGR2GRAY);
 
 	frame_counter++;
-	//	equalizeHist(*BW_rect_mat_left,*BW_rect_mat_left);
-	//	equalizeHist(*BW_rect_mat_right,*BW_rect_mat_right);
 
-	//left_ocl->upload(*BW_rect_mat_left);
-	//right_ocl->upload(*BW_rect_mat_right);
-
-
-	//oclMat left_ocl(height,width,CV_8UC3);
-
-	//	left_ocl.upload(*rect_mat_left);
-
-	//oclMat* disp_ocl;
+#if USE_GPU
+	cv::Mat local;
+	cv::cvtColor(rect_mat_left,local,CV_BGR2BGRA);
+	frame_ocl.upload(local);
+#endif
 }
 
-void argus_depth::refresh_window(){
-	cv::rectangle(rect_mat_left, *clearview_mask, cv::Scalar(255,255,255), 1, 8);
-	cv::rectangle(rect_mat_right, *clearview_mask, cv::Scalar(255,255,255), 1, 8);
+inline void argus_depth::refresh_window(){
+	cv::rectangle(rect_mat_left, clearview_mask, cv::Scalar(255,255,255), 1, 8);
+	cv::rectangle(rect_mat_right, clearview_mask, cv::Scalar(255,255,255), 1, 8);
 
 	cv::Mat imgResult(height,2*width,CV_8UC3); // Your final imageasd
 	cv::Mat roiImgResult_Left = imgResult(cv::Rect(0,0,rect_mat_left.cols,rect_mat_left.rows));
@@ -208,17 +238,15 @@ void argus_depth::refresh_window(){
 	//	cv::imshow( "depth2", jet_depth_map2 );
 }
 
-
+/*
+ * Loads necessary parameters
+ */
 void argus_depth::load_param(){
-
 	bool flag1 = false;
 	bool flag2 = false;
-
 	std::string intrinsics="intrinsics_eye.yml";
 	std::string extrinsics="extrinsics_eye.yml";
-
 	cv::Size imageSize(width,height);
-
 	cv::FileStorage fs(intrinsics, CV_STORAGE_READ);
 	if( fs.isOpened() )
 	{
@@ -231,7 +259,6 @@ void argus_depth::load_param(){
 	}
 	else
 		std::cout << "Error: can not load the intrinsic parameters" << std::endl;
-
 	fs.open(extrinsics, CV_STORAGE_READ);
 	if( fs.isOpened() )
 	{
@@ -256,10 +283,9 @@ void argus_depth::load_param(){
 		initUndistortRectifyMap(cameraMatrix[0], distCoeffs[0], R1, P1, imageSize, CV_16SC2, rmap[0][0], rmap[0][1]);
 		initUndistortRectifyMap(cameraMatrix[1], distCoeffs[1], R2, P2, imageSize, CV_16SC2, rmap[1][0], rmap[1][1]);
 	}
-
 }
 
-void argus_depth::compute_depth(){
+inline void argus_depth::compute_depth(){
 	//	cv::Rect refined_human_anchor=human_anchor;
 	//	refined_human_anchor.x=human_anchor.x-numberOfDisparities;
 	//	refined_human_anchor.width=human_anchor.width+numberOfDisparities;
@@ -276,118 +302,112 @@ void argus_depth::compute_depth(){
 	//	depth_map.copyTo(depth_map2);
 }
 
-void argus_depth::smooth_depth_map(){
+inline void argus_depth::smooth_depth_map(){
 	cv::Mat holes;
 	threshold(depth_map,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
 	inpaint(depth_map, holes, depth_map, 2.0 , cv::INPAINT_NS );
 }
 
-void argus_depth::detect_human(){
+inline cv::Mat argus_depth::find_skin(cv::Mat input){
+	cv::Mat result;
+	cvtColor(input, result, CV_BGR2YCrCb);
+	inRange(result, cv::Scalar(60, 130, 80), cv::Scalar(255, 170, 125), result);
+	return result;
+}
 
-	human_group.clear();
-	//		hog.setSVMDetector(ocl::HOGDescriptor::getDefaultPeopleDetector());
-	//		ocl::oclMat img_ocl;
-	//		img_ocl.upload(*BW_rect_mat_left);
+/*
+ * Detects possible humans based on 2D color information.
+ */
+inline void argus_depth::detect_human(){
+	std::vector<human> human_group;	//vector of possible humans
 
 	std::vector<cv::Rect> found, found_filtered;
+	std::vector<cv::Rect> faces;
 
-	//hog.detectMultiScale(BW_rect_mat_left, found, 0.5, cv::Size(8,8), cv::Size(0,0), 1.05, 0);   //Window stride. It must be a multiple of block stride.
+	cas_cla.detectMultiScale(rect_mat_left,faces, 1.5, 3);
+#if USE_GPU
+	hog.detectMultiScale(frame_ocl, found, 0.6, cv::Size(8,8), cv::Size(0,0), 1.10, 1);
+#else
 	hog.detectMultiScale(BW_rect_mat_left, found, 0, cv::Size(8,8), cv::Size(32,32), 1.08, 1);
-	//hog.detectMultiScale(img_ocl, found, 0, Size(8,8), Size(0,0), 1.05, 0);
+#endif
 
-	//filter double detections
-	size_t i, j;
-	for( i = 0; i < found.size(); i++ )
+	//filter double human detections
+	int i, j;
+	for(int i = 0; i < (int)found.size(); i++ )
 	{
 		cv::Rect r = found[i];
-		for( j = 0; j < found.size(); j++ )
+		for( j = 0; j < (int)found.size(); j++ )
 			if( j != i && (r & found[j]) == r)
 				break;
-		if( j == found.size() )
+		if( j == (int)found.size() )
 			found_filtered.push_back(r);
 	}
 
-	this->calculate_motion();
-
-	//Fix rectangles size and calculate area
-	int found_area[found_filtered.size()];
-	for( i = 0; i < found_filtered.size(); i++ )
+	/*
+	 * Assign faces to detected bodies. Choose the best
+	 * face by measuring the distance of the face from
+	 * the body center.
+	 */
+	for( i = 0; i < (int)found_filtered.size(); i++ )
 	{
-		//found_filtered[i].x += cvRound(r.width*0.1);
-		//found_filtered[i].width = cvRound(r.width*0.8);
-		//found_filtered[i].y += cvRound(found_filtered[i].height*0.08);
-		//found_filtered[i].height = cvRound(found_filtered[i].height*1.05);
-		found_area[i] = found_filtered[i].area();
-		found_filtered[i]=(*clearview_mask) & found_filtered[i];
+		human human_candidate;
+		human_candidate.propability = 0;
+		human_candidate.bounding_rect =(clearview_mask) & found_filtered[i];
+		human_candidate.human_center = cv::Point(human_candidate.bounding_rect.x + human_candidate.bounding_rect.width/2, human_candidate.bounding_rect.y + human_candidate.bounding_rect.height/2);
+		for(j = 0; j<(int)faces.size();j++)
+		{
+			cv::Point head_candidate = cv::Point(faces[j].x + faces[j].width/2, faces[j].y + faces[j].height/2);
+			if( human_candidate.bounding_rect.contains(head_candidate) )
+			{
+				if(human_candidate.head_rect == cv::Rect())		//head not yet assigned
+				{
+					human_candidate.head_rect = faces[j];
+					human_candidate.head_center = head_candidate;
+				}else if(fast_distance(head_candidate,human_candidate.human_center) > fast_distance(human_candidate.head_center ,human_candidate.human_center)){
+					human_candidate.head_rect = faces[j];
+					human_candidate.head_center = cv::Point(human_candidate.head_rect.x + human_candidate.head_rect.width/2, human_candidate.head_rect.y + human_candidate.head_rect.height/2);
+				}
+				faces.erase(faces.begin()+j);
+			}
+		}
 
-		human candidate;
-		candidate.bounding_rect = found_filtered[i];
-		cv::Mat movement_ROI = frame_diff(found_filtered[i]);
-		candidate.movement_perc =  (float)countNonZero(movement_ROI)/movement_ROI.total();
-		human_group.push_back(candidate);
+		if(human_candidate.head_rect != cv::Rect()){
+			human_candidate.bounding_rect = human_candidate.bounding_rect | human_candidate.head_rect;
+			float dist = fast_distance(human_candidate.head_center ,human_candidate.human_center);
+			int skin = cv::countNonZero(find_skin(rect_mat_left(human_candidate.head_rect)));
+			human_candidate.propability = 0.5 * 2*dist/(human_candidate.bounding_rect.height-human_candidate.head_rect.height) + 0.5*(float)skin/human_candidate.head_rect.area();
+		}
+		human_group.push_back(human_candidate);
 	}
 
-	for( int i = 0; i < (int)human_group.size(); i++ )
-	{
-		cv::Rect r = human_group[i].bounding_rect;
-		std::stringstream ss;
-		ss << human_group[i].movement_perc;
-		cv::putText(rect_mat_right, ss.str(), r.tl(), cv::FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(0,0,255), 1, 8, false );
+#if DEBUG_MODE
+	debug_detected_human(human_group);
+#endif
 
-		rectangle(rect_mat_left, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
-		rectangle(rect_mat_right, r.tl(), r.br(), cv::Scalar(0,255,0), 1);
-	}
-
-	std::vector<cv::Rect> found_person;
-	if(found_filtered.size()>1){
+	human user;
+	if(human_group.size()>1){
 		//find the biggest human
-		int max = found_area[0];
+		float max = human_group.at(0).bounding_rect.area() * (1 + human_group.at(0).propability);
 		int pos = 0;
-		for( i = 1; i < found_filtered.size(); i++ ){
-			if (found_area[i]>max){
-				max = found_area[i];
+		for( i = 1; i < (int)human_group.size(); i++ ){
+			if (human_group.at(i).bounding_rect.area() * (1 + human_group.at(i).propability)>max){
+				max = human_group.at(i).bounding_rect.area() * (1 + human_group.at(i).propability);
 				pos = i;
 			}
 		}
-
-		cv::Point p1(found_filtered[pos].x+found_filtered[pos].width/2,found_filtered[pos].y+found_filtered[pos].height/2);
-		for( i = 0; i < found_filtered.size(); i++ ){
-			cv::Point p2(found_filtered[i].x+found_filtered[i].width/2,found_filtered[i].y+found_filtered[i].height/2);
-			int distance = sqrt((p1.x-p2.x)*(p1.x-p2.x)+(p1.y-p2.y)*(p1.y-p2.y));
-			if(distance<found_filtered[pos].width/2 && distance<found_filtered[pos].height/2){
-				found_person.push_back(found_filtered[i]);
-			}
-		}
-
-	}else if(found_filtered.size()==1){
-		found_person.push_back(found_filtered[0]);
+		user = human_group.at(pos);
 	}
 
-
-	std::vector<cv::Point> points_person;
-	for( i = 0; i < found_person.size(); i++ ){
-		rectangle(rect_mat_left, found_person[i].tl(), found_person[i].br(), cv::Scalar(0,255,255), 2);
-		cv::Point p1=found_person[i].tl();
-		cv::Point p2(found_person[i].x+found_person[i].width,found_person[i].y);
-		cv::Point p3=found_person[i].br();
-		cv::Point p4(found_person[i].x,found_person[i].y+found_person[i].height);
-		points_person.push_back(p1);
-		points_person.push_back(p2);
-		points_person.push_back(p3);
-		points_person.push_back(p4);
-	}
-	if(points_person.size()>1){
-		cv::Rect final = boundingRect(points_person);
-		rectangle(rect_mat_left, final.tl(), final.br(), cv::Scalar(0,0,255), 3);
+	if(human_group.size()>0){
+		rectangle(rect_mat_right, user.bounding_rect.tl(), user.bounding_rect.br(), cv::Scalar(255,0,255), 3);
 		//if(final.area()>human_anchor.area())human_anchor=final;
-		if(final.area()>0.7*human_anchor.area())human_anchor=final;
+		if(user.bounding_rect.area()>0.7*human_anchor.area())human_anchor=user.bounding_rect;
 
 	}
-	human_anchor=(*clearview_mask) & human_anchor;
-	rectangle(rect_mat_left, human_anchor.tl(), human_anchor.br(), cv::Scalar(255,0,255), 1);
+	human_anchor=(clearview_mask) & human_anchor;
 
-	//	person_left = (*BW_rect_mat_left)(human_anchor).clone();
-	//	person_right = (*BW_rect_mat_right)(human_anchor).clone();
+	//person_left = (*BW_rect_mat_left)(human_anchor).clone();
+	//person_right = (*BW_rect_mat_right)(human_anchor).clone();
 
 }
 
@@ -679,15 +699,6 @@ void argus_depth::camera_view(cv::Mat& image, cv::Mat& destimage, cv::Mat& disp,
 int main(){
 	int key_pressed=255;
 
-	//	vector<ocl::Info> info;
-	//	CV_Assert(ocl::getDevice(info));
-	//	int devnums =ocl::getDevice(info);
-
-
-	//	if(devnums<1){
-	//		std::cout << "no OPENCL device found\n";
-	//	}
-
 	argus_depth *eye_stereo = new argus_depth;
 	bool loop=false;
 	while(1){
@@ -719,5 +730,6 @@ int main(){
 	}
 
 	delete(eye_stereo);
+
 	return 0;
 }
