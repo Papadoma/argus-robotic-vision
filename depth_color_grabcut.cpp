@@ -169,14 +169,54 @@ int main(){
 	cv::Mat disparity, image3d;
 	depth.convertTo(disparity,CV_32FC1,32./255);
 	//disparity = max(disparity,1);
-	reprojectImageTo3D(disparity, image3d, Q, false, -1);
+	reprojectImageTo3D(disparity, image3d, Q, true, -1);
 
-	coplanarity(image3d);
+	//coplanarity(image3d);
 
-	disparity = cloud_to_disparity(image3d);
-	//disparity.convertTo(disparity, CV_32FC1);
-	cv::namedWindow("cloud_map");
-	imshow("cloud_map", disparity);
+	cv::Mat color_YCrCb;
+	cv::cvtColor(color,color_YCrCb,CV_BGR2HSV);
+	cv::namedWindow("YCrCb");
+	imshow("YCrCb", color_YCrCb);
+
+	cv::Mat in[] = { depth, color_YCrCb };
+
+	cv::Mat DCrCb = cv::Mat(image3d.size(),CV_8UC3);
+	int from_to[] = { 0,0, 1,1, 2,2};
+	mixChannels( in, 2, &DCrCb, 1, from_to, 3 );
+
+	cv::namedWindow("DCrCb");
+	cv::namedWindow("human_mask");
+	imshow("DCrCb", DCrCb);
+	cv::Scalar ulimits;
+	cv::Scalar llimits;
+	//cv::Mat human_mask = cv::Mat::zeros(DCrCb.rows + 2, DCrCb.cols + 2, CV_8U);
+
+	//int Dl_value=15,Du_value=15, Cr_value=5, Cb_value=5;
+	int Xu_value=0,Xl_value=0,Yu_value=0,Yl_value=0,Zu_value=0,Zl_value=0;
+	cv::namedWindow("bars");
+	cv::createTrackbar("Xupper", "bars", &Xu_value, 50);
+	cv::createTrackbar("Xlower", "bars", &Xl_value, 50);
+	cv::createTrackbar("Yupper", "bars", &Yu_value, 50);
+	cv::createTrackbar("Ylower", "bars", &Yl_value, 50);
+	cv::createTrackbar("Zupper", "bars", &Zu_value, 50);
+	cv::createTrackbar("Zlower", "bars", &Zl_value, 50);
+
+	while(1){
+		cv::Mat human_mask = cv::Mat::zeros(DCrCb.rows + 2, DCrCb.cols + 2, CV_8U);
+		//ulimits = cv::Scalar(cv::getTrackbarPos("Dupper", "bars"),cv::getTrackbarPos("Cr", "bars"),cv::getTrackbarPos("Cb", "bars"));
+		//llimits = cv::Scalar(cv::getTrackbarPos("Dlower", "bars"),cv::getTrackbarPos("Cr", "bars"),cv::getTrackbarPos("Cb", "bars"));
+		ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "bars"),cv::getTrackbarPos("Yupper", "bars"),cv::getTrackbarPos("Zupper", "bars"));
+		llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "bars"),cv::getTrackbarPos("Ylower", "bars"),cv::getTrackbarPos("Zlower", "bars"));
+
+		floodFill(image3d, human_mask, cv::Point(320,240), 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+		imshow("human_mask", human_mask);
+		int key = cv::waitKey(1) & 255;
+		if(key == 27)break;
+	}
+	//	disparity = cloud_to_disparity(image3d);
+	//	//disparity.convertTo(disparity, CV_32FC1);
+	//	cv::namedWindow("cloud_map");
+	//	imshow("cloud_map", disparity);
 
 	//pcl::PointCloud<pcl::PointXYZ>::Ptr cloud (new pcl::PointCloud<pcl::PointXYZ>);
 
