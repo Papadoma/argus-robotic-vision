@@ -29,6 +29,8 @@ private:
 
 	human user;
 
+	cv::Scalar ulimits;
+	cv::Scalar llimits;
 
 	cv::Mat cameraMatrix[2], distCoeffs[2];
 	cv::Mat R, T, E, F, Q;
@@ -83,7 +85,7 @@ private:
 	void camera_view(cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat&, cv::Mat&, cv::Mat&, cv::Mat&);
 	void lookat(cv::Point3d from, cv::Point3d to, cv::Mat& destR);
 	void eular2rot(double yaw,double pitch, double roll,cv::Mat& dest);
-
+	int Xu_value, Xl_value,Yu_value,Yl_value,Zu_value,Zl_value;
 public:
 	double baseline;
 	cv::Point3d viewpoint;
@@ -160,6 +162,16 @@ argus_depth::argus_depth()
 
 	//clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
 	clearview_mask = roi1 & roi2;
+
+	Xu_value=20,Xl_value=20,Yu_value=10,Yl_value=10,Zu_value=50,Zl_value=50;
+	cv::namedWindow("bars");
+	cv::createTrackbar("Xupper", "bars", &Xu_value, 100);
+	cv::createTrackbar("Xlower", "bars", &Xl_value, 100);
+	cv::createTrackbar("Yupper", "bars", &Yu_value, 100);
+	cv::createTrackbar("Ylower", "bars", &Yl_value, 100);
+	cv::createTrackbar("Zupper", "bars", &Zu_value, 100);
+	cv::createTrackbar("Zlower", "bars", &Zl_value, 100);
+
 }
 
 //Destructor
@@ -425,7 +437,13 @@ inline void argus_depth::detect_human(){
 }
 
 inline void argus_depth::segment_human(){
-	//floodFill(image3d, human_mask, cv::Point(320,240), 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+	cv::Mat human_mask = cv::Mat::zeros(user.point_cloud.rows + 2, user.point_cloud.cols + 2, CV_8U);
+
+	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "bars"),cv::getTrackbarPos("Yupper", "bars"),cv::getTrackbarPos("Zupper", "bars"));
+	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "bars"),cv::getTrackbarPos("Ylower", "bars"),cv::getTrackbarPos("Zlower", "bars"));
+
+	floodFill(user.point_cloud, human_mask, cv::Point(user.point_cloud.cols/2,user.point_cloud.rows/2), 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+	imshow("human_mask", human_mask);
 }
 
 void argus_depth::take_snapshot(){
