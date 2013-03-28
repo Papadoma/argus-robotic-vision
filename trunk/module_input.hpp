@@ -127,6 +127,8 @@ inline module_eye::module_eye(std::string filename_left, std::string filename_ri
 
 	width = file_left.get(CV_CAP_PROP_FRAME_WIDTH);
 	height = file_left.get(CV_CAP_PROP_FRAME_HEIGHT);
+	file_left.set(CV_CAP_PROP_FPS , 60);
+	file_right.set(CV_CAP_PROP_FPS , 60);
 }
 
 inline module_eye::~module_eye(){

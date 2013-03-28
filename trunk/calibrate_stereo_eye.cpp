@@ -16,6 +16,8 @@
 #include "module_input.hpp"
 //#include "module_file.hpp"
 
+#define SWAP_CAMS true
+
 using namespace std;
 using namespace cv;
 
@@ -159,6 +161,11 @@ void eye_stereo_calibrate::refresh_frame(){
 	//		capture_right->retrieve(*mat_right);
 
 	input_module.getFrame(mat_left,mat_right);
+#if SWAP_CAMS
+	cv::Mat temp = mat_left.clone();
+	mat_left = mat_right.clone();
+	mat_right = temp.clone();
+#endif
 	mat_left.copyTo(chess_mat_left);
 	mat_right.copyTo(chess_mat_right);
 
