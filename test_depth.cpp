@@ -38,7 +38,7 @@ test_depth::test_depth(){
 	width=framesize.width;
 
 
-	numberOfDisparities=32;
+	numberOfDisparities=48;
 
 	sgbm.preFilterCap = 63; //previously 31
 	sgbm.SADWindowSize = 1;
