@@ -103,8 +103,8 @@ public:
 
 //Constructor
 argus_depth::argus_depth()
-:detect_user_flag(true),
- frame_counter(0)
+:frame_counter(0)
+,detect_user_flag(true)
 {
 	std::cout << "[Argus] Initializing detectors" << std::endl;
 	if(!cas_cla.load("haarcascade_frontalface_alt.xml")){
@@ -319,7 +319,7 @@ inline void argus_depth::compute_depth(){
 	sgbm(person_left,person_right,user.depth);
 	user.depth = (user.depth)(cv::Rect(numberOfDisparities, 0, user.bounding_rect.width, user.bounding_rect.height)).clone();
 	user.depth.convertTo(user.depth, CV_32FC1, 1./16);
-	reprojectImageTo3D(user.depth, user.point_cloud, Q, true, -1);
+	reprojectImageTo3D(user.depth, user.point_cloud, Q, false, -1);
 	user.depth.convertTo(user.depth_viewable, CV_8UC3, 255./(numberOfDisparities));
 	//this->smooth_depth_map();
 }
@@ -444,6 +444,30 @@ inline void argus_depth::segment_human(){
 
 	floodFill(user.point_cloud, human_mask, cv::Point(user.point_cloud.cols/2,user.point_cloud.rows/2), 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
 	imshow("human_mask", human_mask);
+
+	cv::Mat edge;
+	cv::Mat kernel = (cv::Mat_<int>(6, 1) << 1,1,1,-1,-1,-1);
+	filter2D(user.point_cloud, edge, -1, kernel);
+
+	cv::Mat c1 = cv::Mat(edge.size(), CV_32FC1);
+	cv::Mat c2 = cv::Mat(edge.size(), CV_32FC1);
+	cv::Mat c3 = cv::Mat(edge.size(), CV_32FC1);
+	cv::Mat out[] = {c1, c2, c3};
+	int from_to[] = { 0,0 , 1,0 , 2,0 };
+	mixChannels( &edge, 1, out, 3, from_to, 3 );
+
+
+//	/std::cout<< c1<<std::endl;
+	//normalize(out, out, 0.0, 255.0, cv::NORM_MINMAX);
+
+	imshow("edge", edge);
+	imshow("c1", c1);
+	imshow("c2", c2);
+	imshow("c3", c3);
+	//cloud_to_disparity(user.depth_viewable, edge);
+	//Canny(edge, edge, 100, 300);
+
+	//imshow("edge2", edge);
 }
 
 void argus_depth::take_snapshot(){
@@ -642,12 +666,12 @@ void argus_depth::cloud_to_disparity(cv::Mat disparity, cv::Mat xyz){
 		for(int j=0;j<xyz.cols;j++){
 			z=xyz.ptr<float>(i)[3*j+2];
 			y=xyz.ptr<float>(i)[3*j+1];
-			if(y>-95&&z>-350){
-				disparity.at<float>(i,j)=Q.at<double>(2,3)/z*Q.at<double>(3,2);
-			}else{
-				disparity.at<float>(i,j)=0;
-			}
-
+			//			if(y>-95&&z>-350){
+			//				disparity.at<float>(i,j)=Q.at<double>(2,3)/z*Q.at<double>(3,2);
+			//			}else{
+			//				disparity.at<float>(i,j)=0;
+			//			}
+			disparity.at<float>(i,j)=Q.at<double>(2,3)/z*Q.at<double>(3,2);
 		}
 	}
 
