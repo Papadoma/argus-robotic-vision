@@ -92,6 +92,7 @@ private:
 	void lookat(cv::Point3d from, cv::Point3d to, cv::Mat& destR);
 	void eular2rot(double yaw,double pitch, double roll,cv::Mat& dest);
 	int Xu_value, Xl_value,Yu_value,Yl_value,Zu_value,Zl_value;
+	int canny_up, canny_dn;
 public:
 	double baseline;
 	cv::Point3d viewpoint;
@@ -169,15 +170,18 @@ argus_depth::argus_depth()
 	//clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
 	clearview_mask = roi1 & roi2;
 
-	Xu_value=30,Xl_value=30,Yu_value=30,Yl_value=30,Zu_value=30,Zl_value=30;
+	Xu_value=10,Xl_value=10,Yu_value=10,Yl_value=10,Zu_value=20,Zl_value=60;
+	canny_up = 100, canny_dn =40;
 	cv::namedWindow("XYZ floodfill");
+	cv::createTrackbar("canny up", "XYZ floodfill", &canny_up, 200);
+	cv::createTrackbar("canny down", "XYZ floodfill", &canny_dn, 200);
+
 	cv::createTrackbar("Xupper", "XYZ floodfill", &Xu_value, 100);
 	cv::createTrackbar("Xlower", "XYZ floodfill", &Xl_value, 100);
 	cv::createTrackbar("Yupper", "XYZ floodfill", &Yu_value, 100);
 	cv::createTrackbar("Ylower", "XYZ floodfill", &Yl_value, 100);
 	cv::createTrackbar("Zupper", "XYZ floodfill", &Zu_value, 100);
 	cv::createTrackbar("Zlower", "XYZ floodfill", &Zl_value, 100);
-
 
 }
 
@@ -326,7 +330,7 @@ inline void argus_depth::compute_depth(){
 	sgbm(person_left,person_right,user.depth);
 	user.depth = (user.depth)(cv::Rect(numberOfDisparities, 0, user.bounding_rect.width, user.bounding_rect.height)).clone();
 	user.depth.convertTo(user.depth, CV_32FC1, 1./16);
-	//smooth_depth_map(user.depth);
+	smooth_depth_map(user.depth);
 	reprojectImageTo3D(user.depth, user.point_cloud, Q, false, -1);
 	user.depth.convertTo(user.depth_viewable, CV_8UC3, 255./(numberOfDisparities));
 
@@ -339,8 +343,9 @@ inline void argus_depth::smooth_depth_map(cv::Mat& depth_map){
 	//	cv::Mat holes;
 	//	threshold(depth_map,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
 	//	inpaint(depth_map, holes, depth_map, 2.0 , cv::INPAINT_NS );
-	cv::Mat local = depth_map.clone();
-	bilateralFilter(local, depth_map, 3, 30, 30);
+	//cv::Mat local = depth_map.clone();
+	//bilateralFilter(local, depth_map, 3, 30, 30);
+	cv::medianBlur(depth_map,depth_map,5);
 }
 
 /*
@@ -453,46 +458,49 @@ inline void argus_depth::segment_human(){
 	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
-	ulimits2 = cv::Scalar(cv::getTrackbarPos("Xupper", "D_color floodfill"),cv::getTrackbarPos("Yupper", "D_color floodfill"),cv::getTrackbarPos("Zupper", "D_color floodfill"));
-	llimits2 = cv::Scalar(cv::getTrackbarPos("Xlower", "D_color floodfill"),cv::getTrackbarPos("Ylower", "D_color floodfill"),cv::getTrackbarPos("Zlower", "D_color floodfill"));
-
-
 	if(user_mass_center ==  cv::Point())user_mass_center = cv::Point(user.point_cloud.cols/2,user.point_cloud.rows/2);
 
 	floodFill(user.point_cloud, human_mask,user_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
 
 	cv::Moments mask_moments = moments(human_mask, true);
+	cv::dilate(human_mask,human_mask,cv::Mat(),cv::Point(),2);
 	human_mask.copyTo(user_mask);
+
 	cv::circle(human_mask, user_mass_center, 5, cv::Scalar(127), CV_FILLED);
 	imshow("human_mask", human_mask);
 	user_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
 
+	cv::Mat frame_edge, human_lum;
+	cv::Rect crop(1,1,user_mask.cols-2,user_mask.rows-2);
 
-	cv::Mat edge;
-	cv::Mat kernel = (cv::Mat_<int>(6, 1) << 1,1,1,-1,-1,-1);
-	filter2D(user.point_cloud, edge, -1, kernel);
+	Canny(BW_rect_mat_left, frame_edge, canny_up, canny_dn );
+	bitwise_and(frame_edge(user.bounding_rect), user_mask(crop),human_lum);
 
-	cv::Mat c1 = cv::Mat(edge.size(), CV_32FC1);
-	cv::Mat c2 = cv::Mat(edge.size(), CV_32FC1);
-	cv::Mat c3 = cv::Mat(edge.size(), CV_32FC1);
-	cv::Mat out[] = {c1, c2, c3};
-	int from_to[] = { 0,0 , 1,0 , 2,0 };
-	mixChannels( &edge, 1, out, 3, from_to, 3 );
+	imshow("edges", human_lum);
+	morphologyEx(human_lum, human_lum, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 2 );
+	imshow("edges closed", human_lum);
 
-	//cv::Mat test = c1.mul(c1) + c3.mul(c3);
-	//divide(c3, c1, test);
-	//std::cout<< test<<std::endl;
-	//normalize(test, test, 0.0, 255.0, cv::NORM_MINMAX);
+	std::vector<std::vector<cv::Point> > contours;
+	std::vector<cv::Vec4i> hierarchy;
+	findContours( human_lum, contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE);
+//	for( int i = 0; i< (int)contours.size(); i++ )
+//	{
+//		double area = contourArea(contours[i]);
+//		if(area < user.bounding_rect.area()*0.2){
+//			contours.erase(contours.begin()+i);
+//			std::cout<<"deleted!" << std::endl;
+//		}
+//	}
+	cv::RNG rng(12345);
+	cv::Mat drawing = cv::Mat::zeros( human_lum.size(), CV_8UC1 );
+	for( int i = 0; i< (int)contours.size(); i++ )
+	{
+		double area = contourArea(contours[i]);
+		cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
+		if(area > user.bounding_rect.area()*0.01)drawContours( drawing, contours, i, cv::Scalar(255), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+	}
+	imshow( "Contours", drawing );
 
-	imshow("edge", edge);
-
-	//	imshow("c1", c1);
-	//	imshow("c2", c2);
-	//	imshow("c3", c3);
-	//	//cloud_to_disparity(user.depth_viewable, edge);
-	//	//Canny(edge, edge, 100, 300);
-	//
-	//	//imshow("edge2", edge);
 }
 
 void argus_depth::adjust_mask(){
