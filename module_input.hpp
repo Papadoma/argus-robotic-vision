@@ -38,7 +38,7 @@ public:
 	module_eye();
 	module_eye(std::string, std::string);
 	~module_eye();
-	void getFrame(cv::Mat&, cv::Mat&);
+	bool getFrame(cv::Mat&, cv::Mat&);
 	cv::Size getSize();
 
 };
@@ -150,7 +150,7 @@ inline module_eye::~module_eye(){
 	}
 }
 
-inline void module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
+inline bool module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
 	if (use_camera){
 #if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
 		CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 2000);
@@ -167,6 +167,7 @@ inline void module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
 		capture_left.retrieve(mat_left);
 		capture_right.retrieve(mat_right);
 #endif
+		return true;
 	}else{
 		if(!file_left.grab())EoF=true;
 		if(!file_right.grab())EoF=true;
@@ -174,6 +175,9 @@ inline void module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
 		if(EoF==false){
 			file_left.retrieve(mat_left,3);
 			file_right.retrieve(mat_right,3);
+			return true;
+		}else{
+			return false;
 		}
 	}
 }

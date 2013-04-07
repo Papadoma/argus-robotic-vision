@@ -11,7 +11,7 @@ struct tracking_objects{
 
 class tracking{
 private:
-	module_cam test;
+	module_eye* test;
 	std::vector<cv::Point> mask_points;
 	cv::Mat left,right;
 	cv::Mat mask_frame,tracking_view;
@@ -41,12 +41,13 @@ tracking::tracking(){
 	H_value_max = 255;
 	H_value_min = 0;
 
+	test =new module_eye("left.mpg","right.mpg");
 
-	mask_frame = cv::Mat::zeros(test.getSize(), CV_8UC3);
-	tracking_view = cv::Mat::zeros(test.getSize(), CV_8UC3);
+	mask_frame = cv::Mat::zeros(test->getSize(), CV_8UC3);
+	tracking_view = cv::Mat::zeros(test->getSize(), CV_8UC3);
 
-	height = test.getSize().height;
-	width = test.getSize().width;
+	height = test->getSize().height;
+	width = test->getSize().width;
 }
 void tracking::threshold_image(){
 	cvtColor(left, mask_frame, CV_BGR2HSV);
@@ -162,7 +163,7 @@ void tracking::draw_ROI(){
 
 void tracking::refresh_frame(){
 	//test.getFrame(left, right);
-	test.getFrame(left);
+	test->getFrame(left, right);
 	tracking_view = left.clone();
 	draw_ROI();
 }
