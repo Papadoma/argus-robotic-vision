@@ -9,27 +9,29 @@
 
 #include "module_input.hpp"
 
-struct human{
-	float propability;
+struct human_struct{
+	float propability;				//Propability that a detection is indeed a human
+	cv::Rect body_bounding_rect;	//Bounding rectagle of the human
+	cv::Point human_center;			//2D center of bounding rectangle
+	cv::Rect head_bounding_rect;	//Bounding rectangle of head (if detected)
+	cv::Point head_center;			//2D center of bounding rectangle of head
+};
 
-	cv::Rect bounding_rect;
-	cv::Point human_center;
+struct user_struct :public human_struct{
+	cv::Point3f position_3d;		//3D position of user in its mask mass center, as acquired by reprojectImageto3D
+	cv::Mat depth;					//disparity map
+	cv::Mat depth_viewable;			//disparity map, scaled to CV_8UC1
+	cv::Mat point_cloud;			//3D points of user scene, as acquired by reprojectImageto3D
 
-	cv::Rect head_rect;
-	cv::Point head_center;
-
-	cv::Mat depth;
-	cv::Mat depth_viewable;
-	cv::Mat point_cloud;
+	cv::Mat user_mask;				//The mask which seperates user from background
+	cv::Point mask_mass_center;		//Mass center of mask
 };
 
 class argus_depth{
 private:
 	module_eye* input_module;
 
-	human user;
-	cv::Point user_mass_center;
-	cv::Mat user_mask;
+	user_struct user;
 
 	cv::Scalar ulimits;
 	cv::Scalar llimits;
@@ -73,7 +75,7 @@ private:
 	unsigned int fast_distance(cv::Point, cv::Point);
 
 
-	void debug_detected_human(std::vector<human>);
+	void debug_detected_human(std::vector<human_struct>);
 	void debug_detected_user();
 	void cloud_to_disparity(cv::Mat&, cv::Mat);
 
@@ -86,6 +88,7 @@ private:
 	void compute_depth();
 	void smooth_depth_map(cv::Mat&);
 	void segment_human();
+	void calculate_user_position();
 	void adjust_mask();
 
 	void camera_view(cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat&, cv::Mat&, cv::Mat&, cv::Mat&);
@@ -133,7 +136,7 @@ argus_depth::argus_depth()
 	height = framesize.height;
 	width = framesize.width;
 
-	user.bounding_rect = cv::Rect(width/2,height/2,10,10);
+	user.body_bounding_rect = cv::Rect(width/2,height/2,10,10);
 	user.propability = -1;
 
 	baseline = 9.5;
@@ -165,23 +168,23 @@ argus_depth::argus_depth()
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
-	sgbm.fullDP = true;
+	sgbm.fullDP = false;
 
 	//clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
 	clearview_mask = roi1 & roi2;
 
-	Xu_value=10,Xl_value=10,Yu_value=10,Yl_value=10,Zu_value=20,Zl_value=60;
-	canny_up = 100, canny_dn =40;
-	cv::namedWindow("XYZ floodfill");
+	Xu_value=40,Xl_value=40,Yu_value=40,Yl_value=40,Zu_value=170,Zl_value=170;
+	canny_up = 20, canny_dn =60;
+	cv::namedWindow("XYZ floodfill",CV_WINDOW_NORMAL );
 	cv::createTrackbar("canny up", "XYZ floodfill", &canny_up, 200);
 	cv::createTrackbar("canny down", "XYZ floodfill", &canny_dn, 200);
 
-	cv::createTrackbar("Xupper", "XYZ floodfill", &Xu_value, 100);
-	cv::createTrackbar("Xlower", "XYZ floodfill", &Xl_value, 100);
-	cv::createTrackbar("Yupper", "XYZ floodfill", &Yu_value, 100);
-	cv::createTrackbar("Ylower", "XYZ floodfill", &Yl_value, 100);
-	cv::createTrackbar("Zupper", "XYZ floodfill", &Zu_value, 100);
-	cv::createTrackbar("Zlower", "XYZ floodfill", &Zl_value, 100);
+	cv::createTrackbar("Xupper", "XYZ floodfill", &Xu_value, 500);
+	cv::createTrackbar("Xlower", "XYZ floodfill", &Xl_value, 500);
+	cv::createTrackbar("Yupper", "XYZ floodfill", &Yu_value, 500);
+	cv::createTrackbar("Ylower", "XYZ floodfill", &Yl_value, 500);
+	cv::createTrackbar("Zupper", "XYZ floodfill", &Zu_value, 500);
+	cv::createTrackbar("Zlower", "XYZ floodfill", &Zl_value, 500);
 
 }
 
@@ -205,13 +208,13 @@ inline unsigned int argus_depth::fast_distance(cv::Point P1, cv::Point P2){
 	return(x);
 }
 
-inline void argus_depth::debug_detected_human(std::vector<human> list){
+inline void argus_depth::debug_detected_human(std::vector<human_struct> list){
 	cv::Mat human_frame = rect_mat_left.clone();
 	for( int i = 0; i < (int)list.size(); i++ )
 	{
 		cv::Scalar color = cv::Scalar((6*i*255/list.size())%255,8*(255-i*255/list.size())%255,i*10/list.size()%255);
-		rectangle(human_frame, list[i].bounding_rect.tl(), list[i].bounding_rect.br(), color, 2);
-		if(list[i].head_rect != cv::Rect())rectangle(human_frame, list[i].head_rect.tl(), list[i].head_rect.br(), color, 2);
+		rectangle(human_frame, list[i].body_bounding_rect.tl(), list[i].body_bounding_rect.br(), color, 2);
+		if(list[i].head_bounding_rect != cv::Rect())rectangle(human_frame, list[i].head_bounding_rect.tl(), list[i].head_bounding_rect.br(), color, 2);
 		std::stringstream ss;
 		ss<<list[i].propability;
 		cv::putText(human_frame, ss.str(),list[i].human_center,0,0.5,cv::Scalar(255,255,255));
@@ -220,21 +223,23 @@ inline void argus_depth::debug_detected_human(std::vector<human> list){
 }
 
 inline void argus_depth::debug_detected_user(){
-	cv::Mat user_frame (user.bounding_rect.height, 2*user.bounding_rect.width, CV_8UC3);
-	cv::Mat ROI1 = user_frame(cv::Rect(0,0,user.bounding_rect.width,user.bounding_rect.height));
-	cv::Mat ROI2 = user_frame(cv::Rect(user.bounding_rect.width,0,user.bounding_rect.width,user.bounding_rect.height));
+	cv::Mat user_frame (user.body_bounding_rect.height, 2*user.body_bounding_rect.width, CV_8UC3);
+	cv::Mat ROI1 = user_frame(cv::Rect(0,0,user.body_bounding_rect.width,user.body_bounding_rect.height));
+	cv::Mat ROI2 = user_frame(cv::Rect(user.body_bounding_rect.width,0,user.body_bounding_rect.width,user.body_bounding_rect.height));
 
-	rect_mat_left(user.bounding_rect).copyTo(ROI1);
+	rect_mat_left(user.body_bounding_rect).copyTo(ROI1);
 	applyColorMap(user.depth_viewable, ROI2, cv::COLORMAP_JET);
 	imshow("detected user", user_frame);
 }
 
 inline void argus_depth::refresh_frame(){
-	input_module->getFrame(mat_left,mat_right);
+	if(input_module->getFrame(mat_left,mat_right)){
 
-	remap(mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
-	remap(mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
-
+		remap(mat_left, rect_mat_left, rmap[0][0], rmap[0][1], CV_INTER_LINEAR);
+		remap(mat_right, rect_mat_right, rmap[1][0], rmap[1][1], CV_INTER_LINEAR);
+	}else{
+		input_module = new module_eye("left.mpg","right.mpg");
+	}
 	cvtColor(rect_mat_left,BW_rect_mat_left,CV_BGR2GRAY);
 	cvtColor(rect_mat_right,BW_rect_mat_right,CV_BGR2GRAY);
 
@@ -315,7 +320,8 @@ void argus_depth::load_param(){
  * Compute the persons depth.
  */
 inline void argus_depth::compute_depth(){
-	cv::Rect refined_human_anchor = user.bounding_rect;
+
+	cv::Rect refined_human_anchor = user.body_bounding_rect;
 	refined_human_anchor.x = refined_human_anchor.x-numberOfDisparities;
 	refined_human_anchor.width = refined_human_anchor.width+numberOfDisparities;
 	refined_human_anchor = refined_human_anchor & clearview_mask;
@@ -328,10 +334,14 @@ inline void argus_depth::compute_depth(){
 #endif
 
 	sgbm(person_left,person_right,user.depth);
-	user.depth = (user.depth)(cv::Rect(numberOfDisparities, 0, user.bounding_rect.width, user.bounding_rect.height)).clone();
+	user.depth = (user.depth)(cv::Rect(numberOfDisparities, 0, user.body_bounding_rect.width, user.body_bounding_rect.height)).clone();
+	cv::Mat zeropadded_depth = cv::Mat::zeros(rect_mat_left.size(), CV_16SC1);
 	user.depth.convertTo(user.depth, CV_32FC1, 1./16);
-	smooth_depth_map(user.depth);
-	reprojectImageTo3D(user.depth, user.point_cloud, Q, false, -1);
+	//smooth_depth_map(user.depth);
+	user.depth.copyTo(zeropadded_depth(user.body_bounding_rect));
+
+	reprojectImageTo3D(zeropadded_depth, user.point_cloud, Q, false, -1);
+	user.point_cloud = user.point_cloud(user.body_bounding_rect).clone();
 	user.depth.convertTo(user.depth_viewable, CV_8UC3, 255./(numberOfDisparities));
 
 }
@@ -348,6 +358,10 @@ inline void argus_depth::smooth_depth_map(cv::Mat& depth_map){
 	cv::medianBlur(depth_map,depth_map,5);
 }
 
+inline void argus_depth::calculate_user_position(){
+	//user.human_position;
+}
+
 /*
  * Returns binary image mask on skin range.
  */
@@ -362,7 +376,7 @@ inline cv::Mat argus_depth::find_skin(cv::Mat input){
  * Detects possible humans based on 2D color information.
  */
 inline void argus_depth::detect_human(){
-	std::vector<human> human_group;	//vector of possible humans
+	std::vector<human_struct> human_group;	//vector of possible humans
 
 	std::vector<cv::Rect> found, found_filtered;
 	std::vector<cv::Rect> faces;
@@ -393,32 +407,32 @@ inline void argus_depth::detect_human(){
 	 */
 	for( i = 0; i < (int)found_filtered.size(); i++ )
 	{
-		human human_candidate;
+		human_struct human_candidate;
 		human_candidate.propability = 0;
-		human_candidate.bounding_rect =(clearview_mask) & found_filtered[i];
-		human_candidate.human_center = cv::Point(human_candidate.bounding_rect.x + human_candidate.bounding_rect.width/2, human_candidate.bounding_rect.y + human_candidate.bounding_rect.height/2);
+		human_candidate.body_bounding_rect =(clearview_mask) & found_filtered[i];
+		human_candidate.human_center = cv::Point(human_candidate.body_bounding_rect.x + human_candidate.body_bounding_rect.width/2, human_candidate.body_bounding_rect.y + human_candidate.body_bounding_rect.height/2);
 		for(j = 0; j<(int)faces.size();j++)
 		{
 			cv::Point head_candidate = cv::Point(faces[j].x + faces[j].width/2, faces[j].y + faces[j].height/2);
-			if( human_candidate.bounding_rect.contains(head_candidate) )
+			if( human_candidate.body_bounding_rect.contains(head_candidate) )
 			{
-				if(human_candidate.head_rect == cv::Rect())		//head not yet assigned
+				if(human_candidate.head_bounding_rect == cv::Rect())		//head not yet assigned
 				{
-					human_candidate.head_rect = faces[j];
+					human_candidate.head_bounding_rect = faces[j];
 					human_candidate.head_center = head_candidate;
 				}else if(fast_distance(head_candidate,human_candidate.human_center) > fast_distance(human_candidate.head_center ,human_candidate.human_center)){
-					human_candidate.head_rect = faces[j];
-					human_candidate.head_center = cv::Point(human_candidate.head_rect.x + human_candidate.head_rect.width/2, human_candidate.head_rect.y + human_candidate.head_rect.height/2);
+					human_candidate.head_bounding_rect = faces[j];
+					human_candidate.head_center = cv::Point(human_candidate.head_bounding_rect.x + human_candidate.head_bounding_rect.width/2, human_candidate.head_bounding_rect.y + human_candidate.head_bounding_rect.height/2);
 				}
 				faces.erase(faces.begin()+j);
 			}
 		}
 
-		if(human_candidate.head_rect != cv::Rect()){	//If head is detected
-			human_candidate.bounding_rect = human_candidate.bounding_rect | human_candidate.head_rect;
+		if(human_candidate.head_bounding_rect != cv::Rect()){	//If head is detected
+			human_candidate.body_bounding_rect = human_candidate.body_bounding_rect | human_candidate.head_bounding_rect;
 			float dist = fast_distance(human_candidate.head_center ,human_candidate.human_center);
-			int skin = cv::countNonZero(find_skin(rect_mat_left(human_candidate.head_rect)));
-			human_candidate.propability = 0.5 * 2*dist/(human_candidate.bounding_rect.height-human_candidate.head_rect.height) + 0.5*(float)skin/human_candidate.head_rect.area();
+			int skin = cv::countNonZero(find_skin(rect_mat_left(human_candidate.head_bounding_rect)));
+			human_candidate.propability = 0.5 * 2*dist/(human_candidate.body_bounding_rect.height-human_candidate.head_bounding_rect.height) + 0.5*(float)skin/human_candidate.head_bounding_rect.area();
 		}
 		human_group.push_back(human_candidate);
 	}
@@ -427,15 +441,15 @@ inline void argus_depth::detect_human(){
 	debug_detected_human(human_group);
 #endif
 
-	human possible_user;
+	human_struct possible_user;
 	possible_user.propability = 0;
 	if(human_group.size()>0){
 		//find the biggest human
-		float max = human_group.at(0).bounding_rect.area() * (1 + human_group.at(0).propability);
+		float max = human_group.at(0).body_bounding_rect.area() * (1 + human_group.at(0).propability);
 		int pos = 0;
 		for( i = 1; i < (int)human_group.size(); i++ ){
-			if (human_group.at(i).bounding_rect.area() * (1 + human_group.at(i).propability)>max){
-				max = human_group.at(i).bounding_rect.area() * (1 + human_group.at(i).propability);
+			if (human_group.at(i).body_bounding_rect.area() * (1 + human_group.at(i).propability)>max){
+				max = human_group.at(i).body_bounding_rect.area() * (1 + human_group.at(i).propability);
 				pos = i;
 			}
 		}
@@ -443,9 +457,12 @@ inline void argus_depth::detect_human(){
 	}
 
 	if(possible_user.propability > 0.9 * user.propability){
-		user = possible_user;
+		user.body_bounding_rect = possible_user.body_bounding_rect;
+		user.head_center = possible_user.head_center;
+		user.head_bounding_rect = possible_user.head_bounding_rect;
+		user.human_center = possible_user.human_center;
+		user.propability = possible_user.propability;
 	}
-
 
 	//person_left = (*BW_rect_mat_left)(human_anchor).clone();
 	//person_right = (*BW_rect_mat_right)(human_anchor).clone();
@@ -458,98 +475,100 @@ inline void argus_depth::segment_human(){
 	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
-	if(user_mass_center ==  cv::Point())user_mass_center = cv::Point(user.point_cloud.cols/2,user.point_cloud.rows/2);
+	if(user.mask_mass_center ==  cv::Point())user.mask_mass_center = cv::Point(user.body_bounding_rect.width/2,user.body_bounding_rect.height/2);
 
-	floodFill(user.point_cloud, human_mask,user_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+	floodFill(user.point_cloud, human_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
 
 	cv::Moments mask_moments = moments(human_mask, true);
 	cv::dilate(human_mask,human_mask,cv::Mat(),cv::Point(),2);
-	human_mask.copyTo(user_mask);
+	human_mask.copyTo(user.user_mask);
 
-	cv::circle(human_mask, user_mass_center, 5, cv::Scalar(127), CV_FILLED);
+	cv::circle(human_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
 	imshow("human_mask", human_mask);
-	user_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
+	user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
 
 	cv::Mat frame_edge, human_lum;
-	cv::Rect crop(1,1,user_mask.cols-2,user_mask.rows-2);
+	cv::Rect crop(1,1,user.user_mask.cols-2,user.user_mask.rows-2);
 
 	Canny(BW_rect_mat_left, frame_edge, canny_up, canny_dn );
-	bitwise_and(frame_edge(user.bounding_rect), user_mask(crop),human_lum);
+	bitwise_and(frame_edge(user.body_bounding_rect), user.user_mask(crop),human_lum);
 
 	imshow("edges", human_lum);
 	morphologyEx(human_lum, human_lum, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 2 );
 	imshow("edges closed", human_lum);
-
+cv::Mat test = human_lum.clone();
 	std::vector<std::vector<cv::Point> > contours;
 	std::vector<cv::Vec4i> hierarchy;
 	findContours( human_lum, contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE);
-//	for( int i = 0; i< (int)contours.size(); i++ )
-//	{
-//		double area = contourArea(contours[i]);
-//		if(area < user.bounding_rect.area()*0.2){
-//			contours.erase(contours.begin()+i);
-//			std::cout<<"deleted!" << std::endl;
-//		}
-//	}
+
+	//	for( int i = 0; i< (int)contours.size(); i++ )
+	//	{
+	//		double area = contourArea(contours[i]);
+	//		if(area < user.body_bounding_rect.area()*0.2){
+	//			contours.erase(contours.begin()+i);
+	//			std::cout<<"deleted!" << std::endl;
+	//		}
+	//	}
 	cv::RNG rng(12345);
 	cv::Mat drawing = cv::Mat::zeros( human_lum.size(), CV_8UC1 );
 	for( int i = 0; i< (int)contours.size(); i++ )
 	{
 		double area = contourArea(contours[i]);
 		cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-		if(area > user.bounding_rect.area()*0.01)drawContours( drawing, contours, i, cv::Scalar(255), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+		if(area > user.body_bounding_rect.area()*0.001)drawContours( drawing, contours, i, cv::Scalar(255), CV_FILLED, 8, hierarchy, 0, cv::Point() );
 	}
+
 	imshow( "Contours", drawing );
 
 }
 
 void argus_depth::adjust_mask(){
 	cv::Mat result;
-	cv::Mat mask_blank = cv::Mat::zeros(user_mask.size(), CV_8UC1);
+	cv::Mat mask_blank = cv::Mat::zeros(user.user_mask.size(), CV_8UC1);
 	//	int thickness_top = 10./exp(mask_blank.rows/height + 1);
 	//int thickness_sides = 10./exp(mask_blank.cols/width + 1);
 	int thickness_top = 5;
 	int thickness_sides = 5;
 
 	cv::line(mask_blank, cv::Point(0,0), cv::Point(mask_blank.cols,0), cv::Scalar(255), thickness_top);
-	cv::bitwise_and(mask_blank, user_mask, result);
+	cv::bitwise_and(mask_blank, user.user_mask, result);
 	if(cv::countNonZero(result)){
-		user.bounding_rect.y-=thickness_top;
-		user.bounding_rect.height+=thickness_top;
-		user_mass_center.y += thickness_top;
+		user.body_bounding_rect.y-=thickness_top;
+		user.body_bounding_rect.height+=thickness_top;
+		user.mask_mass_center.y += thickness_top;
 	}else{
-		user.bounding_rect.y+=thickness_top;
-		user.bounding_rect.height-=thickness_top;
-		user_mass_center.y -= thickness_top;
+		user.body_bounding_rect.y+=thickness_top;
+		user.body_bounding_rect.height-=thickness_top;
+		user.mask_mass_center.y -= thickness_top;
 	}
-	user.bounding_rect = user.bounding_rect & clearview_mask;
+	user.body_bounding_rect = user.body_bounding_rect & clearview_mask;
 	imshow("test", result);
 	//	mask_blank = cv::Mat::zeros(mask_blank.size(), CV_8UC1);
 	//	cv::line(mask_blank, cv::Point(0,0), cv::Point(0,mask_blank.rows), cv::Scalar(255), thickness_sides);
 	//	cv::bitwise_and(mask_blank, user_mask, result);
-	//	if(cv::countNonZero(result) && user.bounding_rect.x>0){
-	//		user.bounding_rect.x-=thickness_sides;
-	//		user.bounding_rect.width+=thickness_sides;
+	//	if(cv::countNonZero(result) && user.body_bounding_rect.x>0){
+	//		user.body_bounding_rect.x-=thickness_sides;
+	//		user.body_bounding_rect.width+=thickness_sides;
 	//	}else{
-	//		user.bounding_rect.x+=thickness_sides;
-	//		user.bounding_rect.width-=thickness_sides;
+	//		user.body_bounding_rect.x+=thickness_sides;
+	//		user.body_bounding_rect.width-=thickness_sides;
 	//	}
-	//	std::cout<< user.bounding_rect<< std::endl;
-	//	user.bounding_rect = user.bounding_rect & clearview_mask;
+	//	std::cout<< user.body_bounding_rect<< std::endl;
+	//	user.body_bounding_rect = user.body_bounding_rect & clearview_mask;
 	//
 	//	mask_blank = cv::Mat::zeros(mask_blank.size(), CV_8UC1);
 	//	cv::line(mask_blank, cv::Point(mask_blank.cols,0), cv::Point(mask_blank.cols,mask_blank.rows), cv::Scalar(255), thickness_sides);
 	//	cv::bitwise_and(mask_blank, user_mask, result);
 	//	if(cv::countNonZero(result)){
-	//		user.bounding_rect.width+=thickness_sides;
+	//		user.body_bounding_rect.width+=thickness_sides;
 	//	}else{
-	//		user.bounding_rect.width-=thickness_sides;
+	//		user.body_bounding_rect.width-=thickness_sides;
 	//	}
 
-	user.bounding_rect = user.bounding_rect & clearview_mask;
+	user.body_bounding_rect = user.body_bounding_rect & clearview_mask;
 	imshow("mask blanc", mask_blank);
 
-	//std::cout<< user.bounding_rect <<std::endl;
+	//std::cout<< user.body_bounding_rect <<std::endl;
 }
 
 void argus_depth::take_snapshot(){
@@ -703,7 +722,7 @@ void argus_depth::take_snapshot(){
 //
 //	cv::Mat destimage, destdisp, image, disp;
 //
-//	image = (BW_rect_mat_left)(user.bounding_rect).clone();
+//	image = (BW_rect_mat_left)(user.body_bounding_rect).clone();
 //	disp = depth_map.clone();
 //
 //	//image.convertTo(image,CV_8UC1);
