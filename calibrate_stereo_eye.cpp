@@ -225,20 +225,18 @@ void eye_stereo_calibrate::detect_chessboard(){
 	if(camera_choice==0||camera_choice==2){
 		if(pattern_choice==0){
 			flag_pattern_left = findChessboardCorners(mat_left, square_pattern_size, left_corners,
-					CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE /*+ CALIB_CB_FAST_CHECK*/);
+					CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE +  CALIB_CB_FILTER_QUADS);
 		}else{
-			flag_pattern_left = findCirclesGrid(mat_left, circle_pattern_size, left_corners,
-					CALIB_CB_ASYMMETRIC_GRID);
+			flag_pattern_left = findCirclesGrid(mat_left, circle_pattern_size, left_corners,CALIB_CB_ASYMMETRIC_GRID);
 		}
 	}
 	if(camera_choice==1||camera_choice==2){
 		if(pattern_choice==0){
 			flag_pattern_right = findChessboardCorners(mat_right, square_pattern_size, right_corners,
-					CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE/*+ CALIB_CB_FAST_CHECK*/);
+					CALIB_CB_ADAPTIVE_THRESH + CALIB_CB_NORMALIZE_IMAGE+  CALIB_CB_FILTER_QUADS);
 
 		}else{
-			flag_pattern_right = findCirclesGrid(mat_right, circle_pattern_size, right_corners,
-					CALIB_CB_ASYMMETRIC_GRID);
+			flag_pattern_right = findCirclesGrid(mat_right, circle_pattern_size, right_corners,CALIB_CB_ASYMMETRIC_GRID);
 		}
 	}
 

@@ -1,3 +1,11 @@
+/**
+	Argus System
+    test_depth.cpp
+    Purpose: Tests depth calculation using stereo rectified video input
+
+    @author Miltiadis-Alexios Papadopoulos
+ */
+
 #include <opencv2/opencv.hpp>
 #include "module_input.hpp"
 
@@ -163,6 +171,9 @@ void test_depth::show_video(){
 	roiImg2.copyTo(roiImgResult_Right);
 
 	cv::imshow("Both",imgResult);
+	cv::Mat overlay;
+	addWeighted(rect_mat_left(*clear_roi), 0.5, rect_mat_right(*clear_roi), 0.5, 0, overlay);
+	cv::imshow("Combined",overlay);
 }
 
 void test_depth::take_snapshot(){

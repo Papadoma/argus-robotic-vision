@@ -7,6 +7,7 @@
  */
 
 #include "module_input.hpp"
+#define ENABLE_TRACKING false
 
 bool marking_procedure = false;
 cv::Rect marker;
@@ -43,6 +44,7 @@ private:
 	cv::Point3f get_center(cv::Rect);
 
 	cv::StereoSGBM sgbm;
+	cv::StereoBM bm;
 	int numberOfDisparities;
 public:
 	std::vector<tracking_objects> object_list;
@@ -80,7 +82,7 @@ static void onMouse( int event, int x, int y, int, void* ptr)
 		if(marker!=cv::Rect()){
 			tracking_objects obj;
 			obj.bounding_rect = marker;
-			obj.center2d = marker.tl() - marker.br();
+			obj.center2d = 0.5*obj.bounding_rect.br() +  0.5*obj.bounding_rect.tl();
 			((tracking*)ptr)->object_list.push_back(obj);
 		}
 	}
@@ -96,7 +98,8 @@ tracking::tracking(){
 	cv::namedWindow("Camera");
 	cv::setMouseCallback( "Camera", onMouse, (void *)this );
 
-	test =new module_eye("left.mpg","right.mpg");
+	//test =new module_eye("left.mpg","right.mpg");
+	test =new module_eye();
 
 	height = test->getSize().height;
 	width = test->getSize().width;
@@ -117,6 +120,18 @@ tracking::tracking(){
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = true;
+
+    bm.state->roi1 = roi1;
+    bm.state->roi2 = roi2;
+    bm.state->preFilterCap = 31;
+    bm.state->SADWindowSize = 9;
+    bm.state->minDisparity = 0;
+    bm.state->numberOfDisparities = numberOfDisparities;
+    bm.state->textureThreshold = 10;
+    bm.state->uniquenessRatio = 15;
+    bm.state->speckleWindowSize = 100;
+    bm.state->speckleRange = 32;
+    bm.state->disp12MaxDiff = 1;
 }
 
 /*
@@ -187,11 +202,14 @@ void tracking::refresh_frame(bool pause){
 
 		object_list[i].center = get_center(object_list[i].bounding_rect);
 
-		object_list[i].buf.push_back(object_list[i].center);
-		if(object_list[i].buf.size()>100)object_list[i].buf.pop_front();
+		object_list[i].buf.push_front(object_list[i].center);
+		if(object_list[i].buf.size()>120)object_list[i].buf.pop_back();
 	}
 }
 
+/**
+ * Calculates color histogram of an image
+ */
 cv::MatND tracking::get_hist(cv::Mat image){
 	int hbins = 30, sbins = 32, vbins = 32;
 	int histSize[] = {hbins, sbins, vbins};
@@ -211,24 +229,45 @@ cv::MatND tracking::get_hist(cv::Mat image){
 	return result;
 }
 
+/**
+ * Calculates center of traceable object in WCS
+ */
 cv::Point3f tracking::get_center(cv::Rect rect){
 	cv::Point3f result;
 	cv::Rect refined_rect = rect;
 	refined_rect.x = refined_rect.x-numberOfDisparities;
 	refined_rect.width = refined_rect.width+numberOfDisparities;
 
-	cv::Mat object_left=(rect_mat_left)(refined_rect);
-	cv::Mat object_right=(rect_mat_right)(refined_rect);
 
-	cv::Mat depth;
+
+	cv::Mat object_left=(rect_mat_left)(refined_rect).clone();
+	cv::Mat object_right=(rect_mat_right)(refined_rect).clone();
+	imshow("t1",object_left);
+	imshow("t2",object_right);
+	//cv::cvtColor(object_left,object_left,CV_BGR2GRAY);
+	//cv::cvtColor(object_right,object_right,CV_BGR2GRAY);
+
+	sgbm.P1 = 8*object_left.channels()*sgbm.SADWindowSize*sgbm.SADWindowSize;
+	sgbm.P2 = 32*object_left.channels()*sgbm.SADWindowSize*sgbm.SADWindowSize;
+
+	cv::Mat depth, viewable_depth;
 	sgbm(object_left,object_right,depth);
+	//bm(object_left,object_right,depth);
 	depth = (depth)(cv::Rect(numberOfDisparities, 0, rect.width, rect.height)).clone();
-	depth.convertTo(depth, CV_32FC1, 1./16);
+	cv::Mat zeropadded_depth = cv::Mat::zeros(rect_mat_left.size(), CV_16SC1);
+	depth.convertTo(viewable_depth, CV_8UC1, 255./(numberOfDisparities*16));
+	depth.convertTo(depth, CV_32FC1, 1./(16));
+
+	depth.copyTo(zeropadded_depth(rect));
+
+
+	imshow("test",viewable_depth);
+
 	cv::Mat mask;
-	cv::threshold(depth,mask,0,255,cv::THRESH_BINARY);
+	cv::threshold(zeropadded_depth,mask,0,255,cv::THRESH_BINARY);
 	mask.convertTo(mask,CV_8UC1);
 	cv::Mat point_cloud;
-	cv::reprojectImageTo3D(depth,point_cloud,Q);
+	cv::reprojectImageTo3D(zeropadded_depth,point_cloud,Q);
 	cv::Scalar mean_values = mean(point_cloud,mask);
 	result.x = mean_values.val[0];
 	result.y = mean_values.val[1];
@@ -253,11 +292,11 @@ void tracking::refresh_window(){
 		cv::rectangle(imgResult,object_list[i].bounding_rect,cv::Scalar(0,255,0),1);
 		cv::Point3f buf_mean(0,0,0);
 		for(int j=0; j<(int)object_list[i].buf.size();j++){
-			buf_mean = buf_mean + object_list[i].buf[i];
+			buf_mean = buf_mean + object_list[i].buf[j];
 		}
-		buf_mean.x = buf_mean.x/object_list[i].buf.size();
-		buf_mean.y = buf_mean.y/object_list[i].buf.size();
-		buf_mean.z = buf_mean.z/object_list[i].buf.size();
+		buf_mean.x = cvRound(buf_mean.x/object_list[i].buf.size());
+		buf_mean.y = cvRound(buf_mean.y/object_list[i].buf.size());
+		buf_mean.z = cvRound(buf_mean.z/object_list[i].buf.size());
 		std::stringstream ss;
 		ss<<buf_mean;
 		cv::putText(imgResult,ss.str(),object_list[i].center2d,cv::FONT_HERSHEY_SIMPLEX,0.4,cv::Scalar(255,0,255),1);
@@ -303,7 +342,9 @@ int main(){
 	while(1){
 
 		inst.refresh_frame(pause);
+#if ENABLE_TRACKING
 		inst.track_objects();
+#endif
 		inst.refresh_window();
 
 		int key_pressed = cvWaitKey(1) & 255;
