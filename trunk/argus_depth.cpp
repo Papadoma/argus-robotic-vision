@@ -6,6 +6,7 @@
 #define DEBUG_MODE true
 #define HUMAN_DET_RATE 10
 #define DEPTH_COLOR_SRC false
+#define SEGMENTATION_CONTOURS_SIZE 0.01
 
 #include "module_input.hpp"
 
@@ -496,11 +497,12 @@ inline void argus_depth::segment_human(){
 	imshow("edges", human_lum);
 	morphologyEx(human_lum, human_lum, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 2 );
 	imshow("edges closed", human_lum);
-cv::Mat test = human_lum.clone();
+	cv::Mat test = human_lum.clone();
 	std::vector<std::vector<cv::Point> > contours;
 	std::vector<cv::Vec4i> hierarchy;
-	findContours( human_lum, contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE);
-
+	if(cv::countNonZero(human_lum)){
+		findContours( human_lum, contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_TC89_KCOS );
+	}
 	//	for( int i = 0; i< (int)contours.size(); i++ )
 	//	{
 	//		double area = contourArea(contours[i]);
@@ -513,13 +515,11 @@ cv::Mat test = human_lum.clone();
 	cv::Mat drawing = cv::Mat::zeros( human_lum.size(), CV_8UC1 );
 	for( int i = 0; i< (int)contours.size(); i++ )
 	{
-		double area = contourArea(contours[i]);
-		cv::Scalar color = cv::Scalar( rng.uniform(0, 255), rng.uniform(0,255), rng.uniform(0,255) );
-		if(area > user.body_bounding_rect.area()*0.001)drawContours( drawing, contours, i, cv::Scalar(255), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+		if(contourArea(contours[i]) > user.body_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( drawing, contours, i, cv::Scalar(255), CV_FILLED, 8, hierarchy, 0, cv::Point() );
 	}
-
 	imshow( "Contours", drawing );
 
+	//TODO use backprojection on RGBD to estimate human mask, based on previous frame
 }
 
 void argus_depth::adjust_mask(){
