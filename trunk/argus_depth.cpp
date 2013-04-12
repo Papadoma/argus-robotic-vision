@@ -34,6 +34,8 @@ private:
 
 	user_struct user;
 
+	cv::MatND user_hist;
+
 	cv::Scalar ulimits;
 	cv::Scalar llimits;
 
@@ -463,6 +465,7 @@ inline void argus_depth::detect_human(){
 		user.head_bounding_rect = possible_user.head_bounding_rect;
 		user.human_center = possible_user.human_center;
 		user.propability = possible_user.propability;
+		user_hist = cv::Mat::zeros(user_hist.size(), CV_8UC1);
 	}
 
 	//person_left = (*BW_rect_mat_left)(human_anchor).clone();
@@ -476,7 +479,7 @@ inline void argus_depth::segment_human(){
 	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
-	if(user.mask_mass_center ==  cv::Point())user.mask_mass_center = cv::Point(user.body_bounding_rect.width/2,user.body_bounding_rect.height/2);
+	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(user.body_bounding_rect))user.mask_mass_center = cv::Point(user.body_bounding_rect.width/2,user.body_bounding_rect.height/2);
 
 	floodFill(user.point_cloud, human_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
 
@@ -520,6 +523,61 @@ inline void argus_depth::segment_human(){
 	imshow( "Contours", drawing );
 
 	//TODO use backprojection on RGBD to estimate human mask, based on previous frame
+	cv::Mat user_depth;
+	cv::bitwise_and(drawing, user.depth_viewable,user_depth);		//Get only depth information on the user
+
+	cv::Mat hsv_user;
+	cv::cvtColor(rect_mat_left(user.body_bounding_rect), hsv_user, CV_BGR2HSV);
+	//hsv_user = rect_mat_left(user.body_bounding_rect).clone();
+
+	int  hbins = 30, sbins = 32, dbins = 32;
+	int histSize[] = {hbins, sbins, dbins};
+	float hranges[] = { 0, 180 };
+	float sranges[] = { 0, 255 };
+	float dranges[] = { 0, 255 };
+	const float* ranges[] = { hranges, sranges, dranges };
+	int channels[] = {0, 1, 2};
+
+	cv::Mat hsvd(hsv_user.size() ,CV_8UC3);
+	cv::Mat in[]={user.depth_viewable, hsv_user};
+	int from_to[] = { 0,0, 1,1, 2,2 };
+	mixChannels( in, 2, &hsvd, 1, from_to, 3 );
+	//imshow("teaesa",hsvd);
+
+	cv::Mat local;
+	cv::cvtColor(hsvd, local,CV_HSV2BGR);
+	imshow("awe",local);
+
+	cv::Mat backproj_img;
+	if(cv::countNonZero(user_hist)){
+		calcBackProject(&hsvd, 1, channels, user_hist, backproj_img, ranges, 2, true );
+	}
+
+	calcHist( &hsvd, 1, channels, drawing, user_hist, 3, histSize, ranges, true, false );
+	std::cout<<"change rect" <<std::endl;
+	if(cv::countNonZero(backproj_img) && user.body_bounding_rect.area()){
+		cv::Mat backproj_img_zero_padded = cv::Mat::zeros(rect_mat_left.size(), CV_8UC1);
+		backproj_img.copyTo(backproj_img_zero_padded(user.body_bounding_rect));
+
+		cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
+		cv::Rect awe = user.body_bounding_rect;
+		cv::RotatedRect detection = CamShift(backproj_img_zero_padded, awe, criteria);
+
+		cv::Rect new_rect=detection.boundingRect();
+		new_rect.x -= new_rect.width*0.3/2;
+		new_rect.y -= new_rect.height*0.1/2;
+		new_rect.width = new_rect.width*1.3;
+		new_rect.height = new_rect.height*1.1;
+		new_rect = (new_rect) & clearview_mask;
+		user.body_bounding_rect = new_rect;
+
+		cv::rectangle(backproj_img_zero_padded,new_rect, cv::Scalar(255));
+		imshow("teaesa",backproj_img_zero_padded);
+		std::cout<<new_rect <<std::endl;
+	}
+
+
+
 }
 
 void argus_depth::adjust_mask(){
@@ -877,6 +935,7 @@ void argus_depth::start(){
 #if DEBUG_MODE
 	debug_detected_user();
 #endif
+
 }
 
 int main(){
