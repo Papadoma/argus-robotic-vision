@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ocl/ocl.hpp>
@@ -6,9 +7,11 @@
 #define DEBUG_MODE true
 #define HUMAN_DET_RATE 10
 #define DEPTH_COLOR_SRC false
-#define SEGMENTATION_CONTOURS_SIZE 0.01
+#define SEGMENTATION_CONTOURS_SIZE 0.05
 
 #include "module_input.hpp"
+
+cv::Mat old_depth;
 
 struct human_struct{
 	float propability;				//Propability that a detection is indeed a human
@@ -20,8 +23,8 @@ struct human_struct{
 
 struct user_struct :public human_struct{
 	cv::Point3f position_3d;		//3D position of user in its mask mass center, as acquired by reprojectImageto3D
-	cv::Mat depth;					//disparity map
-	cv::Mat depth_viewable;			//disparity map, scaled to CV_8UC1
+	cv::Mat disparity;				//disparity map
+	cv::Mat disparity_viewable;		//disparity map, scaled to CV_8UC1
 	cv::Mat point_cloud;			//3D points of user scene, as acquired by reprojectImageto3D
 
 	cv::Mat user_mask;				//The mask which seperates user from background
@@ -87,18 +90,17 @@ private:
 
 	void detect_human();
 	cv::Mat find_skin(cv::Mat);
-	void clustering();
 	void compute_depth();
 	void smooth_depth_map(cv::Mat&);
-	void segment_human();
-	void calculate_user_position();
-	void adjust_mask();
+	void segment_user();
 
 	void camera_view(cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat& , cv::Mat&, cv::Mat&, cv::Mat&, cv::Mat&);
 	void lookat(cv::Point3d from, cv::Point3d to, cv::Mat& destR);
 	void eular2rot(double yaw,double pitch, double roll,cv::Mat& dest);
 	int Xu_value, Xl_value,Yu_value,Yl_value,Zu_value,Zl_value;
 	int canny_up, canny_dn;
+
+	void test_thread(int);
 public:
 	double baseline;
 	cv::Point3d viewpoint;
@@ -110,6 +112,7 @@ public:
 	void start();
 	void take_snapshot();
 	bool detect_user_flag;
+
 };
 
 
@@ -176,7 +179,7 @@ argus_depth::argus_depth()
 	//clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
 	clearview_mask = roi1 & roi2;
 
-	Xu_value=40,Xl_value=40,Yu_value=40,Yl_value=40,Zu_value=170,Zl_value=170;
+	Xu_value=5,Xl_value=5,Yu_value=20,Yl_value=20,Zu_value=30,Zl_value=60;
 	canny_up = 20, canny_dn =60;
 	cv::namedWindow("XYZ floodfill",CV_WINDOW_NORMAL );
 	cv::createTrackbar("canny up", "XYZ floodfill", &canny_up, 200);
@@ -226,12 +229,12 @@ inline void argus_depth::debug_detected_human(std::vector<human_struct> list){
 }
 
 inline void argus_depth::debug_detected_user(){
-	cv::Mat user_frame (user.body_bounding_rect.height, 2*user.body_bounding_rect.width, CV_8UC3);
-	cv::Mat ROI1 = user_frame(cv::Rect(0,0,user.body_bounding_rect.width,user.body_bounding_rect.height));
-	cv::Mat ROI2 = user_frame(cv::Rect(user.body_bounding_rect.width,0,user.body_bounding_rect.width,user.body_bounding_rect.height));
+	cv::Mat user_frame = cv::Mat::zeros(rect_mat_left.rows, 2*rect_mat_left.cols, CV_8UC3);
+	cv::Mat ROI1 = user_frame(user.body_bounding_rect);
+	cv::Mat ROI2 = user_frame(user.body_bounding_rect + cv::Point(rect_mat_left.cols,0));
 
-	rect_mat_left(user.body_bounding_rect).copyTo(ROI1);
-	applyColorMap(user.depth_viewable, ROI2, cv::COLORMAP_JET);
+	(rect_mat_right(user.body_bounding_rect)).copyTo(ROI1);
+	applyColorMap(user.disparity_viewable(user.body_bounding_rect), ROI2, cv::COLORMAP_JET);
 	imshow("detected user", user_frame);
 }
 
@@ -323,29 +326,33 @@ void argus_depth::load_param(){
  * Compute the persons depth.
  */
 inline void argus_depth::compute_depth(){
-
+	//Will have to widen the user bounding rectangle a bit, so we wont loose any disparity
 	cv::Rect refined_human_anchor = user.body_bounding_rect;
 	refined_human_anchor.x = refined_human_anchor.x-numberOfDisparities;
 	refined_human_anchor.width = refined_human_anchor.width+numberOfDisparities;
 	refined_human_anchor = refined_human_anchor & clearview_mask;
+
+
 #if DEPTH_COLOR_SRC
-	cv::Mat person_left=(rect_mat_left)(refined_human_anchor);
-	cv::Mat person_right=(rect_mat_right)(refined_human_anchor);
+	cv::Mat person_left=(rect_mat_left)(refined_human_anchor).clone();
+	cv::Mat person_right=(rect_mat_right)(refined_human_anchor).clone();
 #else
-	cv::Mat person_left=(BW_rect_mat_left)(refined_human_anchor);
-	cv::Mat person_right=(BW_rect_mat_right)(refined_human_anchor);
+	cv::Mat person_left=(BW_rect_mat_left)(refined_human_anchor).clone();
+	cv::Mat person_right=(BW_rect_mat_right)(refined_human_anchor).clone();
 #endif
 
-	sgbm(person_left,person_right,user.depth);
-	user.depth = (user.depth)(cv::Rect(numberOfDisparities, 0, user.body_bounding_rect.width, user.body_bounding_rect.height)).clone();
-	cv::Mat zeropadded_depth = cv::Mat::zeros(rect_mat_left.size(), CV_16SC1);
-	user.depth.convertTo(user.depth, CV_32FC1, 1./16);
-	//smooth_depth_map(user.depth);
-	user.depth.copyTo(zeropadded_depth(user.body_bounding_rect));
 
-	reprojectImageTo3D(zeropadded_depth, user.point_cloud, Q, false, -1);
-	user.point_cloud = user.point_cloud(user.body_bounding_rect).clone();
-	user.depth.convertTo(user.depth_viewable, CV_8UC3, 255./(numberOfDisparities));
+	cv::GaussianBlur(person_left,person_left,cv::Size(0,0),1,0);
+	cv::GaussianBlur(person_right,person_right,cv::Size(0,0),1,0);
+	cv::Mat local_depth;
+	sgbm(person_left,person_right,local_depth);							//Compute disparity
+	local_depth.convertTo(local_depth, CV_32FC1, 1./16);				//Scale down to normal disparity
+	//smooth_depth_map(local_depth);
+
+	user.disparity = cv::Mat::zeros(rect_mat_left.size(), CV_32FC1);	//Prepare for copying
+	local_depth.copyTo(user.disparity(refined_human_anchor));			//Copy disparity
+	reprojectImageTo3D(user.disparity, user.point_cloud, Q, false, -1);	//Get the point cloud in WCS
+	user.disparity.convertTo(user.disparity_viewable, CV_8UC3, 255./(numberOfDisparities));	//Get the viewable version of disparity
 
 }
 
@@ -356,13 +363,12 @@ inline void argus_depth::smooth_depth_map(cv::Mat& depth_map){
 	//	cv::Mat holes;
 	//	threshold(depth_map,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
 	//	inpaint(depth_map, holes, depth_map, 2.0 , cv::INPAINT_NS );
-	//cv::Mat local = depth_map.clone();
-	//bilateralFilter(local, depth_map, 3, 30, 30);
-	cv::medianBlur(depth_map,depth_map,5);
-}
-
-inline void argus_depth::calculate_user_position(){
-	//user.human_position;
+	//	cv::Mat local = depth_map.clone();
+	//	bilateralFilter(local, depth_map, 3, 30, 30);
+	//cv::medianBlur(depth_map,depth_map,3);
+	cv::Mat holes;
+	threshold(depth_map,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
+	imshow("holes",holes);
 }
 
 /*
@@ -440,9 +446,11 @@ inline void argus_depth::detect_human(){
 		human_group.push_back(human_candidate);
 	}
 
+
 #if DEBUG_MODE	//Show the detected humans on screen
 	debug_detected_human(human_group);
 #endif
+
 
 	human_struct possible_user;
 	possible_user.propability = 0;
@@ -460,76 +468,82 @@ inline void argus_depth::detect_human(){
 	}
 
 	if(possible_user.propability > 0.9 * user.propability){
+
 		user.body_bounding_rect = possible_user.body_bounding_rect;
 		user.head_center = possible_user.head_center;
 		user.head_bounding_rect = possible_user.head_bounding_rect;
 		user.human_center = possible_user.human_center;
 		user.propability = possible_user.propability;
-		user_hist = cv::Mat::zeros(user_hist.size(), CV_8UC1);
+		user.user_mask = cv::Mat();
+		//user_hist = cv::Mat::zeros(user_hist.size(), CV_8UC1);
 	}
 
-	//person_left = (*BW_rect_mat_left)(human_anchor).clone();
-	//person_right = (*BW_rect_mat_right)(human_anchor).clone();
 }
 
-inline void argus_depth::segment_human(){
-	cv::Mat human_mask = cv::Mat::zeros(user.point_cloud.rows + 2, user.point_cloud.cols + 2, CV_8U);
-	cv::Mat human_mask2 = cv::Mat::zeros(user.point_cloud.rows + 2, user.point_cloud.cols + 2, CV_8U);
+/**
+ * Segments the user from the overall bounding rectangle. Calculates his mask and mass center
+ */
+inline void argus_depth::segment_user(){
+
 
 	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
-	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(user.body_bounding_rect))user.mask_mass_center = cv::Point(user.body_bounding_rect.width/2,user.body_bounding_rect.height/2);
+	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(user.body_bounding_rect)){
+		user.mask_mass_center = cv::Point(user.body_bounding_rect.x + user.body_bounding_rect.width/2, user.body_bounding_rect.y + user.body_bounding_rect.height/2);
+	}
 
-	floodFill(user.point_cloud, human_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+	cv::Mat floodfill_mask = cv::Mat::zeros(user.point_cloud.rows + 2, user.point_cloud.cols + 2, CV_8U);
+	floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+	cv::Rect crop(1,1,floodfill_mask.cols-2,floodfill_mask.rows-2);
+	floodfill_mask = floodfill_mask(crop).clone();
 
-	cv::Moments mask_moments = moments(human_mask, true);
-	cv::dilate(human_mask,human_mask,cv::Mat(),cv::Point(),2);
-	human_mask.copyTo(user.user_mask);
+	//cv::circle(floodfill_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
+	imshow("human_mask", floodfill_mask);
 
-	cv::circle(human_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
-	imshow("human_mask", human_mask);
-	user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
+	//Find edges present in the floodfill's region
+	cv::Mat frame_edge_detection;
+	Canny(BW_rect_mat_left, frame_edge_detection, canny_up, canny_dn );
 
-	cv::Mat frame_edge, human_lum;
-	cv::Rect crop(1,1,user.user_mask.cols-2,user.user_mask.rows-2);
+	//Sometimes, floodfill fails to return a decent mask. In that case, use the previously detected mask
+	if(cv::countNonZero(floodfill_mask) < 0.5*cv::countNonZero(user.user_mask)){
+		bitwise_and(frame_edge_detection, user.user_mask, frame_edge_detection);
+	}else{
+		bitwise_and(frame_edge_detection, floodfill_mask, frame_edge_detection);
+	}
+	imshow("edges", frame_edge_detection);
 
-	Canny(BW_rect_mat_left, frame_edge, canny_up, canny_dn );
-	bitwise_and(frame_edge(user.body_bounding_rect), user.user_mask(crop),human_lum);
+	//Close the edges
+	morphologyEx(frame_edge_detection, frame_edge_detection, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
+	//imshow("edges closed", frame_edge_detection);
 
-	imshow("edges", human_lum);
-	morphologyEx(human_lum, human_lum, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 2 );
-	imshow("edges closed", human_lum);
-	cv::Mat test = human_lum.clone();
+	//Eliminate small edge fragments
 	std::vector<std::vector<cv::Point> > contours;
 	std::vector<cv::Vec4i> hierarchy;
-	if(cv::countNonZero(human_lum)){
-		findContours( human_lum, contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_TC89_KCOS );
-	}
-	//	for( int i = 0; i< (int)contours.size(); i++ )
-	//	{
-	//		double area = contourArea(contours[i]);
-	//		if(area < user.body_bounding_rect.area()*0.2){
-	//			contours.erase(contours.begin()+i);
-	//			std::cout<<"deleted!" << std::endl;
-	//		}
-	//	}
-	cv::RNG rng(12345);
-	cv::Mat drawing = cv::Mat::zeros( human_lum.size(), CV_8UC1 );
+	findContours( frame_edge_detection.clone(), contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE );
+	cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
 	for( int i = 0; i< (int)contours.size(); i++ )
 	{
-		if(contourArea(contours[i]) > user.body_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( drawing, contours, i, cv::Scalar(255), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+		if(contourArea(contours[i]) < user.body_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( frame_edge_detection, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
 	}
-	imshow( "Contours", drawing );
+	//imshow( "Contours", frame_edge_detection );
 
-	//TODO use backprojection on RGBD to estimate human mask, based on previous frame
+	//Get only depth information on the user
 	cv::Mat user_depth;
-	cv::bitwise_and(drawing, user.depth_viewable,user_depth);		//Get only depth information on the user
+	cv::bitwise_and(user.disparity_viewable, frame_edge_detection, user_depth);
+	imshow( "user depth", user_depth );
 
+	//Get scene color information in a different colorspace without luminosity
 	cv::Mat hsv_user;
-	cv::cvtColor(rect_mat_left(user.body_bounding_rect), hsv_user, CV_BGR2HSV);
-	//hsv_user = rect_mat_left(user.body_bounding_rect).clone();
+	cv::cvtColor(rect_mat_left, hsv_user, CV_BGR2HSV);
 
+	//Mix depth and color information
+	cv::Mat hsvd(hsv_user.size() ,CV_8UC3);
+	cv::Mat in[]={user.disparity_viewable, hsv_user};
+	int from_to[] = { 0,0, 1,1, 2,2 };
+	mixChannels( in, 2, &hsvd, 1, from_to, 3 );
+
+	//Prepare for histogram calculation
 	int  hbins = 30, sbins = 32, dbins = 32;
 	int histSize[] = {hbins, sbins, dbins};
 	float hranges[] = { 0, 180 };
@@ -538,285 +552,65 @@ inline void argus_depth::segment_human(){
 	const float* ranges[] = { hranges, sranges, dranges };
 	int channels[] = {0, 1, 2};
 
-	cv::Mat hsvd(hsv_user.size() ,CV_8UC3);
-	cv::Mat in[]={user.depth_viewable, hsv_user};
-	int from_to[] = { 0,0, 1,1, 2,2 };
-	mixChannels( in, 2, &hsvd, 1, from_to, 3 );
-	//imshow("teaesa",hsvd);
-
-	cv::Mat local;
-	cv::cvtColor(hsvd, local,CV_HSV2BGR);
-	imshow("awe",local);
-
+	//Calculate back projection (if there is a previously calculated histogram)
 	cv::Mat backproj_img;
 	if(cv::countNonZero(user_hist)){
 		calcBackProject(&hsvd, 1, channels, user_hist, backproj_img, ranges, 2, true );
+		//cv::threshold(backproj_img,backproj_img,50,255,cv::THRESH_BINARY);
+		imshow("back projection",backproj_img);
 	}
 
-	calcHist( &hsvd, 1, channels, drawing, user_hist, 3, histSize, ranges, true, false );
-	std::cout<<"change rect" <<std::endl;
+	//Calculate histogram
+	calcHist( &hsvd, 1, channels, frame_edge_detection, user_hist, 3, histSize, ranges, true, false );
+
 	if(cv::countNonZero(backproj_img) && user.body_bounding_rect.area()){
-		cv::Mat backproj_img_zero_padded = cv::Mat::zeros(rect_mat_left.size(), CV_8UC1);
-		backproj_img.copyTo(backproj_img_zero_padded(user.body_bounding_rect));
-
+		//Use camshift algorithm to track the user and adjust his bounding rectangle
 		cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
-		cv::Rect awe = user.body_bounding_rect;
-		cv::RotatedRect detection = CamShift(backproj_img_zero_padded, awe, criteria);
+		cv::Rect local_rect = user.body_bounding_rect;
 
-		cv::Rect new_rect=detection.boundingRect();
-		new_rect.x -= new_rect.width*0.3/2;
-		new_rect.y -= new_rect.height*0.1/2;
-		new_rect.width = new_rect.width*1.3;
-		new_rect.height = new_rect.height*1.1;
-		new_rect = (new_rect) & clearview_mask;
-		user.body_bounding_rect = new_rect;
+		//Add previous edge mask information
+		morphologyEx(backproj_img, backproj_img, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
+		cv::bitwise_or(backproj_img, frame_edge_detection, backproj_img);
+		cv::RotatedRect detection = CamShift(backproj_img, local_rect, criteria);
 
-		cv::rectangle(backproj_img_zero_padded,new_rect, cv::Scalar(255));
-		imshow("teaesa",backproj_img_zero_padded);
-		std::cout<<new_rect <<std::endl;
+		//Shape the detected rectangle a bit
+		cv::Rect new_user_rect=detection.boundingRect();
+		new_user_rect.x -= new_user_rect.width*0.3/2;
+		//new_user_rect.y -= new_user_rect.height*0.05/2;
+		new_user_rect.width = new_user_rect.width*1.3;
+		new_user_rect.height = new_user_rect.height*1.05;
+		new_user_rect &= clearview_mask;
+		user.body_bounding_rect = new_user_rect;
+
+
+		//Introduce an 80% confidence to create the final user mask
+		cv::threshold(backproj_img,backproj_img,255*0.8,255,cv::THRESH_BINARY);
+
+		//Eliminate small mask fragments
+		contours.clear();
+		hierarchy.clear();
+		findContours( backproj_img.clone(), contours, hierarchy, CV_RETR_LIST , CV_CHAIN_APPROX_SIMPLE );
+		cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
+		for( int i = 0; i< (int)contours.size(); i++ )
+		{
+			if(contourArea(contours[i]) < user.body_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( backproj_img, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+		}
+		//Find new mass center, used in floodfill
+		cv::Moments mask_moments = moments(backproj_img, true);
+		user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
+
+		//finally, store the new user mask
+		backproj_img.copyTo(user.user_mask);
+		imshow("Final user mask",user.user_mask);
 	}
-
-
-
 }
 
-void argus_depth::adjust_mask(){
-	cv::Mat result;
-	cv::Mat mask_blank = cv::Mat::zeros(user.user_mask.size(), CV_8UC1);
-	//	int thickness_top = 10./exp(mask_blank.rows/height + 1);
-	//int thickness_sides = 10./exp(mask_blank.cols/width + 1);
-	int thickness_top = 5;
-	int thickness_sides = 5;
-
-	cv::line(mask_blank, cv::Point(0,0), cv::Point(mask_blank.cols,0), cv::Scalar(255), thickness_top);
-	cv::bitwise_and(mask_blank, user.user_mask, result);
-	if(cv::countNonZero(result)){
-		user.body_bounding_rect.y-=thickness_top;
-		user.body_bounding_rect.height+=thickness_top;
-		user.mask_mass_center.y += thickness_top;
-	}else{
-		user.body_bounding_rect.y+=thickness_top;
-		user.body_bounding_rect.height-=thickness_top;
-		user.mask_mass_center.y -= thickness_top;
-	}
-	user.body_bounding_rect = user.body_bounding_rect & clearview_mask;
-	imshow("test", result);
-	//	mask_blank = cv::Mat::zeros(mask_blank.size(), CV_8UC1);
-	//	cv::line(mask_blank, cv::Point(0,0), cv::Point(0,mask_blank.rows), cv::Scalar(255), thickness_sides);
-	//	cv::bitwise_and(mask_blank, user_mask, result);
-	//	if(cv::countNonZero(result) && user.body_bounding_rect.x>0){
-	//		user.body_bounding_rect.x-=thickness_sides;
-	//		user.body_bounding_rect.width+=thickness_sides;
-	//	}else{
-	//		user.body_bounding_rect.x+=thickness_sides;
-	//		user.body_bounding_rect.width-=thickness_sides;
-	//	}
-	//	std::cout<< user.body_bounding_rect<< std::endl;
-	//	user.body_bounding_rect = user.body_bounding_rect & clearview_mask;
-	//
-	//	mask_blank = cv::Mat::zeros(mask_blank.size(), CV_8UC1);
-	//	cv::line(mask_blank, cv::Point(mask_blank.cols,0), cv::Point(mask_blank.cols,mask_blank.rows), cv::Scalar(255), thickness_sides);
-	//	cv::bitwise_and(mask_blank, user_mask, result);
-	//	if(cv::countNonZero(result)){
-	//		user.body_bounding_rect.width+=thickness_sides;
-	//	}else{
-	//		user.body_bounding_rect.width-=thickness_sides;
-	//	}
-
-	user.body_bounding_rect = user.body_bounding_rect & clearview_mask;
-	imshow("mask blanc", mask_blank);
-
-	//std::cout<< user.body_bounding_rect <<std::endl;
-}
 
 void argus_depth::take_snapshot(){
 	std::cout<<"Snapshot taken!" << std::endl;
 	//imwrite("depth.png", depth_map2);
 	//imwrite("person.png", person_left);
 }
-
-//void argus_depth::clustering(){
-//
-//	//Mat dataset((depth_map2->rows)*(depth_map2->cols),3,CV_8UC1);
-//	//Mat intensity_data=(*BW_rect_mat_left)(human_anchor);
-//	cv::Mat data=depth_map2.reshape(1,1);
-//	cv::Mat dataset(1,data.cols,CV_8UC1);
-//	data.row(0).copyTo(dataset.row(0));
-//	//equalizeHist(intensity_data,intensity_data);
-//	//Mat dataset2=dataset.reshape(1,depth_map2->rows);
-//
-//
-//	dataset.convertTo(dataset,CV_32F);
-//	dataset=dataset.t();
-//
-//	cv::Mat labels,centers;
-//
-//	cv::TermCriteria criteria;
-//	criteria.type=CV_TERMCRIT_ITER;
-//	criteria.maxCount=5;
-//
-//	kmeans(dataset, 3, labels, criteria, 2, cv::KMEANS_PP_CENTERS);
-//
-//	//Find out which label shows noise
-//	int noise_label, labelA, labelB, popA=0, popB=0;
-//	float mean_teamA=0, mean_teamB=0;
-//	for(int i=0;i<dataset.rows;i++){
-//		if(dataset.at<int>(i,0)==(float)0){
-//			noise_label=(int)labels.at<int>(i,0);
-//			labelA=(noise_label+1)%3;
-//			labelB=(noise_label+2)%3;
-//			break;
-//		};
-//	}
-//
-//	//Calculate the sum of depth for the other teams
-//	for(int i=0;i<dataset.rows;i++){
-//		if(labels.at<int>(i,0)==(float)labelA){
-//			mean_teamA+=dataset.at<int>(i,0);
-//			popA++;
-//		}else if(labels.at<int>(i,0)==(float)labelB){
-//			mean_teamB+=dataset.at<int>(i,0);
-//			popB++;
-//		};
-//	}
-//	mean_teamA=popA*(mean_teamA/popA);
-//	mean_teamB=popB*(mean_teamB/popB);
-//
-//	//Decide which team should be background and which foreground
-//	if(mean_teamA>mean_teamB){
-//		for(int i=0;i<dataset.rows;i++){
-//			if(labels.at<int>(i,0)==(float)labelA){
-//				labels.at<int>(i,0)=(float)2;
-//			}else if(labels.at<int>(i,0)==(float)labelB){
-//				labels.at<int>(i,0)=(float)1;
-//			}else{
-//				labels.at<int>(i,0)=(float)0;
-//			};
-//		}
-//	}else{
-//		for(int i=0;i<dataset.rows;i++){
-//			if(labels.at<int>(i,0)==(float)labelA){
-//				labels.at<int>(i,0)=(float)1;
-//			}else if(labels.at<int>(i,0)==(float)labelB){
-//				labels.at<int>(i,0)=(float)2;
-//			}else{
-//				labels.at<int>(i,0)=(float)0;
-//			};
-//		}
-//	}
-//
-//	labels=labels.t();
-//	labels.convertTo(labels,CV_8UC1);
-//	labels=labels/2;
-//	labels=labels*255;
-//	labels=labels.reshape(1,depth_map2.rows);
-//
-//	//bilateralFilter(labels, labels2, 9, 30, 30, BORDER_DEFAULT );
-//	//labels2.copyTo(labels);
-//	//medianBlur(labels, labels, 5);
-//
-//	std::vector<std::vector<cv::Point> > contours;
-//	std::vector<cv::Vec4i> hierarchy;
-//
-//	cv::Mat biggest_blob;
-//	labels.copyTo(biggest_blob);
-//
-//	findContours( biggest_blob, contours, hierarchy,CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE );
-//
-//	//Find biggest contour
-//	std::vector<cv::Point> max_contour = contours[0];
-//	int max_contour_pos = 0;
-//	for(int i=0;i<(int)contours.size();i++){
-//
-//		if(contours[i].size()>max_contour.size()){
-//			max_contour=contours[i];
-//			max_contour_pos=i;
-//		}
-//	}
-//
-//
-//	drawContours( biggest_blob, contours, max_contour_pos, cv::Scalar(255), CV_FILLED, 8 ); //Fill biggest blob
-//	threshold(biggest_blob,biggest_blob,254,255,cv::THRESH_BINARY); //This clears any contour leftovers caused by findContours
-//	bitwise_and(biggest_blob,labels,labels); 					//Keep the internal detail of the biggest blob
-//	//	imshow("mask",biggest_blob);
-//
-//	bitwise_and(depth_map2,labels,depth_map2);	//Filter the depth map. Keep only foreground and biggest blob
-//	//medianBlur(*depth_map2, *depth_map2, 5);
-//	//	imshow("Foreground bigest blob",*depth_map2);
-//
-//	cv::Mat holes1,holes2;
-//	threshold(depth_map2,holes1,1,255,cv::THRESH_BINARY_INV); //find the holes of the original depth map
-//	threshold(depth_map,holes2,1,255,cv::THRESH_BINARY_INV); //find the holes of the fragmented depth map
-//	//imshow("holes1",holes1);
-//	//imshow("holes2",holes2);
-//	bitwise_and(holes2,biggest_blob,holes2); //keep only the holes inside the blob
-//	//imshow("both holes",holes2);
-//	bitwise_and(holes1,holes2,holes1); //combine the 2 holes, so you know which holes are real, fake ones have depth
-//
-//	cv::Mat cover_depth;
-//	cv::Mat kernel(9,9,CV_8U,cv::Scalar(1));
-//	medianBlur(depth_map,cover_depth, 5);
-//	morphologyEx(cover_depth, cover_depth, cv::MORPH_CLOSE , kernel);	//Create a depth map free of holes but not sharp
-//	//imshow("cover_depth",cover_depth);
-//	bitwise_and(holes1,cover_depth,holes1);	//keep the info for the holes
-//
-//	imshow("before",depth_map2);
-//	add(holes1,depth_map2,depth_map2); //cover the holes
-//	imshow("after",depth_map2);
-//
-//	//imshow("filtered",*depth_map2);
-//
-//	cv::Mat jet_depth_map2(height,width,CV_8UC3);
-//	applyColorMap(depth_map2, jet_depth_map2, cv::COLORMAP_JET );
-//	//imshow( "test", jet_depth_map2 );
-//
-//	//imshow("test1",depth_map2);
-//	cv::Mat point_cloud;
-//	reprojectImageTo3D(depth_map, point_cloud, Q, false, -1 );
-//
-//	cv::Mat xyz= point_cloud.reshape(3,point_cloud.size().area());
-//	cv::Mat R_vec;
-//	Rodrigues(R1, R_vec);
-//
-//	cv::Mat destimage, destdisp, image, disp;
-//
-//	image = (BW_rect_mat_left)(user.body_bounding_rect).clone();
-//	disp = depth_map.clone();
-//
-//	//image.convertTo(image,CV_8UC1);
-//	//disp.convertTo(disp,CV_8UC1);
-//
-//	double focal_length = 598.57;
-//
-//	//(3) camera setting
-//	cv::Mat K = cv::Mat::eye(3,3,CV_64F);
-//	K.at<double>(0,0) = focal_length;
-//	K.at<double>(1,1) = focal_length;
-//	K.at<double>(0,2) = (image.cols-1.0)/2.0;
-//	K.at<double>(1,2) = (image.rows-1.0)/2.0;
-//
-//	cv::Mat dist = cv::Mat::zeros(5,1,CV_64F);
-//	cv::Mat R = cv::Mat::eye(3,3,CV_64F);
-//	cv::Mat t = cv::Mat::zeros(3,1,CV_64F);
-//
-//
-//
-//	lookat(viewpoint, lookatpoint , R);
-//
-//	t.at<double>(0,0)=viewpoint.x;
-//	t.at<double>(1,0)=viewpoint.y;
-//	t.at<double>(2,0)=viewpoint.z;
-//	t=R*t;
-//
-//
-//
-//	camera_view(image,destimage,disp,destdisp,xyz,R,t,K,dist);
-//	destdisp.convertTo(destdisp,CV_8U,0.5);
-//	imshow("out",destdisp);
-//
-//	cv::Mat new_disp;
-//	cloud_to_disparity(new_disp, point_cloud);
-//}
 
 void argus_depth::cloud_to_disparity(cv::Mat& disparity, cv::Mat xyz){
 	disparity = cv::Mat(xyz.rows,xyz.cols,CV_32FC1);
@@ -914,23 +708,29 @@ void argus_depth::camera_view(cv::Mat& image, cv::Mat& destimage, cv::Mat& disp,
 
 }
 
+void argus_depth::test_thread(int i){
+	std::cout<< "hello"<<i<<std::endl;
+}
+
 void argus_depth::start(){
 
+
 	refresh_frame();
+
 	double t = (double)cv::getTickCount();
 	if((frame_counter%HUMAN_DET_RATE == 0)&&(detect_user_flag))detect_human();
+
+
 	compute_depth();
-	segment_human();
 
-	cv::Mat model, best_cset, disparity;
-
-
-	//adjust_mask();
+	segment_user();
 
 	refresh_window();
+
 	t = (double)cv::getTickCount() - t;
 	fps = 1/(t/cv::getTickFrequency());//for fps
 	//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms
+
 
 #if DEBUG_MODE
 	debug_detected_user();
@@ -938,10 +738,12 @@ void argus_depth::start(){
 
 }
 
+
+
 int main(){
 	int key_pressed=255;
 
-	argus_depth *eye_stereo = new argus_depth;
+	argus_depth eye_stereo;
 	bool loop=false;
 	while(1){
 		do{
@@ -950,20 +752,23 @@ int main(){
 			if ( key_pressed == 27 ) break;
 		}while (loop);
 		if ( key_pressed == 27 ) break;
-		if ( key_pressed == 13 ) eye_stereo->take_snapshot();
-		if ( key_pressed == 't' ) eye_stereo->detect_user_flag=!eye_stereo->detect_user_flag;
+		if ( key_pressed == 13 ) eye_stereo.take_snapshot();
+		if ( key_pressed == 't' ) eye_stereo.detect_user_flag=!eye_stereo.detect_user_flag;
 
-		if ( key_pressed == 119 ) eye_stereo->viewpoint.y+=10;	//W
-		if ( key_pressed == 97 ) eye_stereo->viewpoint.x+=10;		//A
-		if ( key_pressed == 115 ) eye_stereo->viewpoint.y-=10;		//S
-		if ( key_pressed == 100 ) eye_stereo->viewpoint.x-=10;		//D
+		if ( key_pressed == 119 ) eye_stereo.viewpoint.y+=10;	//W
+		if ( key_pressed == 97 ) eye_stereo.viewpoint.x+=10;		//A
+		if ( key_pressed == 115 ) eye_stereo.viewpoint.y-=10;		//S
+		if ( key_pressed == 100 ) eye_stereo.viewpoint.x-=10;		//D
 
-		eye_stereo->start();
+		eye_stereo.start();
+
+
+
 		//key_pressed = cvWaitKey(1) & 255;
 
 	}
 
-	delete(eye_stereo);
+
 
 	return 0;
 }
