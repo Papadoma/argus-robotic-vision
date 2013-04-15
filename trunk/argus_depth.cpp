@@ -1,4 +1,4 @@
-
+#include <boost/thread.hpp>
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ocl/ocl.hpp>
@@ -33,9 +33,13 @@ struct user_struct :public human_struct{
 
 class argus_depth{
 private:
+	boost::mutex g_Mutex;
+	//boost::mutex imshow_mutex;
+
 	module_eye* input_module;
 
-	user_struct user;
+	std::vector<human_struct> human_group;	//vector of possible humans
+	user_struct user;						//final detected human
 
 	cv::MatND user_hist;
 
@@ -81,7 +85,7 @@ private:
 	unsigned int fast_distance(cv::Point, cv::Point);
 
 
-	void debug_detected_human(std::vector<human_struct>);
+	void debug_detected_human();
 	void debug_detected_user();
 	void cloud_to_disparity(cv::Mat&, cv::Mat);
 
@@ -100,7 +104,7 @@ private:
 	int Xu_value, Xl_value,Yu_value,Yl_value,Zu_value,Zl_value;
 	int canny_up, canny_dn;
 
-	void test_thread(int);
+
 public:
 	double baseline;
 	cv::Point3d viewpoint;
@@ -181,7 +185,9 @@ argus_depth::argus_depth()
 
 	Xu_value=5,Xl_value=5,Yu_value=20,Yl_value=20,Zu_value=30,Zl_value=60;
 	canny_up = 20, canny_dn =60;
+
 	cv::namedWindow("XYZ floodfill",CV_WINDOW_NORMAL );
+
 	cv::createTrackbar("canny up", "XYZ floodfill", &canny_up, 200);
 	cv::createTrackbar("canny down", "XYZ floodfill", &canny_dn, 200);
 
@@ -212,20 +218,6 @@ inline unsigned int argus_depth::fast_distance(cv::Point P1, cv::Point P2){
 	x     = b/x;
 	x     = (x+a)>>1;
 	return(x);
-}
-
-inline void argus_depth::debug_detected_human(std::vector<human_struct> list){
-	cv::Mat human_frame = rect_mat_left.clone();
-	for( int i = 0; i < (int)list.size(); i++ )
-	{
-		cv::Scalar color = cv::Scalar((6*i*255/list.size())%255,8*(255-i*255/list.size())%255,i*10/list.size()%255);
-		rectangle(human_frame, list[i].body_bounding_rect.tl(), list[i].body_bounding_rect.br(), color, 2);
-		if(list[i].head_bounding_rect != cv::Rect())rectangle(human_frame, list[i].head_bounding_rect.tl(), list[i].head_bounding_rect.br(), color, 2);
-		std::stringstream ss;
-		ss<<list[i].propability;
-		cv::putText(human_frame, ss.str(),list[i].human_center,0,0.5,cv::Scalar(255,255,255));
-	}
-	imshow("detected humans", human_frame);
 }
 
 inline void argus_depth::debug_detected_user(){
@@ -273,6 +265,26 @@ inline void argus_depth::refresh_window(){
 	cv::putText(imgResult, ss.str(), cv::Point (10,20), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2, 8, false );
 
 	imshow( "Camera", imgResult );
+
+
+#if DEBUG_MODE	//Show the detected humans on screen
+	debug_detected_human();
+	debug_detected_user();
+#endif
+}
+
+inline void argus_depth::debug_detected_human(){
+	cv::Mat human_frame = rect_mat_left.clone();
+	for( int i = 0; i < (int)human_group.size(); i++ )
+	{
+		cv::Scalar color = cv::Scalar((6*i*255/human_group.size())%255,8*(255-i*255/human_group.size())%255,i*10/human_group.size()%255);
+		rectangle(human_frame, human_group[i].body_bounding_rect.tl(), human_group[i].body_bounding_rect.br(), color, 2);
+		if(human_group[i].head_bounding_rect != cv::Rect())rectangle(human_frame, human_group[i].head_bounding_rect.tl(), human_group[i].head_bounding_rect.br(), color, 2);
+		std::stringstream ss;
+		ss<<human_group[i].propability;
+		cv::putText(human_frame, ss.str(),human_group[i].human_center,0,0.5,cv::Scalar(255,255,255));
+	}
+	imshow("detected humans", human_frame);
 }
 
 /*
@@ -327,11 +339,12 @@ void argus_depth::load_param(){
  */
 inline void argus_depth::compute_depth(){
 	//Will have to widen the user bounding rectangle a bit, so we wont loose any disparity
+	g_Mutex.lock();
 	cv::Rect refined_human_anchor = user.body_bounding_rect;
 	refined_human_anchor.x = refined_human_anchor.x-numberOfDisparities;
 	refined_human_anchor.width = refined_human_anchor.width+numberOfDisparities;
 	refined_human_anchor = refined_human_anchor & clearview_mask;
-
+	g_Mutex.unlock();
 
 #if DEPTH_COLOR_SRC
 	cv::Mat person_left=(rect_mat_left)(refined_human_anchor).clone();
@@ -349,11 +362,12 @@ inline void argus_depth::compute_depth(){
 	local_depth.convertTo(local_depth, CV_32FC1, 1./16);				//Scale down to normal disparity
 	//smooth_depth_map(local_depth);
 
+	g_Mutex.lock();
 	user.disparity = cv::Mat::zeros(rect_mat_left.size(), CV_32FC1);	//Prepare for copying
 	local_depth.copyTo(user.disparity(refined_human_anchor));			//Copy disparity
 	reprojectImageTo3D(user.disparity, user.point_cloud, Q, false, -1);	//Get the point cloud in WCS
 	user.disparity.convertTo(user.disparity_viewable, CV_8UC3, 255./(numberOfDisparities));	//Get the viewable version of disparity
-
+	g_Mutex.unlock();
 }
 
 /*
@@ -385,7 +399,7 @@ inline cv::Mat argus_depth::find_skin(cv::Mat input){
  * Detects possible humans based on 2D color information.
  */
 inline void argus_depth::detect_human(){
-	std::vector<human_struct> human_group;	//vector of possible humans
+	human_group.clear();
 
 	std::vector<cv::Rect> found, found_filtered;
 	std::vector<cv::Rect> faces;
@@ -447,9 +461,6 @@ inline void argus_depth::detect_human(){
 	}
 
 
-#if DEBUG_MODE	//Show the detected humans on screen
-	debug_detected_human(human_group);
-#endif
 
 
 	human_struct possible_user;
@@ -485,7 +496,6 @@ inline void argus_depth::detect_human(){
  */
 inline void argus_depth::segment_user(){
 
-
 	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
@@ -493,13 +503,17 @@ inline void argus_depth::segment_user(){
 		user.mask_mass_center = cv::Point(user.body_bounding_rect.x + user.body_bounding_rect.width/2, user.body_bounding_rect.y + user.body_bounding_rect.height/2);
 	}
 
-	cv::Mat floodfill_mask = cv::Mat::zeros(user.point_cloud.rows + 2, user.point_cloud.cols + 2, CV_8U);
-	floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+	cv::Mat floodfill_mask = cv::Mat::zeros(height + 2, width + 2, CV_8U);
+
+	if(user.point_cloud.data)floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY );
+
 	cv::Rect crop(1,1,floodfill_mask.cols-2,floodfill_mask.rows-2);
 	floodfill_mask = floodfill_mask(crop).clone();
 
+
 	//cv::circle(floodfill_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
-	imshow("human_mask", floodfill_mask);
+	//imshow("human_mask", floodfill_mask);
+
 
 	//Find edges present in the floodfill's region
 	cv::Mat frame_edge_detection;
@@ -511,7 +525,8 @@ inline void argus_depth::segment_user(){
 	}else{
 		bitwise_and(frame_edge_detection, floodfill_mask, frame_edge_detection);
 	}
-	imshow("edges", frame_edge_detection);
+	//imshow("edges", frame_edge_detection);
+
 
 	//Close the edges
 	morphologyEx(frame_edge_detection, frame_edge_detection, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
@@ -530,8 +545,8 @@ inline void argus_depth::segment_user(){
 
 	//Get only depth information on the user
 	cv::Mat user_depth;
-	cv::bitwise_and(user.disparity_viewable, frame_edge_detection, user_depth);
-	imshow( "user depth", user_depth );
+	if(user.disparity_viewable.data)cv::bitwise_and(user.disparity_viewable, frame_edge_detection, user_depth);
+	//imshow( "user depth", user_depth );
 
 	//Get scene color information in a different colorspace without luminosity
 	cv::Mat hsv_user;
@@ -557,7 +572,7 @@ inline void argus_depth::segment_user(){
 	if(cv::countNonZero(user_hist)){
 		calcBackProject(&hsvd, 1, channels, user_hist, backproj_img, ranges, 2, true );
 		//cv::threshold(backproj_img,backproj_img,50,255,cv::THRESH_BINARY);
-		imshow("back projection",backproj_img);
+		//imshow("back projection",backproj_img);
 	}
 
 	//Calculate histogram
@@ -601,15 +616,16 @@ inline void argus_depth::segment_user(){
 
 		//finally, store the new user mask
 		backproj_img.copyTo(user.user_mask);
-		imshow("Final user mask",user.user_mask);
+		//imshow("Final user mask",user.user_mask);
 	}
 }
 
 
 void argus_depth::take_snapshot(){
 	std::cout<<"Snapshot taken!" << std::endl;
-	//imwrite("depth.png", depth_map2);
-	//imwrite("person.png", person_left);
+	cv::Mat depth_cropped;
+	cv::bitwise_and(user.disparity_viewable, user.user_mask,depth_cropped);
+	imwrite("depth.png", depth_cropped);
 }
 
 void argus_depth::cloud_to_disparity(cv::Mat& disparity, cv::Mat xyz){
@@ -636,6 +652,7 @@ void argus_depth::cloud_to_disparity(cv::Mat& disparity, cv::Mat xyz){
 	imshow("hello",disparity);
 }
 
+/*
 void argus_depth::lookat(cv::Point3d from, cv::Point3d to, cv::Mat& destR)
 {
 	double x=(to.x-from.x);
@@ -707,10 +724,7 @@ void argus_depth::camera_view(cv::Mat& image, cv::Mat& destimage, cv::Mat& disp,
 	}
 
 }
-
-void argus_depth::test_thread(int i){
-	std::cout<< "hello"<<i<<std::endl;
-}
+ */
 
 void argus_depth::start(){
 
@@ -718,12 +732,20 @@ void argus_depth::start(){
 	refresh_frame();
 
 	double t = (double)cv::getTickCount();
-	if((frame_counter%HUMAN_DET_RATE == 0)&&(detect_user_flag))detect_human();
+	boost::thread t3;
+	if((frame_counter%HUMAN_DET_RATE == 0)&&(detect_user_flag)){
+		detect_human();
+		//t3 = boost::thread(boost::bind(&argus_depth::detect_human, this) );
+	}
+	//boost::thread t1(boost::bind(&argus_depth::compute_depth, this) );
+	//boost::thread t2(boost::bind(&argus_depth::segment_user, this) );
+	//t1.join();
+	//t2.join();
 
 
 	compute_depth();
-
 	segment_user();
+	//t3.join();
 
 	refresh_window();
 
@@ -732,9 +754,7 @@ void argus_depth::start(){
 	//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms
 
 
-#if DEBUG_MODE
-	debug_detected_user();
-#endif
+
 
 }
 
@@ -751,14 +771,14 @@ int main(){
 			if ( key_pressed == 32 )loop=!loop;
 			if ( key_pressed == 27 ) break;
 		}while (loop);
-		if ( key_pressed == 27 ) break;
-		if ( key_pressed == 13 ) eye_stereo.take_snapshot();
+		if ( key_pressed == 27 ) break;							//ESC
+		if ( key_pressed == 13 ) eye_stereo.take_snapshot();	//ENTER
 		if ( key_pressed == 't' ) eye_stereo.detect_user_flag=!eye_stereo.detect_user_flag;
 
-		if ( key_pressed == 119 ) eye_stereo.viewpoint.y+=10;	//W
-		if ( key_pressed == 97 ) eye_stereo.viewpoint.x+=10;		//A
-		if ( key_pressed == 115 ) eye_stereo.viewpoint.y-=10;		//S
-		if ( key_pressed == 100 ) eye_stereo.viewpoint.x-=10;		//D
+		//		if ( key_pressed == 119 ) eye_stereo.viewpoint.y+=10;	//W
+		//		if ( key_pressed == 97 ) eye_stereo.viewpoint.x+=10;		//A
+		//		if ( key_pressed == 115 ) eye_stereo.viewpoint.y-=10;		//S
+		//		if ( key_pressed == 100 ) eye_stereo.viewpoint.x-=10;		//D
 
 		eye_stereo.start();
 
