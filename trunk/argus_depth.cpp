@@ -1,4 +1,4 @@
-#include <boost/thread.hpp>
+//#include <boost/thread.hpp>
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ocl/ocl.hpp>
@@ -33,7 +33,7 @@ struct user_struct :public human_struct{
 
 class argus_depth{
 private:
-	boost::mutex g_Mutex;
+
 	//boost::mutex imshow_mutex;
 
 	module_eye* input_module;
@@ -120,7 +120,6 @@ public:
 };
 
 
-
 //Constructor
 argus_depth::argus_depth()
 :frame_counter(0)
@@ -198,6 +197,8 @@ argus_depth::argus_depth()
 	cv::createTrackbar("Zupper", "XYZ floodfill", &Zu_value, 500);
 	cv::createTrackbar("Zlower", "XYZ floodfill", &Zl_value, 500);
 
+	user.user_mask = cv::Mat::zeros(height,width,CV_8UC1);
+	user.disparity_viewable = cv::Mat::zeros(height,width,CV_8UC1);
 }
 
 //Destructor
@@ -228,6 +229,7 @@ inline void argus_depth::debug_detected_user(){
 	(rect_mat_right(user.body_bounding_rect)).copyTo(ROI1);
 	applyColorMap(user.disparity_viewable(user.body_bounding_rect), ROI2, cv::COLORMAP_JET);
 	imshow("detected user", user_frame);
+	imshow("final mask", user.user_mask);
 }
 
 inline void argus_depth::refresh_frame(){
@@ -339,12 +341,11 @@ void argus_depth::load_param(){
  */
 inline void argus_depth::compute_depth(){
 	//Will have to widen the user bounding rectangle a bit, so we wont loose any disparity
-	g_Mutex.lock();
 	cv::Rect refined_human_anchor = user.body_bounding_rect;
 	refined_human_anchor.x = refined_human_anchor.x-numberOfDisparities;
 	refined_human_anchor.width = refined_human_anchor.width+numberOfDisparities;
 	refined_human_anchor = refined_human_anchor & clearview_mask;
-	g_Mutex.unlock();
+
 
 #if DEPTH_COLOR_SRC
 	cv::Mat person_left=(rect_mat_left)(refined_human_anchor).clone();
@@ -362,12 +363,10 @@ inline void argus_depth::compute_depth(){
 	local_depth.convertTo(local_depth, CV_32FC1, 1./16);				//Scale down to normal disparity
 	//smooth_depth_map(local_depth);
 
-	g_Mutex.lock();
 	user.disparity = cv::Mat::zeros(rect_mat_left.size(), CV_32FC1);	//Prepare for copying
 	local_depth.copyTo(user.disparity(refined_human_anchor));			//Copy disparity
 	reprojectImageTo3D(user.disparity, user.point_cloud, Q, false, -1);	//Get the point cloud in WCS
 	user.disparity.convertTo(user.disparity_viewable, CV_8UC3, 255./(numberOfDisparities));	//Get the viewable version of disparity
-	g_Mutex.unlock();
 }
 
 /*
@@ -485,7 +484,6 @@ inline void argus_depth::detect_human(){
 		user.head_bounding_rect = possible_user.head_bounding_rect;
 		user.human_center = possible_user.human_center;
 		user.propability = possible_user.propability;
-		user.user_mask = cv::Mat();
 		//user_hist = cv::Mat::zeros(user_hist.size(), CV_8UC1);
 	}
 
@@ -495,7 +493,6 @@ inline void argus_depth::detect_human(){
  * Segments the user from the overall bounding rectangle. Calculates his mask and mass center
  */
 inline void argus_depth::segment_user(){
-
 	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
@@ -616,10 +613,9 @@ inline void argus_depth::segment_user(){
 
 		//finally, store the new user mask
 		backproj_img.copyTo(user.user_mask);
-		//imshow("Final user mask",user.user_mask);
+
 	}
 }
-
 
 void argus_depth::take_snapshot(){
 	std::cout<<"Snapshot taken!" << std::endl;
@@ -732,7 +728,7 @@ void argus_depth::start(){
 	refresh_frame();
 
 	double t = (double)cv::getTickCount();
-	boost::thread t3;
+	//boost::thread t3;
 	if((frame_counter%HUMAN_DET_RATE == 0)&&(detect_user_flag)){
 		detect_human();
 		//t3 = boost::thread(boost::bind(&argus_depth::detect_human, this) );
