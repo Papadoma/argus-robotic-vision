@@ -33,10 +33,10 @@ struct user_struct :public human_struct{
 
 class argus_depth{
 private:
-
 	//boost::mutex imshow_mutex;
 
 	module_eye* input_module;
+	pose_estimator* pose_tracker;
 
 	std::vector<human_struct> human_group;	//vector of possible humans
 	user_struct user;						//final detected human
@@ -145,6 +145,8 @@ argus_depth::argus_depth()
 	height = framesize.height;
 	width = framesize.width;
 
+
+
 	user.body_bounding_rect = cv::Rect(width/2,height/2,10,10);
 	user.propability = -1;
 
@@ -179,6 +181,8 @@ argus_depth::argus_depth()
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = false;
 
+	pose_tracker = new pose_estimator(width,height,numberOfDisparities);
+
 	//clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
 	clearview_mask = roi1 & roi2;
 
@@ -205,6 +209,7 @@ argus_depth::argus_depth()
 argus_depth::~argus_depth(){
 	cv::destroyAllWindows();
 	delete(input_module);
+	delete(pose_tracker);
 }
 
 inline unsigned int argus_depth::fast_distance(cv::Point P1, cv::Point P2){
@@ -760,6 +765,7 @@ int main(){
 	int key_pressed=255;
 
 	argus_depth eye_stereo;
+
 	bool loop=false;
 	while(1){
 		do{
@@ -770,6 +776,8 @@ int main(){
 		if ( key_pressed == 27 ) break;							//ESC
 		if ( key_pressed == 13 ) eye_stereo.take_snapshot();	//ENTER
 		if ( key_pressed == 't' ) eye_stereo.detect_user_flag=!eye_stereo.detect_user_flag;
+		if ( key_pressed == 'f' ) eye_stereo.detect_user_flag=!eye_stereo.detect_user_flag;
+
 
 		//		if ( key_pressed == 119 ) eye_stereo.viewpoint.y+=10;	//W
 		//		if ( key_pressed == 97 ) eye_stereo.viewpoint.x+=10;		//A
