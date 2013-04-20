@@ -10,6 +10,7 @@
 #define SEGMENTATION_CONTOURS_SIZE 0.05
 
 #include "module_input.hpp"
+#include "pose_estimation.hpp"
 
 cv::Mat old_depth;
 
@@ -74,6 +75,8 @@ private:
 
 	cv::Rect clearview_mask;
 
+	bool tracking;			//Tracking flag, to be enabled after 1st allignment
+
 	int numberOfDisparities;
 	int width;
 	int height;
@@ -123,6 +126,7 @@ public:
 //Constructor
 argus_depth::argus_depth()
 :frame_counter(0)
+,tracking(false)
 ,detect_user_flag(true)
 {
 	std::cout << "[Argus] Initializing detectors" << std::endl;
@@ -483,7 +487,7 @@ inline void argus_depth::detect_human(){
 	}
 
 	if(possible_user.propability > 0.9 * user.propability){
-
+		tracking = false;
 		user.body_bounding_rect = possible_user.body_bounding_rect;
 		user.head_center = possible_user.head_center;
 		user.head_bounding_rect = possible_user.head_bounding_rect;
@@ -618,7 +622,7 @@ inline void argus_depth::segment_user(){
 
 		//finally, store the new user mask
 		backproj_img.copyTo(user.user_mask);
-
+		cv::bitwise_and(backproj_img,user.disparity_viewable,user.disparity_viewable);
 	}
 }
 
@@ -746,8 +750,21 @@ void argus_depth::start(){
 
 	compute_depth();
 	segment_user();
-	//t3.join();
 
+	//t3.join();
+	if(tracking){
+		//pose_tracker->find_pose(user.disparity_viewable,false);
+	}
+	imshow("depth to give",user.disparity_viewable);
+
+	if(!detect_user_flag && !tracking){
+		//std::cout<<cv::countNonZero(user.disparity_viewable)<<std::endl;
+		pose_tracker->find_pose(user.disparity_viewable,true);
+		tracking = true;
+		//imshow("final track",user.disparity_viewable);
+	}
+	//imshow("final track",user.disparity_viewable);
+	//imshow("depth to give",user.disparity_viewable);
 	refresh_window();
 
 	t = (double)cv::getTickCount() - t;
