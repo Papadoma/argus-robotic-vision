@@ -9,11 +9,11 @@
 
 #define MAX_THREADS		2
 #define rand_num ((double) rand() / (RAND_MAX))
-#define A 1	//0.8
+#define A 0.8	//0.8
 #define N 20
-#define MAX_SCORE_CHANGE_COUNT 25	//How many times will the best score stays unchanged before stopping
-#define MAX_EVOLS 200				//How many evolutions will cause the search to stop
-#define DEBUG_MODE true
+#define MAX_SCORE_CHANGE_COUNT 30	//How many times will the best score stays unchanged before stopping
+#define MAX_EVOLS 300				//How many evolutions will cause the search to stop
+#define DEBUG_MODE_POSE true
 
 const int swarm_size = 50;
 const float w = 0.5;
@@ -148,7 +148,7 @@ pose_estimator::pose_estimator(int frame_width, int frame_height, int noDisparit
 	set_modeler_depth();
 	camera_viewspace = model->get_camera_viewspace();
 
-	init_particles(true);
+	//init_particles(true);
 }
 
 pose_estimator::~pose_estimator()
@@ -266,7 +266,7 @@ void pose_estimator::init_particles(bool start_over)
 		human_position = estimate_starting_position();
 		std::cout<< "[Pose Estimator] estimated starting position" << human_position <<std::endl;
 		best_global_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
-		best_global_position.model_position = cv::Point3f(0,0,human_position.z);
+		best_global_position.model_position = cv::Point3f(human_position.x,human_position.y,human_position.z);
 		best_global_position.model_rotation = cv::Point3f(0,0,0);
 		best_global_position.scale = 700;
 		best_global_score = 0;
@@ -296,8 +296,8 @@ void pose_estimator::init_single_particle(particle& singleParticle, int type, bo
 {
 	//singleParticle.x=0;					//'x' variable is responsible for forcing the particle to converge to a local solution
 	if( type==POSITION || type==ALL ){
-		if(!fine)singleParticle.current_position.model_position = get_random_model_position(false, human_position.z*0.9,human_position.z*1.1);
-		singleParticle.next_position.model_position = get_random_model_position(true, human_position.z*0.9,human_position.z*1.1);
+		if(!fine)singleParticle.current_position.model_position = get_random_model_position(false, human_position.z*0.85,human_position.z*1.15);
+		singleParticle.next_position.model_position = get_random_model_position(true, human_position.z*0.85,human_position.z*1.15);
 		if(!fine)singleParticle.best_position.model_position = singleParticle.current_position.model_position;
 		singleParticle.position_violation = cv::Mat::ones(3,1,CV_32FC1);
 	}
@@ -336,7 +336,7 @@ cv::Point3f pose_estimator::estimate_starting_position()
 	input_depth.convertTo(disparity, CV_32FC1,numberOfDisparities/255.);
 	cv::reprojectImageTo3D(disparity, result, Q);
 	cv::Scalar mean_depth = mean(result, input_silhouette);
-	return cv::Point3f(mean_depth.val[0], mean_depth.val[1], mean_depth.val[2]);
+	return cv::Point3f(-mean_depth.val[0], -mean_depth.val[1], mean_depth.val[2]);
 }
 
 /**
@@ -485,7 +485,9 @@ void pose_estimator::calc_evolution(){
 				init_single_particle(swarm[i], BONES, true);
 			}
 		}
-#if DEBUG_MODE
+		std::cout<< "[Pose Estimator] best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
+
+#if DEBUG_MODE_POSE
 		get_instructions();
 		show_best_solution();
 #endif
@@ -749,7 +751,6 @@ void pose_estimator::show_best_solution(){
 	//std::cout<< cv::countNonZero(resullt2)<< std::endl;
 	//imshow("123",resullt2);
 
-	std::cout<< "[Pose Estimator] best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
 	imshow("test",swarm[0].particle_silhouette);
 }
 
