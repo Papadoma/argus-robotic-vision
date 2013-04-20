@@ -2,11 +2,11 @@
 
 int main(){
 	pose_estimator instance(640,480, 32);
-	cv::namedWindow("input frame");
-	cv::namedWindow("best global silhouette");
-	cv::namedWindow("best global depth");
-	cv::namedWindow("best global diff");
-	cv::namedWindow("test");
+//	cv::namedWindow("input frame");
+//	cv::namedWindow("best global silhouette");
+//	cv::namedWindow("best global depth");
+//	cv::namedWindow("best global diff");
+//	cv::namedWindow("test");
 
 	//		cv::cvtColor(test,test,CV_GRAY2RGB);
 	//		cv::circle(test,input_head,3,cv::Scalar(0,0,255),2);

@@ -13,7 +13,8 @@
 #define N 20
 #define MAX_SCORE_CHANGE_COUNT 30	//How many times will the best score stays unchanged before stopping
 #define MAX_EVOLS 300				//How many evolutions will cause the search to stop
-#define DEBUG_MODE_POSE true
+#define DEBUG_WIND_POSE true
+#define DEBUG_COUT_POSE true
 
 const int swarm_size = 50;
 const float w = 0.5;
@@ -149,6 +150,13 @@ pose_estimator::pose_estimator(int frame_width, int frame_height, int noDisparit
 	camera_viewspace = model->get_camera_viewspace();
 
 	//init_particles(true);
+#if DEBUG_WIND_POSE
+	cv::namedWindow("input frame");
+	cv::namedWindow("best global silhouette");
+	cv::namedWindow("best global depth");
+	cv::namedWindow("best global diff");
+	cv::namedWindow("test");
+#endif
 }
 
 pose_estimator::~pose_estimator()
@@ -274,8 +282,8 @@ void pose_estimator::init_particles(bool start_over)
 	}else{
 		enable_bones = false;
 		particle previous_best_particle;
-		previous_best_particle.particle_depth = best_global_depth;			//Last best disparity
-		previous_best_particle.particle_silhouette = best_global_silhouette;//Last best silhouette
+		previous_best_particle.particle_depth = best_global_depth.clone();			//Last best disparity
+		previous_best_particle.particle_silhouette = best_global_silhouette.clone();//Last best silhouette
 		best_global_score = calc_score(previous_best_particle);				//Calculate score of last best position on new given frame
 	}
 
@@ -485,9 +493,16 @@ void pose_estimator::calc_evolution(){
 				init_single_particle(swarm[i], BONES, true);
 			}
 		}
-		std::cout<< "[Pose Estimator] best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
 
-#if DEBUG_MODE_POSE
+		if(best_solution_updated){
+			model->move_model(best_global_position.model_position,best_global_position.model_rotation, best_global_position.scale);
+			model->rotate_bones(best_global_position.bones_rotation);
+			best_global_depth = model->get_depth()->clone();
+			threshold(best_global_depth,best_global_silhouette,1,255,cv::THRESH_BINARY);
+		}
+		std::cout<< "[Pose Estimator] best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
+		//show_best_solution();
+#if DEBUG_WIND_POSE
 		get_instructions();
 		show_best_solution();
 #endif
@@ -632,26 +647,36 @@ void pose_estimator::calc_next_position(particle& particle_inst){
 
 	//Reset particles, if they have settled on some dimensions and on the best_global_position
 	if( particle_inst.current_position.model_position == particle_inst_old_position){
+#if DEBUG_COUT_POSE
 		std::cout<< "Particle " << particle_inst.id <<" resets: POSITION"<< std::endl;
+#endif
 		init_single_particle(particle_inst,POSITION,true);
 	}
 	if( particle_inst.current_position.model_rotation == particle_inst_old_rotation){
+#if DEBUG_COUT_POSE
 		std::cout<< "Particle " << particle_inst.id <<" resets: ROTATION"<< std::endl;
+#endif
 		init_single_particle(particle_inst,ROTATION,true);
 	}
 	if(enable_bones && (cv::countNonZero(particle_inst.current_position.bones_rotation == particle_inst_old_bones)==57)){
+#if DEBUG_COUT_POSE
 		std::cout<< "Particle " << particle_inst.id <<" resets: BONES"<< std::endl;
+#endif
 		init_single_particle(particle_inst,BONES,true);
 	}
 	if( particle_inst.current_position.scale == particle_inst_old_scale){
+#if DEBUG_COUT_POSE
 		std::cout<< "Particle " << particle_inst.id <<" resets: SCALE"<< std::endl;
+#endif
 		init_single_particle(particle_inst,SCALE,true);
 	}
 
 	if(particle_inst.x<log(10*A)){
 		particle_inst.x+=log(10*A)/N;
 	}else{
+#if DEBUG_COUT_POSE
 		std::cout<< "Particle " << particle_inst.id <<" resets: ALL "<< std::endl;
+#endif
 		init_single_particle(particle_inst,ALL,true);
 		particle_inst.obsolete = true;
 	}
@@ -725,11 +750,7 @@ cv::Rect pose_estimator::bounding_box(cv::Mat input){
 }
 
 void pose_estimator::show_best_solution(){
-	model->move_model(best_global_position.model_position,best_global_position.model_rotation, best_global_position.scale);
-	model->rotate_bones(best_global_position.bones_rotation);
-	best_global_depth = model->get_depth()->clone();
-
-	threshold(best_global_depth,best_global_silhouette,1,255,cv::THRESH_BINARY);
+	imshow("input frame", input_depth);
 	cv::Mat result, resullt2 = cv::Mat::zeros(640,480,CV_8UC1);
 	bitwise_xor(input_silhouette, best_global_silhouette, result);
 	imshow("best global silhouette", best_global_silhouette);
@@ -741,16 +762,8 @@ void pose_estimator::show_best_solution(){
 		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),3,cv::Scalar(0,255,255),2);
 		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),1,cv::Scalar(0,0,255),2);
 	}
-
 	imshow("best global depth", best_global_depth);
-	//cv::rectangle(result,bounding_box(best_global_silhouette),cv::Scalar(255),1);
 	imshow("best global diff", result);
-
-	//if(!swarm[0].particle_silhouette.empty())imshow("test",swarm[0].particle_silhouette);
-
-	//std::cout<< cv::countNonZero(resullt2)<< std::endl;
-	//imshow("123",resullt2);
-
 	imshow("test",swarm[0].particle_silhouette);
 }
 

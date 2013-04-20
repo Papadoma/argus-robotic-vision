@@ -776,8 +776,6 @@ void argus_depth::start(){
 
 }
 
-
-
 int main(){
 	int key_pressed=255;
 
