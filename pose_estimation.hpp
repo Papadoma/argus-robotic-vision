@@ -1,3 +1,6 @@
+#ifndef POSE_ESTIMATION_HPP
+#define POSE_ESTIMATION_HPP
+
 #include "ogre_modeler.hpp"
 //#include <boost/thread.hpp>
 #include <math.h>
@@ -269,7 +272,7 @@ void pose_estimator::init_particles(bool start_over)
 		best_global_score = 0;
 		std::cout<< "[Pose Estimator] best solution reseted"<<std::endl;
 	}else{
-		enable_bones = true;
+		enable_bones = false;
 		particle previous_best_particle;
 		previous_best_particle.particle_depth = best_global_depth;			//Last best disparity
 		previous_best_particle.particle_silhouette = best_global_silhouette;//Last best silhouette
@@ -766,30 +769,4 @@ particle_position pose_estimator::find_pose(cv::Mat disparity_frame, bool reset)
 	calc_evolution();
 	return best_global_position;
 }
-
-int main(){
-	pose_estimator instance(640,480, 32);
-	cv::namedWindow("input frame");
-	cv::namedWindow("best global silhouette");
-	cv::namedWindow("best global depth");
-	cv::namedWindow("best global diff");
-	cv::namedWindow("test");
-
-	//		cv::cvtColor(test,test,CV_GRAY2RGB);
-	//		cv::circle(test,input_head,3,cv::Scalar(0,0,255),2);
-	//		cv::circle(test,input_hand_r,3,cv::Scalar(0,0,255),2);
-	//		cv::circle(test,input_hand_l,3,cv::Scalar(0,0,255),2);
-	//		cv::circle(test,input_foot_r,3,cv::Scalar(0,0,255),2);
-	//		cv::circle(test,input_foot_l,3,cv::Scalar(0,0,255),2);
-
-	cv::Mat input_frame = cv::imread("woman_dancing.png",0);
-	instance.find_pose(input_frame, true);
-	input_frame = cv::imread("woman_dancing2.png",0);
-	instance.find_pose(input_frame, false);
-
-	std::cout<< "[Pose Estimator] Pose estimator stopped!"<<std::endl;
-	cv::waitKey(0);
-
-	return 0;
-}
-
+#endif
