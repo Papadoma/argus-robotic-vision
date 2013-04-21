@@ -755,12 +755,15 @@ void argus_depth::start(){
 	if(tracking){
 		//pose_tracker->find_pose(user.disparity_viewable,false);
 	}
-	imshow("depth to give",user.disparity_viewable);
 
+cv::namedWindow("depth to give");
 	if(!detect_user_flag && !tracking){
 		//std::cout<<cv::countNonZero(user.disparity_viewable)<<std::endl;
+		//std::cout<<cv::sum(user.disparity_viewable)<<std::endl;
+		imshow("depth to give",user.disparity_viewable);
 		pose_tracker->find_pose(user.disparity_viewable,true);
 		tracking = true;
+
 		//imshow("final track",user.disparity_viewable);
 	}
 	//imshow("final track",user.disparity_viewable);
