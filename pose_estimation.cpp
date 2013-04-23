@@ -155,6 +155,7 @@ void pose_estimator::init_particles(bool start_over)
 	if(start_over){
 		enable_bones = false;
 		human_position = estimate_starting_position();
+		//human_position = cv::Point3f(0,0,2000);
 		std::cout<< "[Pose Estimator] estimated starting position" << human_position <<std::endl;
 		best_global_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
 		best_global_position.model_position = cv::Point3f(human_position.x,human_position.y,human_position.z);
@@ -163,14 +164,16 @@ void pose_estimator::init_particles(bool start_over)
 		best_global_position.scale = 700;
 		//best_global_position.scale = 570;
 		best_global_score = 0;
-		best_global_depth = cv::Mat::zeros(frame_height,frame_width,CV_8UC1);
-		best_global_silhouette = cv::Mat::zeros(frame_height,frame_width,CV_8UC1);
+		//best_global_depth = cv::Mat::zeros(frame_height,frame_width,CV_8UC1);
+		//best_global_silhouette = cv::Mat::zeros(frame_height,frame_width,CV_8UC1);
 
 		model->move_model(best_global_position.model_position,best_global_position.model_rotation, best_global_position.scale);
 		model->rotate_bones(best_global_position.bones_rotation);
 		best_global_depth = model->get_depth()->clone();
 		threshold(best_global_depth,best_global_silhouette,1,255,cv::THRESH_BINARY);
-
+		cv::namedWindow("1234");
+		imshow("1234",best_global_depth);
+		std::cout<<cv::countNonZero(best_global_depth)<<std::endl;
 		std::cout<< "[Pose Estimator] best solution reseted"<<std::endl;
 
 
@@ -412,7 +415,7 @@ void pose_estimator::calc_evolution(){
 void pose_estimator::paint_particle(particle& particle_inst){
 	model->move_model(particle_inst.current_position.model_position,particle_inst.current_position.model_rotation, particle_inst.current_position.scale);
 	model->rotate_bones(particle_inst.current_position.bones_rotation);
-	particle_inst.extremas = model->get_2D_pos();
+	particle_inst.extremas = model->get_2D_pos().clone();
 	particle_inst.particle_depth = model->get_depth()->clone();
 	threshold(particle_inst.particle_depth,particle_inst.particle_silhouette,1,255,cv::THRESH_BINARY);
 }
@@ -648,7 +651,7 @@ cv::Rect pose_estimator::bounding_box(cv::Mat input){
 void pose_estimator::show_best_solution(){
 	imshow("input frame", input_depth);
 	cv::Mat result = cv::Mat::zeros(frame_height,frame_width,CV_8UC1);
-	cv::waitKey(0);
+	//cv::waitKey(0);
 	bitwise_xor(input_silhouette, best_global_silhouette, result);
 	imshow("best global silhouette", best_global_silhouette);
 	cv::Mat jet_depth_map2;

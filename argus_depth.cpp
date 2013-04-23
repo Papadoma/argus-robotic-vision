@@ -1,4 +1,4 @@
-//#include <boost/thread.hpp>
+#include <boost/thread.hpp>
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ocl/ocl.hpp>
@@ -211,9 +211,10 @@ argus_depth::argus_depth()
 
 //Destructor
 argus_depth::~argus_depth(){
-	cv::destroyAllWindows();
 	delete(input_module);
 	delete(pose_tracker);
+	cv::destroyAllWindows();
+
 }
 
 inline unsigned int argus_depth::fast_distance(cv::Point P1, cv::Point P2){
@@ -737,37 +738,48 @@ void argus_depth::start(){
 	refresh_frame();
 
 	double t = (double)cv::getTickCount();
-	//boost::thread t3;
+	boost::thread t3;
 	if((frame_counter%HUMAN_DET_RATE == 0)&&(detect_user_flag)){
-		detect_human();
-		//t3 = boost::thread(boost::bind(&argus_depth::detect_human, this) );
+		//detect_human();
+		t3 = boost::thread(boost::bind(&argus_depth::detect_human, this) );
 	}
 	//boost::thread t1(boost::bind(&argus_depth::compute_depth, this) );
 	//boost::thread t2(boost::bind(&argus_depth::segment_user, this) );
-	//t1.join();
-	//t2.join();
-
+//	t1.join();
+//	t2.join();
+//	t3.join();
 
 	compute_depth();
 	segment_user();
 
-	//t3.join();
+
 	if(tracking){
 		//pose_tracker->find_pose(user.disparity_viewable,false);
 	}
+//	if(!tracking){
+//		//pose_tracker = new pose_estimator(width,height,numberOfDisparities);
+//
+//		tracking = true;
+//	}
 
-cv::namedWindow("depth to give");
+//	if(frame_counter>100){
+//		cv::Mat input_frame = cv::imread("woman_dancing.png",0);
+//
+//		pose_tracker->find_pose(input_frame,true);
+//		cv::waitKey(0);
+//	}
 	if(!detect_user_flag && !tracking){
 		//std::cout<<cv::countNonZero(user.disparity_viewable)<<std::endl;
 		//std::cout<<cv::sum(user.disparity_viewable)<<std::endl;
-		imshow("depth to give",user.disparity_viewable);
-		pose_tracker->find_pose(user.disparity_viewable,true);
+
+
+		//pose_tracker->find_pose(user.disparity_viewable,true);
 		tracking = true;
 
 		//imshow("final track",user.disparity_viewable);
 	}
-	//imshow("final track",user.disparity_viewable);
-	//imshow("depth to give",user.disparity_viewable);
+
+
 	refresh_window();
 
 	t = (double)cv::getTickCount() - t;
