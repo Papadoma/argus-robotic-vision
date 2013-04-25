@@ -1,20 +1,24 @@
 #ifndef POSE_ESTIMATION_HPP
 #define POSE_ESTIMATION_HPP
 
+#define NUM_THREADS		4
+#if NUM_THREADS > 1
+#include <boost/thread.hpp>
+#endif
+
 #include "ogre_modeler.hpp"
-//#include <boost/thread.hpp>
+
 #include <math.h>
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
 
-#define MAX_THREADS		2
 #define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8	//0.8
-#define N 20
-#define MAX_SCORE_CHANGE_COUNT 30	//How many times will the best score stays unchanged before stopping
+#define N 10
+#define MAX_SCORE_CHANGE_COUNT 15	//How many times will the best score stays unchanged before stopping
 #define MAX_EVOLS 300				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
-#define DEBUG_COUT_POSE true
+#define DEBUG_COUT_POSE false
 
 const int swarm_size = 50;
 const float w = 0.5;
@@ -49,6 +53,11 @@ struct particle{
 
 class pose_estimator{
 private:
+#if NUM_THREADS > 1
+	boost::mutex best_solution_mutex;
+	boost::thread_group thread_group;
+#endif
+
 	cv::RNG rand_gen;
 
 	void load_param();
@@ -63,7 +72,7 @@ private:
 
 	cv::Mat get_random_bones_rot(bool);
 	cv::Mat get_random_19x3_mat(bool);
-	cv::Point3f get_random_model_position(bool, float, float);
+	cv::Point3f get_random_model_position(bool);
 	cv::Point3f get_random_model_rot(bool);
 	cv::Mat get_MinMax_XY(float);
 
@@ -78,7 +87,7 @@ private:
 	cv::Point3f rotation_max, rotation_min;
 	float z_max, z_min;
 
-	cv::Point3f human_position;		//At first, the estimated human position;
+	cv::Point3f human_position;			//Estimated human position;
 
 	bool enable_bones;
 	int evolution_num;					//Total number of evolutions
@@ -97,7 +106,8 @@ private:
 	cv::Rect bounding_box(cv::Mat);
 	void init_particles(bool);				//Reset particles by initializing them. Everything is reseted.
 	void init_single_particle(particle&, int, bool);
-	void calc_evolution();			//Calculate evolution of particles. Returns final score.
+	void calc_evolution();					//Calculate evolution of particles. Returns final score.
+	void evaluate_particles(int , int );	//Evaluates particles according to their score
 
 public:
 	double best_global_score;

@@ -737,11 +737,13 @@ void argus_depth::start(){
 
 	refresh_frame();
 
-	double t = (double)cv::getTickCount();
-	boost::thread t3;
+	double t;
+	//boost::thread t3;
 	if((frame_counter%HUMAN_DET_RATE == 0)&&(detect_user_flag)){
-		//detect_human();
-		t3 = boost::thread(boost::bind(&argus_depth::detect_human, this) );
+
+		detect_human();
+
+		//t3 = boost::thread(boost::bind(&argus_depth::detect_human, this) );
 	}
 	//boost::thread t1(boost::bind(&argus_depth::compute_depth, this) );
 	//boost::thread t2(boost::bind(&argus_depth::segment_user, this) );
@@ -750,6 +752,8 @@ void argus_depth::start(){
 //	t3.join();
 
 	compute_depth();
+
+
 	segment_user();
 
 
@@ -769,14 +773,8 @@ void argus_depth::start(){
 //		cv::waitKey(0);
 //	}
 	if(!detect_user_flag && !tracking){
-		//std::cout<<cv::countNonZero(user.disparity_viewable)<<std::endl;
-		//std::cout<<cv::sum(user.disparity_viewable)<<std::endl;
-
-
 		//pose_tracker->find_pose(user.disparity_viewable,true);
-		tracking = true;
-
-		//imshow("final track",user.disparity_viewable);
+		//tracking = true;
 	}
 
 
