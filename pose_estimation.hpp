@@ -20,7 +20,7 @@
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 50;
+const int swarm_size = 60;
 const float w = 0.5;
 const float c1 = 1.5;
 const float c2 = 1.5;
@@ -36,7 +36,7 @@ struct particle{
 	int id;
 	cv::Mat particle_silhouette;		//Silhouette of particle
 	cv::Mat particle_depth;				//Viewable disparity of particle
-	cv::Mat extremas;					//Limbs and head 2D position
+	bool reset_array[4];
 
 	cv::Mat bones_violation;
 	cv::Mat position_violation;
@@ -54,7 +54,8 @@ struct particle{
 class pose_estimator{
 private:
 #if NUM_THREADS > 1
-	boost::mutex best_solution_mutex;
+	//boost::mutex best_solution_mutex;
+	boost::mutex obsolete_counter_mutex;
 	boost::thread_group thread_group;
 #endif
 
@@ -65,6 +66,7 @@ private:
 	cv::Mat calculate_depth_limit();
 
 	cv::Point3f estimate_starting_position();
+	void calc_next_position_loop(int, int);
 	void calc_next_position(particle&);
 	void round_position(particle_position&);
 	double calc_score(particle&);
@@ -95,6 +97,7 @@ private:
 	int startX, startY, endX, endY;		//2D search space for positioning the model
 	int frame_width, frame_height;
 	int numberOfDisparities;
+	int obsolete_counter;
 
 	cv::Mat_<cv::Point3f> camera_viewspace; //TRN, TLN, BLN, BRN, TRF, TLF, BLF, BRF
 

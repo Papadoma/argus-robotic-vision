@@ -8,8 +8,8 @@ int main(){
 	//cv::Mat input_frame = cv::imread("man_standing.png",0);
 
 	instance->find_pose(input_frame, true);
-	input_frame = cv::imread("woman_dancing2.png",0);
-	instance->find_pose(input_frame, false);
+	//input_frame = cv::imread("woman_dancing2.png",0);
+	//instance->find_pose(input_frame, false);
 
 	std::cout<< "[Pose Estimator] Pose estimator stopped!"<<std::endl;
 	cv::waitKey(0);
