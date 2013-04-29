@@ -1,3 +1,4 @@
+#pragma once
 #ifndef MODULE_EYE_HPP
 #define MODULE_EYE_HPP
 
