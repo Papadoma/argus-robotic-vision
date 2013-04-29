@@ -349,7 +349,6 @@ cv::Mat ogre_model::get_2D_pos(){
 void ogre_model::get_opencv_snap(){
 	setMaxMinDepth();
 	renderToTexture->getBuffer()->getRenderTarget()->update();
-
 	renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
 
 #if DEBUG_WINDOW

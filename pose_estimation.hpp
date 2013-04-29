@@ -1,3 +1,4 @@
+#pragma once
 #ifndef POSE_ESTIMATION_HPP
 #define POSE_ESTIMATION_HPP
 
@@ -14,13 +15,13 @@
 
 #define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8	//0.8
-#define N 10
+#define N 15
 #define MAX_SCORE_CHANGE_COUNT 15	//How many times will the best score stays unchanged before stopping
 #define MAX_EVOLS 300				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 60;
+const int swarm_size = 30;
 const float w = 0.5;
 const float c1 = 1.5;
 const float c2 = 1.5;
@@ -45,7 +46,7 @@ struct particle{
 	particle_position current_position;	//Current particle position
 	particle_position next_position;	//Next particle position (velocity)
 	particle_position best_position;	//Best position of particle
-	double best_score;
+	float best_score;
 	float x;
 
 	bool obsolete;						//Marks whether the particle is reseted completely at least once during evolution
@@ -69,7 +70,7 @@ private:
 	void calc_next_position_loop(int, int);
 	void calc_next_position(particle&);
 	void round_position(particle_position&);
-	double calc_score(particle&);
+	float calc_score(particle&);
 	void paint_particle(particle&);
 
 	cv::Mat get_random_bones_rot(bool);
@@ -92,6 +93,7 @@ private:
 	cv::Point3f human_position;			//Estimated human position;
 
 	bool enable_bones;
+	bool tracking_mode;
 	int evolution_num;					//Total number of evolutions
 	int score_change_count;				//No of evolutions since last best score calculation
 	int startX, startY, endX, endY;		//2D search space for positioning the model
@@ -106,14 +108,13 @@ private:
 
 	enum init_type { POSITION, ROTATION, BONES, SCALE, ALL };
 
-	cv::Rect bounding_box(cv::Mat);
-	void init_particles(bool);				//Reset particles by initializing them. Everything is reseted.
+	void init_particles();				//Reset particles by initializing them. Everything is reseted.
 	void init_single_particle(particle&, int, bool);
 	void calc_evolution();					//Calculate evolution of particles. Returns final score.
 	void evaluate_particles(int , int );	//Evaluates particles according to their score
 
 public:
-	double best_global_score;
+	float best_global_score;
 	ogre_model* model;
 
 	cv::Mat input_silhouette;			//Silhouette of input image
