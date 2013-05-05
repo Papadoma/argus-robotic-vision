@@ -28,29 +28,35 @@ private:
 	void debug_view();
 
 public:
-	marker_tracker(cv::Mat);
+	marker_tracker(std::string);
 	cv::Point get_marker_center(cv::Mat);
 };
 
-marker_tracker::marker_tracker(cv::Mat marker_img)
+marker_tracker::marker_tracker(std::string filename)
 :marker_found(false),
  marker_visible(false),
  marker_density(0)
 {
-	if(!marker_img.data)exit(1);
+//	if(!marker_img.data)exit(1);
+//
+//	cv::Mat marker_local_img;
+//	cvtColor( marker_img, marker_local_img, CV_BGR2HSV );
+//
+//	int hbins = 180, sbins = 256;
+//	int histSize[] = {hbins, sbins};
+//	float hue_range[] = { 0, 179 };
+//	float sat_range[] = { 0, 255 };
+//	int channels[] = {0,1};
+//	const float* ranges[] = { hue_range, sat_range };
+//
+//	calcHist( &marker_local_img, 1, channels, cv::Mat(), marker_hist, 2, histSize, ranges, true, false );
+//	//normalize( marker_hist, marker_hist, 0, 255, cv::NORM_MINMAX, -1, cv::Mat() );
 
-	cv::Mat marker_local_img;
-	cvtColor( marker_img, marker_local_img, CV_BGR2HSV );
 
-	int hbins = 180, sbins = 256;
-	int histSize[] = {hbins, sbins};
-	float hue_range[] = { 0, 179 };
-	float sat_range[] = { 0, 255 };
-	int channels[] = {0,1};
-	const float* ranges[] = { hue_range, sat_range };
-
-	calcHist( &marker_local_img, 1, channels, cv::Mat(), marker_hist, 2, histSize, ranges, true, false );
-	//normalize( marker_hist, marker_hist, 0, 255, cv::NORM_MINMAX, -1, cv::Mat() );
+	cv::FileStorage fs(filename, cv::FileStorage::READ);
+	if (!fs.isOpened()) {std::cout << "unable to open file storage!" << std::endl; return;}
+	fs["marker_histogram"] >> marker_hist;
+	fs.release();
 
 	//Kalman filter part
 	KF = new cv::KalmanFilter(4, 2, 0);
@@ -84,13 +90,13 @@ void marker_tracker::filter_image(){
 	int channels[] = {0,1};
 	const float* ranges[] = { hue_range, sat_range };
 	calcBackProject( &hsv, 1, channels, marker_hist, backproj, ranges, 1, true );
-	//normalize( backproj, backproj, 0, 255, cv::NORM_MINMAX, -1, cv::Mat() );
+	normalize( backproj, backproj, 0, 255, cv::NORM_MINMAX, -1, cv::Mat() );
 
 	imshow("right_backproj",backproj);
 
 	cv::threshold(backproj,marker_mask,10,255,cv::THRESH_BINARY);
-	cv::morphologyEx(marker_mask,marker_mask,cv::MORPH_OPEN,cv::Mat(),cv::Point(),1);
-	cv::morphologyEx(marker_mask,marker_mask,cv::MORPH_CLOSE,cv::Mat(),cv::Point(),2);
+	cv::morphologyEx(marker_mask,marker_mask,cv::MORPH_CLOSE,cv::Mat(),cv::Point(),1);
+	cv::morphologyEx(marker_mask,marker_mask,cv::MORPH_OPEN,cv::Mat(),cv::Point(),2);
 }
 
 void marker_tracker::find_marker(){
@@ -122,12 +128,14 @@ void marker_tracker::find_marker(){
 
 void marker_tracker::track_marker(){
 	cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
-
+	cv::RotatedRect detection;
 	if(marker_bounding_rect.area()>1){
-		cv::RotatedRect detection = CamShift(backproj, marker_bounding_rect, criteria);
+		detection = CamShift(backproj, marker_bounding_rect, criteria);
 		if(detection.boundingRect().area())marker_bounding_rect = detection.boundingRect() & cv::Rect(0,0,color_frame.cols,color_frame.rows);
+
 	}
-	marker_density = (float)cv::countNonZero(backproj(marker_bounding_rect))/marker_bounding_rect.area();
+	marker_density = (float)cv::countNonZero(backproj(marker_bounding_rect))/(detection.size.height*detection.size.width+1);
+	std::cout<<marker_density<<std::endl;
 
 	if(marker_density>MARKER_DENSITY){
 		marker_visible = true;
@@ -220,7 +228,7 @@ int main(){
 	cv::Mat input_frame,l;
 
 	cv::Mat marker_img = cv::imread("green_marker.jpg");
-	marker_tracker tracker(marker_img);
+	marker_tracker tracker("marker_histogram.yml");
 	while(1){
 		int key_pressed = cvWaitKey(1) & 255;
 		if ( key_pressed == 27 ) break;			//ESC

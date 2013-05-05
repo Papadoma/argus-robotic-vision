@@ -9,10 +9,19 @@
 #include <opencv2/opencv.hpp>
 #include "module_input.hpp"
 
+#define DEPTH_ALG 0 //0:SGBM, 1:BM, 2:VAR
+
 class test_depth{
 private:
 	module_eye* input_module;
+
+#if DEPTH_ALG == 0
 	cv::StereoSGBM sgbm;
+#elif DEPTH_ALG == 1
+	cv::StereoBM bm;
+#else
+	cv::StereoVar var;
+#endif
 
 	cv::Mat cameraMatrix[2], distCoeffs[2];
 	cv::Mat R, T, E, F, Q;
@@ -40,18 +49,17 @@ public:
 
 
 test_depth::test_depth(){
-	input_module=new module_eye("left.mpg","right.mpg");
+	//input_module=new module_eye("left.mpg","right.mpg");
 	input_module=new module_eye();
 	cv::Size framesize = input_module->getSize();
 	height=framesize.height;
 	width=framesize.width;
 
-
 	numberOfDisparities=48;
-
-	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 1;
 	int cn = 1;
+#if DEPTH_ALG == 0
+	sgbm.preFilterCap = 63; //previously 31
+	sgbm.SADWindowSize = 3;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
@@ -60,7 +68,23 @@ test_depth::test_depth(){
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
-	sgbm.fullDP = true;
+	sgbm.fullDP = false;
+#elif DEPTH_ALG == 1
+	bm.init(cv::StereoBM::BASIC_PRESET ,numberOfDisparities,7);
+#else
+	var.levels = 3;                                 // ignored with USE_AUTO_PARAMS
+	var.pyrScale = 0.5;                             // ignored with USE_AUTO_PARAMS
+	var.nIt = 25;
+	var.minDisp = -numberOfDisparities;
+	var.maxDisp = 0;
+	var.poly_n = 3;
+	var.poly_sigma = 0.0;
+	var.fi = 15.0f;
+	var.lambda = 0.03f;
+	var.penalization = var.PENALIZATION_TICHONOV;   // ignored with USE_AUTO_PARAMS
+	var.cycle = var.CYCLE_V;                        // ignored with USE_AUTO_PARAMS
+	var.flags = var.USE_SMART_ID | var.USE_AUTO_PARAMS | var.USE_INITIAL_DISPARITY | var.USE_MEDIAN_FILTERING ;
+#endif
 
 	this->load_param();
 
@@ -149,10 +173,22 @@ void test_depth::refresh_depth(){
 	//	BW_rect_mat_right.copyTo(local_right);
 	//	bilateralFilter(local_left,BW_rect_mat_left,9,10,10);
 	//	bilateralFilter(local_right,BW_rect_mat_right,9,10,10);
+double t= cv::getTickCount();
+#if	DEPTH_ALG == 0
+	sgbm(BW_rect_mat_left,BW_rect_mat_right,depth);							//Compute disparity
+#elif DEPTH_ALG == 1
+	bm(BW_rect_mat_left,BW_rect_mat_right,depth);
+#else
+	var(BW_rect_mat_left, BW_rect_mat_right, depth);
+#endif
+	t = cv::getTickCount() - t;
+	std::cout<<t*1000/cv::getTickFrequency()<<std::endl;
 
-	sgbm(BW_rect_mat_left,BW_rect_mat_right,depth);
+#if DEPTH_ALG == 0 || DEPTH_ALG == 1
 	depth.convertTo(depth, CV_8UC1, 255/(numberOfDisparities*16.));
-
+#else
+	depth.convertTo(depth, CV_8UC1);
+#endif
 	cv::Mat jet_depth_map2(height,width,CV_8UC3);
 	applyColorMap(depth, jet_depth_map2, cv::COLORMAP_JET );
 
