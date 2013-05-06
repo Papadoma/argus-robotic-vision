@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "module_input.hpp"
 

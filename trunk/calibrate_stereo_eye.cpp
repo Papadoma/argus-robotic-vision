@@ -16,7 +16,7 @@
 #include "module_input.hpp"
 //#include "module_file.hpp"
 
-#define SWAP_CAMS true
+#define SWAP_CAMS false
 
 using namespace std;
 using namespace cv;
