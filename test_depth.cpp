@@ -9,7 +9,7 @@
 #include <opencv2/opencv.hpp>
 #include "module_input.hpp"
 
-#define DEPTH_ALG 0 //0:SGBM, 1:BM, 2:VAR
+#define DEPTH_ALG 1 //0:SGBM, 1:BM, 2:VAR
 
 class test_depth{
 private:
@@ -49,8 +49,8 @@ public:
 
 
 test_depth::test_depth(){
-	//input_module=new module_eye("left.mpg","right.mpg");
-	input_module=new module_eye();
+	input_module=new module_eye("left.mpg","right.mpg");
+	//input_module=new module_eye();
 	cv::Size framesize = input_module->getSize();
 	height=framesize.height;
 	width=framesize.width;
