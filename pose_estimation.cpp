@@ -395,8 +395,8 @@ inline void pose_estimator::calc_evolution(){
 
 		std::cout<< "[Pose Estimator] best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
 
-//		t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
-//		std::cout<<"[Pose Estimator] execution time: "<<t<<"ms"<<std::endl;
+		//		t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+		//		std::cout<<"[Pose Estimator] execution time: "<<t<<"ms"<<std::endl;
 
 #if DEBUG_WIND_POSE
 		get_instructions();
@@ -443,7 +443,7 @@ inline void pose_estimator::paint_particle(particle& particle_inst){
 	model->move_model(particle_inst.current_position.model_position,particle_inst.current_position.model_rotation, particle_inst.current_position.scale);
 	model->rotate_bones(particle_inst.current_position.bones_rotation);
 	particle_inst.particle_depth = model->get_depth()->clone();
-	//particle_inst.extremas = model->get_2D_pos().clone();
+	particle_inst.extremas = model->get_2D_pos().clone();
 }
 
 inline void pose_estimator::calc_next_position_loop(int start, int end){
@@ -466,22 +466,22 @@ inline void pose_estimator::calc_next_position_loop(int start, int end){
  *random movement, its best position and the global best one
  */
 inline void pose_estimator::calc_next_position(particle& particle_inst){
-//	round_position(particle_inst.current_position);
-//	cv::Mat particle_inst_old_bones = particle_inst.current_position.bones_rotation.clone();
-//	cv::Point3f particle_inst_old_position = particle_inst.current_position.model_position;
-//	cv::Point3f particle_inst_old_rotation = particle_inst.current_position.model_rotation;
-//	float particle_inst_old_scale = particle_inst.current_position.scale;
+	//	round_position(particle_inst.current_position);
+	//	cv::Mat particle_inst_old_bones = particle_inst.current_position.bones_rotation.clone();
+	//	cv::Point3f particle_inst_old_position = particle_inst.current_position.model_position;
+	//	cv::Point3f particle_inst_old_rotation = particle_inst.current_position.model_rotation;
+	//	float particle_inst_old_scale = particle_inst.current_position.scale;
 	float w1 = A/exp(particle_inst.x);
 	srand(time(0));
 
-//	particle_inst.next_position.model_position.x = w1*particle_inst.next_position.model_position.x + c1*rand_num*(particle_inst.best_position.model_position.x-particle_inst.current_position.model_position.x) + c2*rand_num*(best_global_position.model_position.x-particle_inst.current_position.model_position.x);
-//	particle_inst.next_position.model_position.y = w1*particle_inst.next_position.model_position.y + c1*rand_num*(particle_inst.best_position.model_position.y-particle_inst.current_position.model_position.y) + c2*rand_num*(best_global_position.model_position.y-particle_inst.current_position.model_position.y);
-//	particle_inst.next_position.model_position.z = w1*particle_inst.next_position.model_position.z + c1*rand_num*(particle_inst.best_position.model_position.z-particle_inst.current_position.model_position.z) + c2*rand_num*(best_global_position.model_position.z-particle_inst.current_position.model_position.z);
-//	particle_inst.next_position.model_rotation.x = w1*particle_inst.next_position.model_rotation.x + c1*rand_num*(particle_inst.best_position.model_rotation.x-particle_inst.current_position.model_rotation.x) + c2*rand_num*(best_global_position.model_rotation.x-particle_inst.current_position.model_rotation.x);
-//	particle_inst.next_position.model_rotation.y = w1*particle_inst.next_position.model_rotation.y + c1*rand_num*(particle_inst.best_position.model_rotation.y-particle_inst.current_position.model_rotation.y) + c2*rand_num*(best_global_position.model_rotation.y-particle_inst.current_position.model_rotation.y);
-//	particle_inst.next_position.model_rotation.z = w1*particle_inst.next_position.model_rotation.z + c1*rand_num*(particle_inst.best_position.model_rotation.z-particle_inst.current_position.model_rotation.z) + c2*rand_num*(best_global_position.model_rotation.z-particle_inst.current_position.model_rotation.z);
-//	if(enable_bones)particle_inst.next_position.bones_rotation = w1*particle_inst.next_position.bones_rotation + c1*get_random_19x3_mat(false).mul(particle_inst.best_position.bones_rotation-particle_inst.current_position.bones_rotation) + c2*get_random_19x3_mat(false).mul(best_global_position.bones_rotation-particle_inst.current_position.bones_rotation);
-//	particle_inst.next_position.scale = w1*particle_inst.next_position.scale + c1*rand_num*(particle_inst.best_position.scale-particle_inst.current_position.scale) + c2*rand_num*(best_global_position.scale-particle_inst.current_position.scale);
+	//	particle_inst.next_position.model_position.x = w1*particle_inst.next_position.model_position.x + c1*rand_num*(particle_inst.best_position.model_position.x-particle_inst.current_position.model_position.x) + c2*rand_num*(best_global_position.model_position.x-particle_inst.current_position.model_position.x);
+	//	particle_inst.next_position.model_position.y = w1*particle_inst.next_position.model_position.y + c1*rand_num*(particle_inst.best_position.model_position.y-particle_inst.current_position.model_position.y) + c2*rand_num*(best_global_position.model_position.y-particle_inst.current_position.model_position.y);
+	//	particle_inst.next_position.model_position.z = w1*particle_inst.next_position.model_position.z + c1*rand_num*(particle_inst.best_position.model_position.z-particle_inst.current_position.model_position.z) + c2*rand_num*(best_global_position.model_position.z-particle_inst.current_position.model_position.z);
+	//	particle_inst.next_position.model_rotation.x = w1*particle_inst.next_position.model_rotation.x + c1*rand_num*(particle_inst.best_position.model_rotation.x-particle_inst.current_position.model_rotation.x) + c2*rand_num*(best_global_position.model_rotation.x-particle_inst.current_position.model_rotation.x);
+	//	particle_inst.next_position.model_rotation.y = w1*particle_inst.next_position.model_rotation.y + c1*rand_num*(particle_inst.best_position.model_rotation.y-particle_inst.current_position.model_rotation.y) + c2*rand_num*(best_global_position.model_rotation.y-particle_inst.current_position.model_rotation.y);
+	//	particle_inst.next_position.model_rotation.z = w1*particle_inst.next_position.model_rotation.z + c1*rand_num*(particle_inst.best_position.model_rotation.z-particle_inst.current_position.model_rotation.z) + c2*rand_num*(best_global_position.model_rotation.z-particle_inst.current_position.model_rotation.z);
+	//	if(enable_bones)particle_inst.next_position.bones_rotation = w1*particle_inst.next_position.bones_rotation + c1*get_random_19x3_mat(false).mul(particle_inst.best_position.bones_rotation-particle_inst.current_position.bones_rotation) + c2*get_random_19x3_mat(false).mul(best_global_position.bones_rotation-particle_inst.current_position.bones_rotation);
+	//	particle_inst.next_position.scale = w1*particle_inst.next_position.scale + c1*rand_num*(particle_inst.best_position.scale-particle_inst.current_position.scale) + c2*rand_num*(best_global_position.scale-particle_inst.current_position.scale);
 
 	particle_inst.next_position.model_position = w1*particle_inst.next_position.model_position + c1*rand_num*(particle_inst.best_position.model_position-particle_inst.current_position.model_position) + c2*rand_num*(best_global_position.model_position-particle_inst.current_position.model_position);
 	particle_inst.next_position.model_rotation = w1*particle_inst.next_position.model_rotation + c1*rand_num*(particle_inst.best_position.model_rotation-particle_inst.current_position.model_rotation) + c2*rand_num*(best_global_position.model_rotation-particle_inst.current_position.model_rotation);
@@ -654,11 +654,22 @@ inline float pose_estimator::calc_score(particle& particle_inst){
 	bitwise_or(input_silhouette, particle_inst.particle_silhouette, result_or);
 	bitwise_xor(input_silhouette, particle_inst.particle_silhouette, result_xor);
 	int result_and_count = countNonZero(result_and);
-	//	float dist1 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(0,0)-input_head.x),2) + pow((particle_inst.extremas.at<ushort>(0,1)-input_head.y),2)));
-	//	float dist2 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(1,0)-input_hand_r.x),2) + pow((particle_inst.extremas.at<ushort>(1,1)-input_hand_r.y),2)));
-	//	float dist3 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(2,0)-input_hand_l.x),2) + pow((particle_inst.extremas.at<ushort>(2,1)-input_hand_l.y),2)));
+	//float dist1 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(0,0)-input_head.x),2) + pow((particle_inst.extremas.at<ushort>(0,1)-input_head.y),2)));
+	float right_dist = FLT_MAX, left_dist = FLT_MAX;
+	bool use_rhand=false, use_lhand=false;
+	if(particle_inst.extremas.data && right_hand!=cv::Point(-1,-1)) {
+		right_dist = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(1,0)-right_hand.x),2) + pow((particle_inst.extremas.at<ushort>(1,1)-right_hand.y),2)));
+		use_rhand = true;
+
+	}
+	if(particle_inst.extremas.data && left_hand!=cv::Point(-1,-1)) {
+		left_dist = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(2,0)-left_hand.x),2) + pow((particle_inst.extremas.at<ushort>(2,1)-left_hand.y),2)));
+		use_lhand = true;
+	}
+
 	//		float dist4 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(3,0)-input_foot_r.x),2) + pow((particle_inst.extremas.at<ushort>(3,1)-input_foot_r.y),2)));
 	//		float dist5 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(4,0)-input_foot_l.x),2) + pow((particle_inst.extremas.at<ushort>(4,1)-input_foot_l.y),2)));
+
 	cv::Mat window_boundaries_violation;
 	bitwise_and(particle_inst.particle_silhouette,window_boundaries,window_boundaries_violation);
 
@@ -667,8 +678,17 @@ inline float pose_estimator::calc_score(particle& particle_inst){
 		cv::absdiff(particle_inst.particle_depth,input_depth,result);
 		cv::Scalar mean,stddev;
 		meanStdDev(result, mean, stddev);
-		return 1./(1+stddev.val[0]) * 1./(1+mean.val[0]) * (result_and_count*result_and_count)/( countNonZero(result_or) * ( 1 + countNonZero(result_xor) ) );
+		//return 1./(1+stddev.val[0]) * 1./(1+mean.val[0]) * (result_and_count*result_and_count)/( countNonZero(result_or) * ( 1 + countNonZero(result_xor) ) );
 
+		if(use_rhand&&use_lhand){
+			return 0.5*1./(1+stddev.val[0]) * 1./(1+mean.val[0])+0.25*1./(1+right_dist) +0.25*1./(1+left_dist);
+		}else if(use_rhand){
+			return 0.5*1./(1+stddev.val[0]) * 1./(1+mean.val[0])+0.5*1./(1+right_dist);
+		}else if(use_lhand){
+			return 0.5*1./(1+stddev.val[0]) * 1./(1+mean.val[0])+0.5*1./(1+left_dist);
+		}else{
+			return 1./(1+stddev.val[0]) * 1./(1+mean.val[0]);
+		}
 	}else{
 		return 0;
 	}
@@ -702,8 +722,11 @@ void pose_estimator::get_instructions(){
 	}
 }
 
-particle_position pose_estimator::find_pose(cv::Mat disparity_frame, bool track)
+particle_position pose_estimator::find_pose(cv::Mat disparity_frame, bool track, cv::Point left_marker, cv::Point right_marker)
 {
+	left_hand = left_marker;
+	right_hand =right_marker;
+
 	disparity_frame.copyTo(input_depth);
 	threshold(disparity_frame,input_silhouette,1,255,cv::THRESH_BINARY);
 	tracking_mode = track;

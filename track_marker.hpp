@@ -1,11 +1,11 @@
 #ifndef MARKER_TRACKER_HPP
 #define MARKER_TRACKER_HPP
 
-//#include "module_single_cam.hpp"
-#include "module_input.hpp"
+#include <opencv2/opencv.hpp>
+
 #define CONTOURS_SIZE 10
 #define MARKER_DENSITY 0.5
-#define DEBUG_COUT_MARKER true
+#define DEBUG_COUT_MARKER false
 
 class marker_tracker{
 private:
@@ -35,6 +35,7 @@ public:
 	marker_tracker(std::string);
 	cv::Point get_marker_center(cv::Mat);
 	float get_density(){return marker_density;};
+	bool is_visible(){return marker_visible;};
 };
 
 #endif

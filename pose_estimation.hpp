@@ -2,7 +2,7 @@
 #ifndef POSE_ESTIMATION_HPP
 #define POSE_ESTIMATION_HPP
 
-#define NUM_THREADS		4
+#define NUM_THREADS		1//4
 #if NUM_THREADS > 1
 #include <boost/thread.hpp>
 #endif
@@ -42,6 +42,7 @@ struct particle{
 	cv::Mat bones_violation;
 	cv::Mat position_violation;
 	cv::Mat rotation_violation;
+	cv::Mat extremas;
 
 	particle_position current_position;	//Current particle position
 	particle_position next_position;	//Next particle position (velocity)
@@ -91,6 +92,8 @@ private:
 	float z_max, z_min;
 
 	cv::Point3f human_position;			//Estimated human position;
+	cv::Point	left_hand;
+	cv::Point	right_hand;
 
 	bool enable_bones;
 	bool tracking_mode;
@@ -124,7 +127,7 @@ public:
 	pose_estimator(int, int, int);
 	~pose_estimator();
 
-	particle_position find_pose(cv::Mat, bool reset);		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
+	particle_position find_pose(cv::Mat disparity_frame, bool track, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
 	cv::Mat get_silhouette(){return best_global_silhouette;};
 	cv::Mat get_depth(){return best_global_depth;};
 	void get_instructions();

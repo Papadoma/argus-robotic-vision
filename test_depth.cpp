@@ -9,7 +9,7 @@
 #include <opencv2/opencv.hpp>
 #include "module_input.hpp"
 
-#define DEPTH_ALG 1 //0:SGBM, 1:BM, 2:VAR
+#define DEPTH_ALG 0 //0:SGBM, 1:BM, 2:VAR
 
 class test_depth{
 private:
@@ -43,6 +43,12 @@ public:
 	void take_snapshot();
 	int width,height;
 
+	cv::Mat point_cloud;
+	cv::Rect marker;
+	cv::MatND histogram;
+	cv::Mat mask;
+	cv::Point center;
+
 	cv::Mat depth;
 
 };
@@ -55,20 +61,30 @@ test_depth::test_depth(){
 	height=framesize.height;
 	width=framesize.width;
 
-	numberOfDisparities=48;
+	numberOfDisparities=32;
 	int cn = 1;
 #if DEPTH_ALG == 0
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 3;
+	sgbm.SADWindowSize = 1;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = numberOfDisparities;
-	sgbm.uniquenessRatio = 15;
+	sgbm.uniquenessRatio = 30;
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
 	sgbm.fullDP = false;
+
+	cv::namedWindow("parameters",CV_WINDOW_NORMAL );
+	cv::createTrackbar("preFilterCap", "parameters", &sgbm.preFilterCap, 200);
+	cv::createTrackbar("uniquenessRatio", "parameters", &sgbm.uniquenessRatio, 200);
+	cv::createTrackbar("speckleWindowSize", "parameters", &sgbm.speckleWindowSize, 1000);
+	cv::createTrackbar("speckleRange", "parameters", &sgbm.speckleRange, 1000);
+	cv::createTrackbar("disp12MaxDiff", "parameters", &sgbm.disp12MaxDiff, 1000);
+	cv::createTrackbar("P1", "parameters", &sgbm.P1, 1000);
+	cv::createTrackbar("P2", "parameters", &sgbm.P2, 1000);
+
 #elif DEPTH_ALG == 1
 	bm.init(cv::StereoBM::BASIC_PRESET ,numberOfDisparities,7);
 #else
@@ -87,7 +103,8 @@ test_depth::test_depth(){
 #endif
 
 	this->load_param();
-
+	marker=cv::Rect(250,100,120,350);
+	center = cv::Point(320,240);
 }
 
 test_depth::~test_depth(){
@@ -165,15 +182,8 @@ void test_depth::smooth_depth(){
 }
 
 void test_depth::refresh_depth(){
-	//medianBlur(BW_rect_mat_left, BW_rect_mat_left, 5);
-	//medianBlur(BW_rect_mat_right, BW_rect_mat_right, 5);
+	double t= cv::getTickCount();
 
-	//	cv::Mat local_left,local_right;
-	//	BW_rect_mat_left.copyTo(local_left);
-	//	BW_rect_mat_right.copyTo(local_right);
-	//	bilateralFilter(local_left,BW_rect_mat_left,9,10,10);
-	//	bilateralFilter(local_right,BW_rect_mat_right,9,10,10);
-double t= cv::getTickCount();
 #if	DEPTH_ALG == 0
 	sgbm(BW_rect_mat_left,BW_rect_mat_right,depth);							//Compute disparity
 #elif DEPTH_ALG == 1
@@ -184,6 +194,10 @@ double t= cv::getTickCount();
 	t = cv::getTickCount() - t;
 	std::cout<<t*1000/cv::getTickFrequency()<<std::endl;
 
+	cv::Mat local_depth;
+	depth.convertTo(local_depth,CV_32FC1, 1./16);
+	reprojectImageTo3D(local_depth, point_cloud, Q, false, -1);	//Get the point cloud in WCS
+
 #if DEPTH_ALG == 0 || DEPTH_ALG == 1
 	depth.convertTo(depth, CV_8UC1, 255/(numberOfDisparities*16.));
 #else
@@ -192,8 +206,10 @@ double t= cv::getTickCount();
 	cv::Mat jet_depth_map2(height,width,CV_8UC3);
 	applyColorMap(depth, jet_depth_map2, cv::COLORMAP_JET );
 
+
 	//medianBlur(depth, depth, 5);
 }
+
 
 void test_depth::show_video(){
 	cv::rectangle(rect_mat_left,*clear_roi,cv::Scalar(0,255,0));
