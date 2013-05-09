@@ -44,7 +44,14 @@ private:
 	void render_window(){	root->renderOneFrame();};
 	void setup();
 	void get_opencv_snap();
-
+	void getMeshInformation(const Ogre::MeshPtr mesh,
+			size_t &vertex_count,
+			Ogre::Vector3* &vertices,
+			size_t &index_count,
+			unsigned* &indices,
+			const Ogre::Vector3 &position,
+			const Ogre::Quaternion &orient,
+			const Ogre::Vector3 &scale);
 
 	int render_width, render_height;
 	float min,max,center; //depth limits
@@ -74,6 +81,8 @@ public:
 
 	cv::Mat get_2D_pos();
 	cv::Mat* get_depth();
+	cv::Mat get_segmentation();
 };
+
 
 #endif
