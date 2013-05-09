@@ -418,3 +418,181 @@ cv::Mat_<cv::Point3f> ogre_model::get_camera_viewspace(){
 	return coordsCV;
 }
 
+
+void ogre_model::getMeshInformation(const Ogre::MeshPtr mesh,
+		size_t &vertex_count,
+		Ogre::Vector3* &vertices,
+		size_t &index_count,
+		unsigned* &indices,
+		const Ogre::Vector3 &position,
+		const Ogre::Quaternion &orient,
+		const Ogre::Vector3 &scale)
+{
+	bool added_shared = false;
+	size_t current_offset = 0;
+	size_t shared_offset = 0;
+	size_t next_offset = 0;
+	size_t index_offset = 0;
+
+	vertex_count = index_count = 0;
+
+	// Calculate how many vertices and indices we're going to need
+	for ( unsigned short i = 0; i < mesh->getNumSubMeshes(); ++i)
+	{
+		Ogre::SubMesh* submesh = mesh->getSubMesh(i);
+		// We only need to add the shared vertices once
+		if(submesh->useSharedVertices)
+		{
+			if( !added_shared )
+			{
+				vertex_count += mesh->sharedVertexData->vertexCount;
+				added_shared = true;
+			}
+		}
+		else
+		{
+			vertex_count += submesh->vertexData->vertexCount;
+		}
+		// Add the indices
+		index_count += submesh->indexData->indexCount;
+	}
+
+	// Allocate space for the vertices and indices
+	vertices = new Ogre::Vector3[vertex_count];
+	indices = new unsigned[index_count];
+
+	added_shared = false;
+
+	// Run through the submeshes again, adding the data into the arrays
+	for (unsigned short i = 0; i < mesh->getNumSubMeshes(); ++i)
+	{
+		Ogre::SubMesh* submesh = mesh->getSubMesh(i);
+
+		Ogre::VertexData* vertex_data = submesh->useSharedVertices ? mesh->sharedVertexData : submesh->vertexData;
+
+		if ((!submesh->useSharedVertices) || (submesh->useSharedVertices && !added_shared))
+		{
+			if(submesh->useSharedVertices)
+			{
+				added_shared = true;
+				shared_offset = current_offset;
+			}
+
+			const Ogre::VertexElement* posElem =
+					vertex_data->vertexDeclaration->findElementBySemantic(Ogre::VES_POSITION);
+
+			Ogre::HardwareVertexBufferSharedPtr vbuf = vertex_data->vertexBufferBinding->getBuffer(posElem->getSource());
+			//Ogre::HardwareVertexBufferSharedPtr vbuf = renderToTexture->getBuffer(posElem->getSource());
+
+			//renderToTexture->getBuffer()
+
+			unsigned char* vertex =
+					static_cast<unsigned char*>(vbuf->lock(Ogre::HardwareBuffer::HBL_READ_ONLY));
+
+			// There is _no_ baseVertexPointerToElement() which takes an Ogre::Real or a double
+			//  as second argument. So make it float, to avoid trouble when Ogre::Real will
+			//  be comiled/typedefed as double:
+			//Ogre::Real* pReal;
+			float* pReal;
+
+			for( size_t j = 0; j < vertex_data->vertexCount; ++j, vertex += vbuf->getVertexSize())
+			{
+				posElem->baseVertexPointerToElement(vertex, &pReal);
+				Ogre::Vector3 pt(pReal[0], pReal[1], pReal[2]);
+				vertices[current_offset + j] = (orient * (pt * scale)) + position;
+			}
+
+			vbuf->unlock();
+			next_offset += vertex_data->vertexCount;
+		}
+
+		Ogre::IndexData* index_data = submesh->indexData;
+		size_t numTris = index_data->indexCount / 3;
+		Ogre::HardwareIndexBufferSharedPtr ibuf = index_data->indexBuffer;
+
+		bool use32bitindexes = (ibuf->getType() == Ogre::HardwareIndexBuffer::IT_32BIT);
+
+		unsigned long* pLong = static_cast<unsigned long*>(ibuf->lock(Ogre::HardwareBuffer::HBL_READ_ONLY));
+		unsigned short* pShort = reinterpret_cast<unsigned short*>(pLong);
+
+		size_t offset = (submesh->useSharedVertices)? shared_offset : current_offset;
+
+		if ( use32bitindexes )
+		{
+			for ( size_t k = 0; k < numTris*3; ++k)
+			{
+				indices[index_offset++] = pLong[k] + static_cast<unsigned long>(offset);
+			}
+		}
+		else
+		{
+			for ( size_t k = 0; k < numTris*3; ++k)
+			{
+				indices[index_offset++] = static_cast<unsigned long>(pShort[k]) +
+						static_cast<unsigned long>(offset);
+			}
+		}
+
+		ibuf->unlock();
+		current_offset = next_offset;
+	}
+}
+
+cv::Mat ogre_model::get_segmentation(){
+
+	cv::Mat result = cv::Mat::zeros(render_height,render_width, CV_8UC1);
+	Ogre::MeshPtr model_mesh = body->getMesh();
+	Ogre::Mesh::BoneAssignmentIterator bone_iter = model_mesh->getBoneAssignmentIterator();
+	Ogre::VertexData* vertex_data = model_mesh->sharedVertexData;
+
+	size_t vertex_count;
+	size_t index_count;
+	Ogre::Vector3 *vertices;
+	Ogre::uint32 *indices;
+	//body->
+	// get the mesh information
+	getMeshInformation(body->getMesh(), vertex_count, vertices, index_count, indices,
+			body->getParentNode()->_getDerivedPosition(),
+			body->getParentNode()->_getDerivedOrientation(),
+			body->getParentNode()->_getDerivedScale());
+
+	//	std::cout<<"Vertices in mesh: "<<vertex_count<<std::endl;
+	//	std::cout<<"Triangles in mesh: "<<index_count / 3<<std::endl;
+
+	//For every vertex, find out which bone it belongs to
+	unsigned short vertex2bone[vertex_count];
+	while(bone_iter.hasMoreElements()){
+		Ogre::VertexBoneAssignment_s vertex_bone = bone_iter.getNext();
+		vertex2bone[vertex_bone.vertexIndex]=vertex_bone.boneIndex;
+	}
+
+	//Iterate through mesh triangles, composed of 3 vertices
+	cv::Point triangle[3];
+	Ogre::Vector3 point0,point1,point2;
+	for (size_t i = 0; i < index_count; i += 3)
+	{
+
+		point0 = camera->getProjectionMatrix()*camera->getViewMatrix()*vertices[indices[i]];
+		point1 = camera->getProjectionMatrix()*camera->getViewMatrix()*vertices[indices[i+1]] ;
+		point2 = camera->getProjectionMatrix()*camera->getViewMatrix()*vertices[indices[i+2]];
+
+		triangle[0] = cv::Point((0.5 + point0.x/2)*render_width,(0.5 - point0.y/2)*render_height);
+		triangle[1] = cv::Point((0.5 + point1.x/2)*render_width,(0.5 - point1.y/2)*render_height);
+		triangle[2] = cv::Point((0.5 + point2.x/2)*render_width,(0.5 - point2.y/2)*render_height);
+
+		unsigned short triangle2bone = vertex2bone[indices[i]];
+		if(vertex2bone[indices[i+1]] == vertex2bone[indices[i+2]])triangle2bone = vertex2bone[indices[i+1]];
+
+		fillConvexPoly(result, triangle, 3, cv::Scalar(triangle2bone));
+		//fillConvexPoly(result, triangle, 3, cv::Scalar( vertex2bone[indices[i]], vertex2bone[indices[i+1]],  vertex2bone[indices[i+2]]));
+	}
+	cv::normalize(result, result, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+	//	std::cout<<"index_count"<<index_count<<std::endl;
+	//	int count=0;
+	//
+	//	std::cout<<"bone_iter "<<count<<std::endl;
+
+	delete[] vertices;
+	delete[] indices;
+	return result;
+}

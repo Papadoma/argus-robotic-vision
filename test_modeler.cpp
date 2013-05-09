@@ -72,6 +72,8 @@ int main(){
 		double t = (double)cv::getTickCount();
 		cv::Mat output = model.get_depth()->clone();
 		t = (double)cv::getTickCount() - t;
+		imshow("segmentation",model.get_segmentation());
+
 		float fps = 1/(t/cv::getTickFrequency());
 		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total fps "<< fps << std::endl;//for fps
 

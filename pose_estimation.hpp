@@ -2,7 +2,7 @@
 #ifndef POSE_ESTIMATION_HPP
 #define POSE_ESTIMATION_HPP
 
-#define NUM_THREADS		1//4
+#define NUM_THREADS		4//4
 #if NUM_THREADS > 1
 #include <boost/thread.hpp>
 #endif
@@ -16,15 +16,15 @@
 #define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8	//0.8
 #define N 15
-#define MAX_SCORE_CHANGE_COUNT 15	//How many times will the best score stays unchanged before stopping
-#define MAX_EVOLS 300				//How many evolutions will cause the search to stop
+#define MAX_SCORE_CHANGE_COUNT 100	//How many times will the best score stays unchanged before stopping
+#define MAX_EVOLS 600				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 30;
+const int swarm_size = 50;
 const float w = 0.5;
-const float c1 = 1.5;
-const float c2 = 1.5;
+const float c1 = 1.5;//1.5
+const float c2 = 1.5;//1.5
 
 struct particle_position{
 	cv::Mat bones_rotation;
@@ -47,7 +47,7 @@ struct particle{
 	particle_position current_position;	//Current particle position
 	particle_position next_position;	//Next particle position (velocity)
 	particle_position best_position;	//Best position of particle
-	float best_score;
+	double best_score;
 	float x;
 
 	bool obsolete;						//Marks whether the particle is reseted completely at least once during evolution
@@ -71,7 +71,7 @@ private:
 	void calc_next_position_loop(int, int);
 	void calc_next_position(particle&);
 	void round_position(particle_position&);
-	float calc_score(particle&);
+	double calc_score(particle&);
 	void paint_particle(particle&);
 
 	cv::Mat get_random_bones_rot(bool);
@@ -108,6 +108,7 @@ private:
 
 	cv::Mat best_global_silhouette;
 	cv::Mat best_global_depth;
+	cv::Mat best_global_extremas;
 
 	enum init_type { POSITION, ROTATION, BONES, SCALE, ALL };
 
@@ -117,7 +118,7 @@ private:
 	void evaluate_particles(int , int );	//Evaluates particles according to their score
 
 public:
-	float best_global_score;
+	double best_global_score;
 	ogre_model* model;
 
 	cv::Mat input_silhouette;			//Silhouette of input image
