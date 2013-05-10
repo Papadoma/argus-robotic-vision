@@ -347,7 +347,7 @@ cv::Mat ogre_model::get_2D_pos(){
 }
 
 void ogre_model::get_opencv_snap(){
-	setMaxMinDepth();
+	//setMaxMinDepth();
 	renderToTexture->getBuffer()->getRenderTarget()->update();
 	renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
 
@@ -393,6 +393,7 @@ void ogre_model::set_depth_limits(float min_set = -1, float center_set = -1, flo
 		min = floor(min_set);
 		center = round(center_set);
 	}
+	setMaxMinDepth();
 }
 
 void ogre_model::set_camera_clip(float near_dist,float far_dist){
@@ -539,11 +540,9 @@ void ogre_model::getMeshInformation(const Ogre::MeshPtr mesh,
 }
 
 cv::Mat ogre_model::get_segmentation(){
-
 	cv::Mat result = cv::Mat::zeros(render_height,render_width, CV_8UC1);
 	Ogre::MeshPtr model_mesh = body->getMesh();
 	Ogre::Mesh::BoneAssignmentIterator bone_iter = model_mesh->getBoneAssignmentIterator();
-	Ogre::VertexData* vertex_data = model_mesh->sharedVertexData;
 
 	size_t vertex_count;
 	size_t index_count;
@@ -586,6 +585,7 @@ cv::Mat ogre_model::get_segmentation(){
 		fillConvexPoly(result, triangle, 3, cv::Scalar(triangle2bone));
 		//fillConvexPoly(result, triangle, 3, cv::Scalar( vertex2bone[indices[i]], vertex2bone[indices[i+1]],  vertex2bone[indices[i+2]]));
 	}
+	//std::cout<<vertices[indices[100]]<<std::endl;
 	cv::normalize(result, result, 0, 255, cv::NORM_MINMAX, CV_8UC1);
 	//	std::cout<<"index_count"<<index_count<<std::endl;
 	//	int count=0;
