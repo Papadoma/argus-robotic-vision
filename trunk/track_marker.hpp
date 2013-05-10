@@ -38,4 +38,5 @@ public:
 	bool is_visible(){return marker_visible;};
 };
 
+#undef DEBUG_COUT_MARKER
 #endif

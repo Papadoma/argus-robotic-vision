@@ -3,7 +3,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/ocl/ocl.hpp>
 
-#define USE_GPU false
+#define USE_GPU true
 #define DEBUG_MODE true
 #define HUMAN_DET_RATE 10
 #define DEPTH_COLOR_SRC false
@@ -15,7 +15,10 @@
 #include "track_marker.hpp"
 //#include "GeodesicDistMap.h"
 
-cv::Mat old_depth;
+#define NUM_THREADS		4
+#if NUM_THREADS > 1
+#include <boost/thread.hpp>
+#endif
 
 struct human_struct{
 	float propability;				//Propability that a detection is indeed a human
@@ -298,7 +301,7 @@ inline void argus_depth::refresh_frame(){
 
 #if USE_GPU
 	cv::Mat local;
-	cv::cvtColor(rect_mat_left,local,CV_BGR2BGRA);
+	cv::cvtColor(rect_mat_left,local,CV_BGR2GRAY);
 	frame_ocl.upload(local);
 #endif
 }
@@ -1022,7 +1025,7 @@ void argus_depth::start(){
 #if NUM_THREADS > 1
 	thread_group.create_thread(boost::bind(&argus_depth::find_markers, this));
 	thread_group.create_thread(boost::bind(&argus_depth::compute_depth, this));
-	thread_group.create_thread(boost::bind(&argus_depth::segment_user, this));
+	//thread_group.create_thread(boost::bind(&argus_depth::segment_user, this));
 #else
 	find_markers();
 	compute_depth();

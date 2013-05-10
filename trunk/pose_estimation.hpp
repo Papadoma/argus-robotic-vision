@@ -135,4 +135,7 @@ public:
 	void show_best_solution();
 };
 
+#undef NUM_THREADS
+#undef DEBUG_WIND_POSE
+#undef DEBUG_COUT_POSE
 #endif
