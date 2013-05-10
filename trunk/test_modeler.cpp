@@ -75,7 +75,7 @@ int main(){
 		imshow("segmentation",model.get_segmentation());
 
 		float fps = 1/(t/cv::getTickFrequency());
-		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total fps "<< fps << std::endl;//for fps
+		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total ms "<< 1000./fps << std::endl;//for fps
 
 		cv::cvtColor(output,output,CV_GRAY2RGB);
 

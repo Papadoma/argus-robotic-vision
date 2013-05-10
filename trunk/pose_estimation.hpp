@@ -2,7 +2,7 @@
 #ifndef POSE_ESTIMATION_HPP
 #define POSE_ESTIMATION_HPP
 
-#define NUM_THREADS		4//4
+#define NUM_THREADS		1//4
 #if NUM_THREADS > 1
 #include <boost/thread.hpp>
 #endif

@@ -13,7 +13,7 @@
 #include "module_input.hpp"
 #include "pose_estimation.hpp"
 #include "track_marker.hpp"
-#include "GeodesicDistMap.h"
+//#include "GeodesicDistMap.h"
 
 cv::Mat old_depth;
 
@@ -125,8 +125,8 @@ private:
 	int Xu_value, Xl_value,Yu_value,Yl_value,Zu_value,Zl_value;
 	int canny;
 
-	GeodesicDistMap* m_distMap;
-	void skeletonize();
+	//GeodesicDistMap* m_distMap;
+	//void skeletonize();
 public:
 	double baseline;
 	cv::Point3d viewpoint;
@@ -203,11 +203,11 @@ argus_depth::argus_depth()
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = numberOfDisparities;
-	sgbm.uniquenessRatio = 5;
+	sgbm.uniquenessRatio = 0;
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
-	sgbm.fullDP = true;
+	sgbm.fullDP = false;
 #else
 	bm.init(cv::StereoBM::BASIC_PRESET ,numberOfDisparities,7);
 #endif
@@ -222,15 +222,15 @@ argus_depth::argus_depth()
 	Xu_value=7,Xl_value=7,Yu_value=20,Yl_value=20,Zu_value=30,Zl_value=60;
 	canny = 30;
 
-	//	cv::namedWindow("XYZ floodfill",CV_WINDOW_NORMAL );
-	//
-	//	cv::createTrackbar("canny", "XYZ floodfill", &canny, 200);
-	//	cv::createTrackbar("Xupper", "XYZ floodfill", &Xu_value, 1000);
-	//	cv::createTrackbar("Xlower", "XYZ floodfill", &Xl_value, 1000);
-	//	cv::createTrackbar("Yupper", "XYZ floodfill", &Yu_value, 1000);
-	//	cv::createTrackbar("Ylower", "XYZ floodfill", &Yl_value, 1000);
-	//	cv::createTrackbar("Zupper", "XYZ floodfill", &Zu_value, 1000);
-	//	cv::createTrackbar("Zlower", "XYZ floodfill", &Zl_value, 1000);
+		cv::namedWindow("XYZ floodfill",CV_WINDOW_NORMAL );
+
+		cv::createTrackbar("canny", "XYZ floodfill", &canny, 200);
+		cv::createTrackbar("Xupper", "XYZ floodfill", &Xu_value, 1000);
+		cv::createTrackbar("Xlower", "XYZ floodfill", &Xl_value, 1000);
+		cv::createTrackbar("Yupper", "XYZ floodfill", &Yu_value, 1000);
+		cv::createTrackbar("Ylower", "XYZ floodfill", &Yl_value, 1000);
+		cv::createTrackbar("Zupper", "XYZ floodfill", &Zu_value, 1000);
+		cv::createTrackbar("Zlower", "XYZ floodfill", &Zl_value, 1000);
 
 	user.user_mask = cv::Mat::zeros(height,width,CV_8UC1);
 	user.disparity = cv::Mat::zeros(height,width,CV_32FC1);
@@ -247,7 +247,7 @@ argus_depth::~argus_depth(){
 	delete(pose_tracker);
 	delete(left_tracker);
 	delete(right_tracker);
-	delete(m_distMap);
+	//delete(m_distMap);
 	cv::destroyAllWindows();
 
 }
@@ -267,6 +267,9 @@ inline unsigned int argus_depth::fast_distance(cv::Point P1, cv::Point P2){
 }
 
 inline void argus_depth::debug_detected_user(){
+	cv::circle(rect_mat_left,user.left_marker,3,cv::Scalar(0,255,0),-2);
+	cv::circle(rect_mat_left,user.right_marker,3,cv::Scalar(0,0,255),-2);
+
 	cv::Mat user_frame = cv::Mat::zeros(rect_mat_left.rows, 2*rect_mat_left.cols, CV_8UC3);
 	cv::Mat ROI1 = user_frame(user.body_bounding_rect);
 	cv::Mat ROI2 = user_frame(user.body_bounding_rect + cv::Point(rect_mat_left.cols,0));
@@ -274,12 +277,10 @@ inline void argus_depth::debug_detected_user(){
 	(rect_mat_left(user.body_bounding_rect)).copyTo(ROI1);
 	applyColorMap(user.disparity_viewable(user.body_bounding_rect), ROI2, cv::COLORMAP_JET);
 
-	cv::Mat test_frame = rect_mat_left.clone();
-	cv::circle(test_frame,user.left_marker,3,cv::Scalar(0,255,0),-2);
-	cv::circle(test_frame,user.right_marker,3,cv::Scalar(0,0,255),-2);
-	imshow("test",test_frame);
-	imshow("detected user", user_frame);
+//	cv::Mat test_frame = rect_mat_left.clone();
 
+//	imshow("test",test_frame);
+	imshow("detected user", user_frame);
 }
 
 inline void argus_depth::refresh_frame(){
@@ -303,6 +304,11 @@ inline void argus_depth::refresh_frame(){
 }
 
 inline void argus_depth::refresh_window(){
+#if DEBUG_MODE	//Show the detected humans on screen
+	debug_detected_human();
+	debug_detected_user();
+#endif
+
 	cv::rectangle(rect_mat_left, clearview_mask, cv::Scalar(255,255,255), 1, 8);
 	cv::rectangle(rect_mat_right, clearview_mask, cv::Scalar(255,255,255), 1, 8);
 
@@ -317,12 +323,6 @@ inline void argus_depth::refresh_window(){
 	cv::putText(imgResult, ss.str(), cv::Point (10,20), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2, 8, false );
 
 	imshow( "Camera", imgResult );
-
-
-#if DEBUG_MODE	//Show the detected humans on screen
-	debug_detected_human();
-	debug_detected_user();
-#endif
 }
 
 inline void argus_depth::debug_detected_human(){
@@ -653,13 +653,13 @@ inline void argus_depth::segment_user(){
 	mixChannels( in, 2, &hsvd, 1, from_to, 3 );
 
 	//Prepare for histogram calculation
-	int  hbins = 100, sbins = 100,dbins = 100;
+	int  hbins = 40, sbins = 40,dbins = 64;
 	int histSize[] = {hbins, sbins, dbins};
 	float hranges[] = { 0, 179 };
 	float sranges[] = { 0, 255 };
 	float dranges[] = { 0, numberOfDisparities };
 	const float* ranges[] = { hranges, sranges, dranges };
-	int channels[] = {0, 2};
+	int channels[] = {0,1, 2};
 
 	//Calculate back projection (if there is a previously calculated histogram)
 	cv::Mat backproj_img;
@@ -667,13 +667,17 @@ inline void argus_depth::segment_user(){
 		calcBackProject(&hsvd, 1, channels, user_hist, backproj_img, ranges, 1, true );
 	}
 
-	//Calculate histogram
-	calcHist( &hsvd, 1, channels, pre_mask, user_hist, 2, histSize, ranges, true, false );
-
 	cv::Mat user_skin = find_skin(rect_mat_left);
+	cv::Mat user_skin_clear = cv::Mat::zeros(user_skin.size(),CV_8UC1);
 	cv::erode(user_skin,user_skin,cv::Mat(),cv::Point(),1);
-	cv::bitwise_and(pre_mask,user_skin,user_skin);
+	user_skin.copyTo(user_skin_clear(user.body_bounding_rect));
+	cv::bitwise_or(pre_mask,user_skin,user_skin);
 	imshow("user_skin",user_skin);
+
+	//Calculate histogram
+	calcHist( &hsvd, 1, channels, user_skin, user_hist, 3, histSize, ranges, true, false );
+
+
 
 	if(cv::countNonZero(backproj_img) && local_user_bounding_rect.area()){
 		//Add previous edge mask information
@@ -986,21 +990,21 @@ void argus_depth::camera_view(cv::Mat& image, cv::Mat& destimage, cv::Mat& disp,
 }
  */
 
-void argus_depth::skeletonize(){
-	cv::Mat local_mask, local_point_cloud;
-	cv::cvtColor(user.user_mask,local_mask, CV_GRAY2BGR);
-	local_mask.convertTo(local_mask,CV_32FC3,1./255);
-
-	cv::bitwise_and(user.point_cloud,local_mask,local_point_cloud);
-	local_point_cloud=user.point_cloud.mul(local_mask);
-
-	cv::Mat imgGeo,imgPred;
-	if(!m_distMap->isCreated())m_distMap->create(local_point_cloud);
-	m_distMap->compute(local_point_cloud, imgGeo, imgPred);
-
-	cv::normalize(imgGeo,imgGeo,0,255,cv::NORM_MINMAX,CV_8UC1);
-	//cv::imshow("imgGeo",imgGeo* 0.8);
-}
+//void argus_depth::skeletonize(){
+//	cv::Mat local_mask, local_point_cloud;
+//	cv::cvtColor(user.user_mask,local_mask, CV_GRAY2BGR);
+//	local_mask.convertTo(local_mask,CV_32FC3,1./255);
+//
+//	cv::bitwise_and(user.point_cloud,local_mask,local_point_cloud);
+//	local_point_cloud=user.point_cloud.mul(local_mask);
+//
+//	cv::Mat imgGeo,imgPred;
+//	if(!m_distMap->isCreated())m_distMap->create(local_point_cloud);
+//	m_distMap->compute(local_point_cloud, imgGeo, imgPred);
+//
+//	cv::normalize(imgGeo,imgGeo,0,255,cv::NORM_MINMAX,CV_8UC1);
+//	//cv::imshow("imgGeo",imgGeo* 0.8);
+//}
 
 void argus_depth::start(){
 
