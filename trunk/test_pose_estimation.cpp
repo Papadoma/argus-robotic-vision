@@ -4,8 +4,8 @@ int main(){
 
 	pose_estimator* instance;
 	instance = new pose_estimator(640,480, 32);
-	cv::Mat input_frame = cv::imread("woman_dancing.png",0);
-	//cv::Mat input_frame = cv::imread("snap_depth3.png",0);
+	//cv::Mat input_frame = cv::imread("woman_dancing.png",0);
+	cv::Mat input_frame = cv::imread("snap_depth3.png",0);
 	//cv::Mat input_frame = cv::imread("test_human2.png",0);
 	//cv::Mat input_frame = cv::imread("snap_depth2.png",0);
 	//cv::Mat input_frame = cv::imread("man_standing.png",0);
