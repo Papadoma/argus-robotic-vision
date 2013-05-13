@@ -203,3 +203,5 @@ cv::Point marker_tracker::get_marker_center(cv::Mat input_frame){
 		return cv::Point(-1,-1);
 	}
 }
+
+#undef DEBUG_COUT

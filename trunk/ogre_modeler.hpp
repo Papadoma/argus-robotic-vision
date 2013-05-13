@@ -3,9 +3,6 @@
 
 #include <opencv2/opencv.hpp>
 #include <stdio.h>
-//#include <GL/glut.h>
-//#include <glm/glm.hpp>
-
 #include <OGRE/Ogre.h>
 #include <iostream>
 

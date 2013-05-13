@@ -10,16 +10,24 @@ int main(){
 	//cv::Mat input_frame = cv::imread("snap_depth2.png",0);
 	//cv::Mat input_frame = cv::imread("man_standing.png",0);
 
-	//instance->find_pose(input_frame, false, cv::Point(461,200), cv::Point(291,215));
-	//instance->find_pose(input_frame, false, cv::Point(433,79), cv::Point(226,83));
-	instance->find_pose(input_frame, false);
-	//instance->find_pose(input_frame, false, cv::Point(529,157), cv::Point(343,188));
-	//instance->find_pose(input_frame, false, cv::Point(433,72), cv::Point(230,71));
-	//input_frame = cv::imread("woman_dancing2.png",0);
-	//instance->find_pose(input_frame, true, cv::Point(459,202), cv::Point(296,219));
+	int key = 'r';
+	while(key == 'r'){
+		//instance->find_pose(input_frame, false, cv::Point(461,200), cv::Point(291,215));
+		//instance->find_pose(input_frame, false, cv::Point(433,79), cv::Point(226,83));
+
+		//instance->find_pose(input_frame, false);
+		instance->find_pose(input_frame, false, cv::Point(433,67), cv::Point(230,67));
+		instance->find_pose(input_frame, true, cv::Point(433,67), cv::Point(230,67));
+		instance->find_pose(input_frame, true, cv::Point(433,67), cv::Point(230,67));
+
+		//instance->find_pose(input_frame, false, cv::Point(529,157), cv::Point(343,188));
+
+		//input_frame = cv::imread("woman_dancing2.png",0);
+		//instance->find_pose(input_frame, true, cv::Point(459,202), cv::Point(296,219));
+		key = cv::waitKey(0) & 255;
+	}
 
 	std::cout<< "[Pose Estimator] Pose estimator stopped!"<<std::endl;
-	cv::waitKey(0);
 	return 0;
 }
 

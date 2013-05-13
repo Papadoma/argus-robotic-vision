@@ -5,7 +5,7 @@
 
 #define CONTOURS_SIZE 10
 #define MARKER_DENSITY 0.5
-#define DEBUG_COUT_MARKER false
+#define DEBUG_COUT false
 
 class marker_tracker{
 private:
@@ -38,5 +38,4 @@ public:
 	bool is_visible(){return marker_visible;};
 };
 
-#undef DEBUG_COUT_MARKER
 #endif
