@@ -1,7 +1,5 @@
 #include "ogre_modeler.hpp"
 
-
-
 ogre_model::ogre_model(int render_width, int render_height)
 :render_width(render_width),
  render_height(render_height)
@@ -379,6 +377,7 @@ cv::Mat* ogre_model::get_depth(){
 float ogre_model::get_fps(){
 	return renderToTexture->getBuffer()->getRenderTarget()->getAverageFPS();
 }
+
 void ogre_model::set_depth_limits(float min_set = -1, float center_set = -1, float max_set = -1){
 	const Ogre::Sphere& bodySphere = body->getWorldBoundingSphere();
 	Ogre::Vector3 SphereCenter = bodySphere.getCenter();
@@ -418,7 +417,6 @@ cv::Mat_<cv::Point3f> ogre_model::get_camera_viewspace(){
 
 	return coordsCV;
 }
-
 
 void ogre_model::getMeshInformation(const Ogre::MeshPtr mesh,
 		size_t &vertex_count,
@@ -596,3 +594,7 @@ cv::Mat ogre_model::get_segmentation(){
 	delete[] indices;
 	return result;
 }
+
+#undef DEBUG_CONSOLE
+#undef DEBUG_WINDOW
+#undef DEPTH_MODE
