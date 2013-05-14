@@ -1151,7 +1151,8 @@ void argus_depth::start(){
 
 void argus_depth::detect_human_loop(){
 	while(detect_user_flag){
-		if(frame_counter%HUMAN_DET_RATE == 0)detect_human();
+		boost::this_thread::sleep(boost::posix_time::seconds(5));
+		detect_human();
 	}
 }
 
@@ -1174,6 +1175,8 @@ void argus_depth::main_loop(){
 		start();
 		refresh_window();
 	}
+	detect_user_flag=false;
+	t1.join();
 }
 
 int main(){
