@@ -7,7 +7,7 @@ marker_tracker::marker_tracker(std::string filename)
 {
 
 	cv::FileStorage fs(filename, cv::FileStorage::READ);
-	if (!fs.isOpened()) {std::cout << "unable to open file storage!" << std::endl; exit(1);}
+	if (!fs.isOpened()) {std::cout << "[Marker tracker] unable to open marker histogram!" << std::endl; exit(1);}
 	fs["marker_histogram"] >> marker_hist;
 	fs.release();
 

@@ -13,15 +13,15 @@
 #include <stdlib.h>
 #include <opencv2/opencv.hpp>
 
-#define rand_num ((double) rand() / (RAND_MAX))
-#define A 0.8	//0.8
-#define N 15
-#define MAX_SCORE_CHANGE_COUNT 15	//How many times will the best score stays unchanged before stopping
+//#define rand_num ((double) rand() / (RAND_MAX))
+#define A 0.8f	//0.8
+#define N 20
+#define MAX_SCORE_CHANGE_COUNT 50	//How many times will the best score stays unchanged before stopping
 #define MAX_EVOLS 600				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 30;
+const int swarm_size = 50;
 const float w = 0.5;
 const float c1 = 1.5;//1.5
 const float c2 = 1.5;//1.5
@@ -40,8 +40,8 @@ struct particle{
 	bool reset_array[4];
 
 	cv::Mat bones_violation;
-	cv::Mat position_violation;
-	cv::Mat rotation_violation;
+//	cv::Mat position_violation;
+//	cv::Mat rotation_violation;
 	cv::Mat extremas;
 
 	particle_position current_position;	//Current particle position
@@ -58,6 +58,7 @@ private:
 #if NUM_THREADS > 1
 	//boost::mutex best_solution_mutex;
 	boost::mutex obsolete_counter_mutex;
+	boost::mutex human_position_mutex;
 	boost::thread_group thread_group;
 #endif
 
@@ -128,11 +129,14 @@ public:
 	pose_estimator(int, int, int);
 	~pose_estimator();
 
-	particle_position find_pose(cv::Mat disparity_frame, bool track, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
+
+
+	particle find_pose(cv::Mat disparity_frame, bool track, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
 	cv::Mat get_silhouette(){return best_global_silhouette;};
 	cv::Mat get_depth(){return best_global_depth;};
 	void get_instructions();
 	void show_best_solution();
+	void set_human_position(cv::Point3f est_pos){human_position=est_pos;};
 };
 
 #endif
