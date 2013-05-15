@@ -15,10 +15,12 @@ int main(){
 		//instance->find_pose(input_frame, false, cv::Point(461,200), cv::Point(291,215));
 		//instance->find_pose(input_frame, false, cv::Point(433,79), cv::Point(226,83));
 
-		//instance->find_pose(input_frame, false);
-		instance->find_pose(input_frame, false, cv::Point(433,67), cv::Point(230,67));
-		instance->find_pose(input_frame, true, cv::Point(433,67), cv::Point(230,67));
-		instance->find_pose(input_frame, true, cv::Point(433,67), cv::Point(230,67));
+		instance->find_pose(input_frame, false);
+		//instance->find_pose(input_frame, false, cv::Point(424,149) , cv::Point(222,158) );
+		//instance->find_pose(input_frame, true, cv::Point(424,149) , cv::Point(222,158) );
+		//instance->find_pose(input_frame, true, cv::Point(424,149) , cv::Point(222,158) );
+		//instance->find_pose(input_frame, true, cv::Point(433,67), cv::Point(230,67));
+		//instance->find_pose(input_frame, true, cv::Point(433,67), cv::Point(230,67));
 
 		//instance->find_pose(input_frame, false, cv::Point(529,157), cv::Point(343,188));
 
