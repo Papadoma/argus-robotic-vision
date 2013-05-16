@@ -207,7 +207,7 @@ inline void pose_estimator::init_single_particle(particle& singleParticle, int t
 	}
 
 	if( type==BONES || type==ALL ){
-		if(!fine)singleParticle.current_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1)+ get_random_bones_rot(true);
+		if(!fine)singleParticle.current_position.bones_rotation = /*cv::Mat::zeros(19,3,CV_32FC1)+*/ get_random_bones_rot(true).clone();
 		singleParticle.next_position.bones_rotation = get_random_bones_rot(true).clone();
 		if(!fine)singleParticle.best_position.bones_rotation = singleParticle.current_position.bones_rotation.clone();
 		//singleParticle.bones_violation = cv::Mat::ones(19,3,CV_32FC1);
@@ -246,22 +246,22 @@ inline cv::Mat pose_estimator::get_random_bones_rot(bool velocity)
 			2,	2,	2,		//head
 			1,	1,	1,		//u_torso
 			1,	1,	1,		//l_torso
-			1,	1,	1,		//r_shoulder
-			1,	1,	1,		//l_shoulder
-			1,	1,	1,		//r_hip
-			1,	1,	1,		//l_hip
-			3,	3,	3,		//r_arm
-			4,	4,	4,		//r_forearm
+			0,	1,	1,		//r_shoulder
+			0,	1,	1,		//l_shoulder
+			0,	1,	1,		//r_hip
+			0,	1,	1,		//l_hip
+			4,	3,	3,		//r_arm
+			0,	0,	4,		//r_forearm
 			2,	2,	2,		//r_hand
-			3,	3,	3,		//l_arm
-			4,	4,	4,		//l_forearm
+			4,	3,	3,		//l_arm
+			0,	0,	4,		//l_forearm
 			2,	2,	2,		//l_hand
-			3,	3,	3,		//r_thigh
-			3,	3,	3,		//r_calf
-			2,	2,	2,		//r_foot
-			3,	3,	3,		//l_thigh
-			3,	3,	3,		//l_calf
-			2,	2,	2		//l_foot
+			2,	3,	3,		//r_thigh
+			0,	3,	0,		//r_calf
+			0,	2,	0,		//r_foot
+			2,	3,	3,		//l_thigh
+			0,	3,	0,		//l_calf
+			0,	2,	0		//l_foot
 	};
 
 	cv::Mat mat_weights(19,3,CV_32FC1,weights);
@@ -270,7 +270,7 @@ inline cv::Mat pose_estimator::get_random_bones_rot(bool velocity)
 		cv::Mat result;
 		result = get_random_19x3_mat(velocity).clone();
 		if(velocity){
-			result = 0.5*(bone_max-bone_min).mul(result.mul(mat_weights/4));
+			result = (bone_max-bone_min).mul(result.mul(mat_weights/4));
 			//result = 60*result.mul(mat_weights/4);
 			//result = 40*result;
 		}else{
@@ -311,9 +311,9 @@ inline cv::Point3f pose_estimator::get_random_model_position(bool velocity){
 	cv::Point3f position;
 
 	if(velocity){
-		position.x = rand_gen.gaussian(0.3) * 300 ;	//gaussian distribution
-		position.y = rand_gen.gaussian(0.3) * 300 ;
-		position.z = rand_gen.gaussian(0.3) * 300 ;
+		position.x = rand_gen.gaussian(0.3) * 500 ;	//gaussian distribution
+		position.y = rand_gen.gaussian(0.3) * 500 ;
+		position.z = rand_gen.gaussian(0.3) * 500 ;
 	}else{
 		position.x = human_position.x + (0.5 - rand_gen.uniform(0.f,1.1f)) * 500 ;	//uniform distribution
 		position.y = human_position.y + (0.5 - rand_gen.uniform(0.f,1.1f)) * 500 ;
@@ -535,22 +535,22 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 #endif
 	if(particle_inst.current_position.model_position.x < local_human_position.x - 500){
 		particle_inst.current_position.model_position.x = local_human_position.x - 500;
-		particle_inst.next_position.model_position.x = -0.3*particle_inst.next_position.model_position.x;
+		//particle_inst.next_position.model_position.x = -0.3*particle_inst.next_position.model_position.x;
 		//particle_inst.position_violation.at<float>(0,0) = 0;
 	}else if(particle_inst.current_position.model_position.x > local_human_position.x + 500){
 		particle_inst.current_position.model_position.x = local_human_position.x + 500;
-		particle_inst.next_position.model_position.x = -0.3*particle_inst.next_position.model_position.x;
+		//particle_inst.next_position.model_position.x = -0.3*particle_inst.next_position.model_position.x;
 		//particle_inst.position_violation.at<float>(0,0) = 0;
 	}else{
 		//particle_inst.position_violation.at<float>(0,0) = 1;
 	}
 	if(particle_inst.current_position.model_position.y < local_human_position.y - 500){
 		particle_inst.current_position.model_position.y = local_human_position.y - 500;
-		particle_inst.next_position.model_position.y = -0.3*particle_inst.next_position.model_position.y;
+		//particle_inst.next_position.model_position.y = -0.3*particle_inst.next_position.model_position.y;
 		//particle_inst.position_violation.at<float>(1,0) = 0;
 	}else if(particle_inst.current_position.model_position.y > local_human_position.y + 500){
 		particle_inst.current_position.model_position.y = local_human_position.y + 500;
-		particle_inst.next_position.model_position.y = -0.3*particle_inst.next_position.model_position.y;
+		//particle_inst.next_position.model_position.y = -0.3*particle_inst.next_position.model_position.y;
 		//particle_inst.position_violation.at<float>(1,0) = 0;
 	}else{
 		//particle_inst.position_violation.at<float>(1,0) = 1;
@@ -558,10 +558,11 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 
 	if(particle_inst.current_position.model_position.z < local_human_position.z - 500){
 		particle_inst.current_position.model_position.z = local_human_position.z - 500;
-		particle_inst.next_position.model_position.z = -0.3*particle_inst.next_position.model_position.z;
+		//particle_inst.next_position.model_position.z = -0.3*particle_inst.next_position.model_position.z;
 		//particle_inst.position_violation.at<float>(2,0) = 0;
 	}else if(particle_inst.current_position.model_position.z > local_human_position.z + 500){
-		particle_inst.next_position.model_position.z = -0.3*particle_inst.next_position.model_position.z;
+		particle_inst.current_position.model_position.z = local_human_position.z + 500;
+		//particle_inst.next_position.model_position.z = -0.3*particle_inst.next_position.model_position.z;
 		//particle_inst.position_violation.at<float>(2,0) = 0;
 	}else{
 		//particle_inst.position_violation.at<float>(2,0) = 1;
@@ -570,11 +571,11 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 	//Place the new rotation within limits
 	if( particle_inst.current_position.model_rotation.x > rotation_max.x){	//yaw
 		particle_inst.current_position.model_rotation.x = rotation_max.x;
-		particle_inst.next_position.model_rotation.x = -0.3*particle_inst.next_position.model_rotation.x;
+		//particle_inst.next_position.model_rotation.x = -0.3*particle_inst.next_position.model_rotation.x;
 		//particle_inst.rotation_violation.at<float>(0,0) = 0;
 	}else if(particle_inst.current_position.model_rotation.x < rotation_min.x){
 		particle_inst.current_position.model_rotation.x = rotation_min.x;
-		particle_inst.next_position.model_rotation.x = -0.3*particle_inst.next_position.model_rotation.x;
+		//particle_inst.next_position.model_rotation.x = -0.3*particle_inst.next_position.model_rotation.x;
 		//particle_inst.rotation_violation.at<float>(0,0) = 0;
 	}else{
 		//particle_inst.rotation_violation.at<float>(0,0) = 1;
@@ -582,11 +583,11 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 
 	if(particle_inst.current_position.model_rotation.y > rotation_max.y){	//pitch
 		particle_inst.current_position.model_rotation.y = rotation_max.y;
-		particle_inst.next_position.model_rotation.y = -0.3*particle_inst.next_position.model_rotation.y;
+		//particle_inst.next_position.model_rotation.y = -0.3*particle_inst.next_position.model_rotation.y;
 		//particle_inst.rotation_violation.at<float>(1,0) = 0;
 	}else if(particle_inst.current_position.model_rotation.y < rotation_min.y){
 		particle_inst.current_position.model_rotation.y = rotation_min.y;
-		particle_inst.next_position.model_rotation.y = -0.3*particle_inst.next_position.model_rotation.y;
+		//particle_inst.next_position.model_rotation.y = -0.3*particle_inst.next_position.model_rotation.y;
 		//particle_inst.rotation_violation.at<float>(1,0) = 0;
 	}else{
 		//particle_inst.rotation_violation.at<float>(1,0) = 1;
@@ -594,11 +595,11 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 
 	if(particle_inst.current_position.model_rotation.z > rotation_max.z){	//roll
 		particle_inst.current_position.model_rotation.z = rotation_max.z;
-		particle_inst.next_position.model_rotation.z = -0.3*particle_inst.next_position.model_rotation.z;
+		//particle_inst.next_position.model_rotation.z = -0.3*particle_inst.next_position.model_rotation.z;
 		//particle_inst.rotation_violation.at<float>(2,0) = 0;
 	}else if(particle_inst.current_position.model_rotation.z < rotation_min.z){
 		particle_inst.current_position.model_rotation.z = rotation_min.z;
-		particle_inst.next_position.model_rotation.z = -0.3*particle_inst.next_position.model_rotation.z;
+		//particle_inst.next_position.model_rotation.z = -0.3*particle_inst.next_position.model_rotation.z;
 		//particle_inst.rotation_violation.at<float>(2,0) = 0;
 	}else{
 		//particle_inst.rotation_violation.at<float>(2,0) = 1;
@@ -607,10 +608,10 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 	//Place the new scale within limits
 	if(particle_inst.current_position.scale < 400){
 		particle_inst.current_position.scale = 400;
-		particle_inst.next_position.scale = -0.0*particle_inst.next_position.scale;
+		//particle_inst.next_position.scale = -0.0*particle_inst.next_position.scale;
 	}else if (particle_inst.current_position.scale >1200){
 		particle_inst.current_position.scale = 1200;
-		particle_inst.next_position.scale = -0.0*particle_inst.next_position.scale;
+		//particle_inst.next_position.scale = -0.0*particle_inst.next_position.scale;
 	}
 
 	//Place the new bones rotation within limits
@@ -618,7 +619,7 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 	cv::min(particle_inst.current_position.bones_rotation,bone_max,particle_inst.current_position.bones_rotation);
 	cv::max(particle_inst.current_position.bones_rotation,bone_min,particle_inst.current_position.bones_rotation);
 	particle_inst.bones_violation = (result == particle_inst.current_position.bones_rotation);	//Check if before and after limiting
-	particle_inst.bones_violation.convertTo(particle_inst.bones_violation, CV_32FC1,(float)1.3/255);
+	particle_inst.bones_violation.convertTo(particle_inst.bones_violation, CV_32FC1,(float)1.0/255);
 
 	//Test if there where any violations/ FOR DEBUGGING PURPOSES
 	//	if (57-cv::countNonZero(particle_inst.bones_violation)){
@@ -630,9 +631,9 @@ inline void pose_estimator::calc_next_position(particle& particle_inst){
 	//	if (3-cv::countNonZero(particle_inst.rotation_violation)){
 	//		std::cout << "[Pose Estimator]: Rotation violation fixed on particle: "<<particle_inst.id<<" for No of values: "<< 3-cv::countNonZero(particle_inst.rotation_violation)<<std::endl;
 	//	}
-	particle_inst.bones_violation -= 0.3;
-	particle_inst.next_position.bones_rotation = particle_inst.next_position.bones_rotation.mul(particle_inst.bones_violation);
-	particle_inst.next_position.bones_rotation.copyTo(particle_inst.next_position.bones_rotation);
+	particle_inst.bones_violation -= 0.0;
+	//particle_inst.next_position.bones_rotation = particle_inst.next_position.bones_rotation.mul(particle_inst.bones_violation);
+	//particle_inst.next_position.bones_rotation.copyTo(particle_inst.next_position.bones_rotation);
 
 	//Round current_position, since its float
 	round_position(particle_inst.current_position);
@@ -742,7 +743,7 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 			//return  1./(1+abs(mean.val[0]))*right_dist*left_dist * result_and_count/countNonZero(result_or);
 			//return  1./(1+cv::mean(fuzzy_mat).val[0]) *1./(1+cv::mean(fuzzy_mat).val[0])*right_dist*left_dist;
 			//return  0.5*100000./(1+fuzzy_mean.val[0])*1./(1+fuzzy_mean.val[0])*1./(1+fuzzy_stddev.val[0])*1./(1+fuzzy_stddev.val[0]) + 0.5*right_dist*left_dist;
-			return 1./(1+cv::mean(fuzzy_mat).val[0]/255)+right_dist*left_dist;
+			return 1./(1+cv::mean(fuzzy_mat).val[0]/127)* 1./(1+cv::mean(result).val[0]/127) +right_dist*left_dist;
 
 		}else if(found_rhand&&enable_bones){
 			//return 1./(1+abs(stddev.val[0])) * 1./(1+abs(mean.val[0]))*right_dist ;
@@ -756,7 +757,7 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 
 		}else{
 
-			return 1./(1+cv::mean(fuzzy_mat).val[0]/255);
+			return 1./(1+cv::mean(fuzzy_mat).val[0]/127) * 1./(1+cv::mean(result).val[0]/127);
 
 			//return 1./(1+abs(stddev.val[0])) * 1./(1+abs(mean.val[0])) * result_and_count/countNonZero(result_or);
 			//return 1./(1+abs(mean.val[0])) * result_and_count/countNonZero(result_or);
