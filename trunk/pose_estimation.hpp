@@ -2,7 +2,7 @@
 #ifndef POSE_ESTIMATION_HPP
 #define POSE_ESTIMATION_HPP
 
-#define NUM_THREADS		1//4
+#define NUM_THREADS		4//4
 #if NUM_THREADS > 1
 #include <boost/thread.hpp>
 #endif
@@ -15,13 +15,13 @@
 
 //#define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8f	//0.8
-#define N 20
+#define N 15
 #define MAX_SCORE_CHANGE_COUNT 50	//How many times will the best score stays unchanged before stopping
 #define MAX_EVOLS 600				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 50;
+const int swarm_size = 30;
 const float w = 0.5;
 const float c1 = 1.5;//1.5
 const float c2 = 1.5;//1.5
