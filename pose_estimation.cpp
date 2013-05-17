@@ -743,7 +743,7 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 			//return  1./(1+abs(mean.val[0]))*right_dist*left_dist * result_and_count/countNonZero(result_or);
 			//return  1./(1+cv::mean(fuzzy_mat).val[0]) *1./(1+cv::mean(fuzzy_mat).val[0])*right_dist*left_dist;
 			//return  0.5*100000./(1+fuzzy_mean.val[0])*1./(1+fuzzy_mean.val[0])*1./(1+fuzzy_stddev.val[0])*1./(1+fuzzy_stddev.val[0]) + 0.5*right_dist*left_dist;
-			return 1./(1+cv::mean(fuzzy_mat).val[0]/127)* 1./(1+cv::mean(result).val[0]/127) +right_dist*left_dist;
+			return 1./(1+cv::mean(fuzzy_mat).val[0]/127) + right_dist*left_dist+ 1./(1+cv::mean(result).val[0]/127);
 
 		}else if(found_rhand&&enable_bones){
 			//return 1./(1+abs(stddev.val[0])) * 1./(1+abs(mean.val[0]))*right_dist ;
@@ -757,7 +757,7 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 
 		}else{
 
-			return 1./(1+cv::mean(fuzzy_mat).val[0]/127) * 1./(1+cv::mean(result).val[0]/127);
+			return 1./(1+cv::mean(fuzzy_mat).val[0]/127)+ 1./(1+cv::mean(result).val[0]/127);
 
 			//return 1./(1+abs(stddev.val[0])) * 1./(1+abs(mean.val[0])) * result_and_count/countNonZero(result_or);
 			//return 1./(1+abs(mean.val[0])) * result_and_count/countNonZero(result_or);
