@@ -1,16 +1,11 @@
 #include "module_input.hpp"
 
 module_eye::module_eye()
-:use_camera(true)
-#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
-,
+:use_camera(true),
 width(640),
 height(480)
-
-#endif
-
 {
-#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#if (defined(_WIN32) || defined(__WIN32__) || defined(WIN32)) && USE_CL_DRIVER
 	int numCams = CLEyeGetCameraCount();
 	if(numCams == 0)
 	{
@@ -91,7 +86,7 @@ module_eye::module_eye(std::string filename_left, std::string filename_right)
 
 module_eye::~module_eye(){
 	if(use_camera){
-#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#if (defined(_WIN32) || defined(__WIN32__) || defined(WIN32)) && USE_CL_DRIVER
 		CLEyeCameraStop(capture_left);
 		CLEyeCameraStop(capture_right);
 		CLEyeDestroyCamera(capture_left);
@@ -110,7 +105,7 @@ module_eye::~module_eye(){
 
 bool module_eye::getFrame(cv::Mat& mat_left,cv::Mat& mat_right){
 	if (use_camera){
-#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#if (defined(_WIN32) || defined(__WIN32__) || defined(WIN32)) && USE_CL_DRIVER
 		CLEyeCameraGetFrame(capture_left,	pCapBufferLeft, 2000);
 		CLEyeCameraGetFrame(capture_right,	pCapBufferRight, 2000);
 

@@ -1,18 +1,18 @@
 #pragma once
 #ifndef MODULE_EYE_HPP
 #define MODULE_EYE_HPP
-
+#define USE_CL_DRIVER true
 
 #include <opencv2/opencv.hpp>
 #include <opencv/cv.h>
 
-#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#if (defined(_WIN32) || defined(__WIN32__) || defined(WIN32)) && USE_CL_DRIVER
 #include <CLEyeMulticam.h>
 #endif
 
 class module_eye{
 private:
-#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#if (defined(_WIN32) || defined(__WIN32__) || defined(WIN32)) && USE_CL_DRIVER
 	typedef CLEyeCameraInstance capture_type;
 #else
 	typedef cv::VideoCapture capture_type;
@@ -28,7 +28,7 @@ private:
 	cv::VideoCapture file_left;
 	cv::VideoCapture file_right;
 
-#if defined(_WIN32) || defined(__WIN32__) || defined(WIN32)
+#if (defined(_WIN32) || defined(__WIN32__) || defined(WIN32)) && USE_CL_DRIVER
 	PBYTE pCapBufferLeft;
 	PBYTE pCapBufferRight;
 	IplImage *pCapImageLeft;
