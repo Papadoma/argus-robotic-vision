@@ -575,7 +575,7 @@ inline void argus_depth::detect_human(){
 		user.head_bounding_rect = possible_user.head_bounding_rect;
 		user.human_center = possible_user.human_center;
 		user.propability = possible_user.propability;
-		user_hist = cv::Mat::zeros(user_hist.size(), CV_8UC1);
+		//user_hist = cv::Mat::zeros(user_hist.size(), CV_8UC1);
 		user_mutex.unlock();
 #else
 		user.body_bounding_rect = possible_user.body_bounding_rect;
@@ -1141,14 +1141,14 @@ inline void argus_depth::start(){
 	particle detected_pose;
 	if(tracking){
 		//thread_group.create_thread(boost::bind(&argus_depth::skeletonize, this));
-		//detected_pose = pose_tracker->find_pose(user.disparity_viewable,true);
-		//imshow("human_pose",detected_pose.particle_depth);
+		detected_pose = pose_tracker->find_pose(user.disparity_viewable,true);
+		imshow("human_pose",detected_pose.particle_depth);
 	}
 	if(!detect_user_flag && !tracking){
-		//pose_tracker->set_human_position(user.human_position);
-		//detected_pose = pose_tracker->find_pose(user.disparity_viewable,false);
-		//imshow("human_pose",detected_pose.particle_depth);
-		//tracking = true;
+		pose_tracker->set_human_position(user.human_position);
+		detected_pose = pose_tracker->find_pose(user.disparity_viewable,false);
+		imshow("human_pose",detected_pose.particle_depth);
+		tracking = true;
 	}
 #if NUM_THREADS > 1
 	thread_group.join_all();

@@ -191,7 +191,7 @@ void ogre_model::setup(){
 	Ogre::RenderTexture* renderTexture = renderToTexture->getBuffer()->getRenderTarget();
 	renderTexture->addViewport(camera);
 	renderTexture->getViewport(0)->setClearEveryFrame(true);
-	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::Black);
+	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
 	renderTexture->getViewport(0)->setOverlaysEnabled(false);
 	renderTexture->getViewport(0)->setShadowsEnabled(false);
 
@@ -344,11 +344,12 @@ cv::Mat ogre_model::get_2D_pos(){
 	return pos2D;
 }
 
-void ogre_model::get_opencv_snap(){
-	//setMaxMinDepth();
+inline void ogre_model::get_opencv_snap(){
+	//double t = (double)cv::getTickCount();
 	renderToTexture->getBuffer()->getRenderTarget()->update();
 	renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
-
+	//t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+	//std::cout<<"[Modeler] execution time: "<<t<<"ms"<<std::endl;
 #if DEBUG_WINDOW
 	render_window();
 	std::cout << "[Modeler] Main window fps"<<Window->getLastFPS()<<std::endl;
@@ -357,10 +358,13 @@ void ogre_model::get_opencv_snap(){
 }
 
 cv::Mat* ogre_model::get_depth(){
+	//	double t = (double)cv::getTickCount();
 	get_opencv_snap();
+	//	t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+	//	std::cout<<"[Modeler] execution time: "<<t<<"ms"<<std::endl;
 #if DEPTH_MODE == 1
-	image_depth = 255 - image_depth;
-	threshold(image_depth, image_depth, 254, 255, cv::THRESH_TOZERO_INV);
+	//	swarm[i].particle_depth = 255 - swarm[i].particle_depth;
+	//	threshold(swarm[i].particle_depth, swarm[i].particle_depth, 254, 255, cv::THRESH_TOZERO_INV);
 #elif DEPTH_MODE == 2
 	cv::Mat temp;
 	image_depth = 65535 - image_depth;
@@ -371,6 +375,7 @@ cv::Mat* ogre_model::get_depth(){
 	image_depth = 1 - image_depth;
 	threshold(image_depth, image_depth, 0.99, 1, cv::THRESH_TOZERO_INV);
 #endif
+
 	return &image_depth;
 }
 
@@ -418,7 +423,7 @@ cv::Mat_<cv::Point3f> ogre_model::get_camera_viewspace(){
 	return coordsCV;
 }
 
-void ogre_model::getMeshInformation(const Ogre::MeshPtr mesh,
+inline void ogre_model::getMeshInformation(const Ogre::MeshPtr mesh,
 		size_t &vertex_count,
 		Ogre::Vector3* &vertices,
 		size_t &index_count,
@@ -467,7 +472,8 @@ void ogre_model::getMeshInformation(const Ogre::MeshPtr mesh,
 	{
 		Ogre::SubMesh* submesh = mesh->getSubMesh(i);
 
-		Ogre::VertexData* vertex_data = submesh->useSharedVertices ? mesh->sharedVertexData : submesh->vertexData;
+		//Ogre::VertexData* vertex_data = submesh->useSharedVertices ? mesh->sharedVertexData : submesh->vertexData;
+		Ogre::VertexData* vertex_data = body->_getSkelAnimVertexData();
 
 		if ((!submesh->useSharedVertices) || (submesh->useSharedVertices && !added_shared))
 		{
@@ -564,8 +570,10 @@ cv::Mat ogre_model::get_segmentation(){
 	}
 
 	//Iterate through mesh triangles, composed of 3 vertices
-	cv::Point triangle[3];
+	cv::Point triangle[index_count/3][3];
 	Ogre::Vector3 point0,point1,point2;
+	cv::Mat vertices_depth(index_count/3, 1, CV_32FC1);
+	cv::Mat vertices_color(index_count/3, 1, CV_8UC1);
 	for (size_t i = 0; i < index_count; i += 3)
 	{
 
@@ -573,15 +581,26 @@ cv::Mat ogre_model::get_segmentation(){
 		point1 = camera->getProjectionMatrix()*camera->getViewMatrix()*vertices[indices[i+1]] ;
 		point2 = camera->getProjectionMatrix()*camera->getViewMatrix()*vertices[indices[i+2]];
 
-		triangle[0] = cv::Point((0.5 + point0.x/2)*render_width,(0.5 - point0.y/2)*render_height);
-		triangle[1] = cv::Point((0.5 + point1.x/2)*render_width,(0.5 - point1.y/2)*render_height);
-		triangle[2] = cv::Point((0.5 + point2.x/2)*render_width,(0.5 - point2.y/2)*render_height);
+		vertices_depth.at<float>(i/3,0)=((point0+point1+point2)/3).z;
 
-		unsigned short triangle2bone = vertex2bone[indices[i]];
+		triangle[i/3][0] = cv::Point((0.5 + point0.x/2)*render_width,(0.5 - point0.y/2)*render_height);
+		triangle[i/3][1] = cv::Point((0.5 + point1.x/2)*render_width,(0.5 - point1.y/2)*render_height);
+		triangle[i/3][2] = cv::Point((0.5 + point2.x/2)*render_width,(0.5 - point2.y/2)*render_height);
+
+		unsigned char triangle2bone=0 ;//= vertex2bone[indices[i]];
+		if(vertex2bone[indices[i]] == vertex2bone[indices[i+1]])triangle2bone = vertex2bone[indices[i]];
 		if(vertex2bone[indices[i+1]] == vertex2bone[indices[i+2]])triangle2bone = vertex2bone[indices[i+1]];
+		if(vertex2bone[indices[i]] == vertex2bone[indices[i+2]])triangle2bone = vertex2bone[indices[i]];
+		vertices_color.at<uchar>(i/3,0)=triangle2bone;
 
-		fillConvexPoly(result, triangle, 3, cv::Scalar(triangle2bone));
-		//fillConvexPoly(result, triangle, 3, cv::Scalar( vertex2bone[indices[i]], vertex2bone[indices[i+1]],  vertex2bone[indices[i+2]]));
+	}
+	cv::Mat cv_indices;
+	cv::sortIdx(vertices_depth, cv_indices, cv::SORT_EVERY_COLUMN | cv::SORT_DESCENDING);
+	std::cout<<cv_indices.rows<<std::endl;
+
+	for (int i = 0; i < cv_indices.rows; i ++)
+	{
+		fillConvexPoly(result, triangle[cv_indices.at<int>(i,0)], 3, cv::Scalar(vertices_color.at<uchar>(cv_indices.at<int>(i,0),0)));
 	}
 	//std::cout<<vertices[indices[100]]<<std::endl;
 	cv::normalize(result, result, 0, 255, cv::NORM_MINMAX, CV_8UC1);

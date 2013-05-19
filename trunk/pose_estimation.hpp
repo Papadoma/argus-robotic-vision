@@ -16,12 +16,11 @@
 //#define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8f	//0.8
 #define N 15
-#define MAX_SCORE_CHANGE_COUNT 50	//How many times will the best score stays unchanged before stopping
-#define MAX_EVOLS 600				//How many evolutions will cause the search to stop
+#define MAX_EVOLS 100				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 30;
+const int swarm_size = 20;
 const float w = 0.5;
 const float c1 = 1.5;//1.5
 const float c2 = 1.5;//1.5
@@ -35,7 +34,7 @@ struct particle_position{
 
 struct particle{
 	int id;
-	cv::Mat particle_silhouette;		//Silhouette of particle
+	//cv::Mat particle_silhouette;		//Silhouette of particle
 	cv::Mat particle_depth;				//Viewable disparity of particle
 	bool reset_array[4];
 
@@ -107,7 +106,7 @@ private:
 
 	cv::Mat_<cv::Point3f> camera_viewspace; //TRN, TLN, BLN, BRN, TRF, TLF, BLF, BRF
 
-	cv::Mat best_global_silhouette;
+	//cv::Mat best_global_silhouette;
 	cv::Mat best_global_depth;
 	cv::Mat best_global_extremas;
 
@@ -118,21 +117,19 @@ private:
 	void calc_evolution();					//Calculate evolution of particles. Returns final score.
 	void evaluate_particles(int , int );	//Evaluates particles according to their score
 
+	int MAX_SCORE_CHANGE_COUNT;	//How many times will the best score stays unchanged before stopping
 public:
 	double best_global_score;
 	ogre_model* model;
 
-	cv::Mat input_silhouette;			//Silhouette of input image
 	cv::Rect input_boundingbox;			//BOunding box of input image
 	cv::Mat input_depth;				//Viewable disparity of input image
 
 	pose_estimator(int, int, int);
 	~pose_estimator();
 
-
-
 	particle find_pose(cv::Mat disparity_frame, bool track, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
-	cv::Mat get_silhouette(){return best_global_silhouette;};
+	//cv::Mat get_silhouette(){return best_global_silhouette;};
 	cv::Mat get_depth(){return best_global_depth;};
 	void get_instructions();
 	void show_best_solution();
