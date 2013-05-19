@@ -72,18 +72,21 @@ int main(){
 		double t = (double)cv::getTickCount();
 		cv::Mat output = model.get_depth()->clone();
 		t = (double)cv::getTickCount() - t;
-		imshow("segmentation",model.get_segmentation());
+		cv::Mat seg;
+		cv::applyColorMap(model.get_segmentation(), seg, cv::COLORMAP_JET );
+		imshow("segmentation",seg);
 
 		float fps = 1/(t/cv::getTickFrequency());
 		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total ms "<< 1000./fps << std::endl;//for fps
 
+		output = 255-output;
 		cv::cvtColor(output,output,CV_GRAY2RGB);
 
 		std::ostringstream str;
 		str << "Yaw:" << angles[0]-150 << " Pitch:" << angles[1]-150 << " Roll:" << angles[2]-150 << "  pos:" << pos;
 		putText(output, str.str(), cv::Point(5,30), CV_FONT_HERSHEY_PLAIN, 2,CV_RGB(0,0,255));
 
-		std::cout << model.get_2D_pos()<<std::endl;
+		//std::cout << model.get_2D_pos()<<std::endl;
 		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(0,0),model.get_2D_pos().at<ushort>(0,1)),2,cv::Scalar(0,0,255),-6);
 		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(1,0),model.get_2D_pos().at<ushort>(1,1)),2,cv::Scalar(0,0,255),-6);
 		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(2,0),model.get_2D_pos().at<ushort>(2,1)),2,cv::Scalar(0,0,255),-6);
