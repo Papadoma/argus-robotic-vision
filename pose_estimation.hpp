@@ -124,11 +124,12 @@ public:
 
 	cv::Rect input_boundingbox;			//BOunding box of input image
 	cv::Mat input_depth;				//Viewable disparity of input image
+	cv::Mat distance_penalty;			//Distance transform based penalty
 
 	pose_estimator(int, int, int);
 	~pose_estimator();
 
-	particle find_pose(cv::Mat disparity_frame, bool track, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
+	particle find_pose(cv::Mat disparity_frame, bool track, cv::Rect, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
 	//cv::Mat get_silhouette(){return best_global_silhouette;};
 	cv::Mat get_depth(){return best_global_depth;};
 	void get_instructions();

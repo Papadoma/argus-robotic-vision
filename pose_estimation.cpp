@@ -716,7 +716,7 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 
 	//if( (countNonZero(window_boundaries_violation)==0)){
 	cv::Mat result;
-	cv::absdiff(particle_inst.particle_depth,input_depth,result);
+	//cv::absdiff(particle_inst.particle_depth,input_depth,result);
 	//result = input_depth - particle_inst.particle_depth;
 	//cv::Scalar mean,stddev;
 	//meanStdDev(result, mean, stddev);
@@ -725,6 +725,10 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 	cv::Mat fuzzy_mat,fuzzy_mat2,fuzzy_mat3;
 	//cv::Scalar fuzzy_mean, fuzzy_stddev;
 	cv::bitwise_xor(particle_inst.particle_depth, input_depth,fuzzy_mat);
+//	cv::bitwise_or(particle_inst.particle_depth, input_depth,fuzzy_mat2);
+//	cv::bitwise_and(particle_inst.particle_depth, input_depth,fuzzy_mat3);
+
+
 	//fuzzy_mat.convertTo(fuzzy_mat,CV_64FC1,1./255);
 	//meanStdDev(fuzzy_mat, fuzzy_mean, fuzzy_stddev);
 
@@ -735,7 +739,7 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 		//return  1./(1+abs(mean.val[0]))*right_dist*left_dist * result_and_count/countNonZero(result_or);
 		//return  1./(1+cv::mean(fuzzy_mat).val[0]) *1./(1+cv::mean(fuzzy_mat).val[0])*right_dist*left_dist;
 		//return  0.5*100000./(1+fuzzy_mean.val[0])*1./(1+fuzzy_mean.val[0])*1./(1+fuzzy_stddev.val[0])*1./(1+fuzzy_stddev.val[0]) + 0.5*right_dist*left_dist;
-		return 1./(1+cv::mean(fuzzy_mat).val[0]) + right_dist*left_dist+ 1./(1+cv::mean(result).val[0]);
+		return 1./(1+cv::mean(fuzzy_mat).val[0]) + right_dist*left_dist;
 
 	}else if(found_rhand&&enable_bones){
 		//return 1./(1+abs(stddev.val[0])) * 1./(1+abs(mean.val[0]))*right_dist ;
@@ -748,8 +752,9 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 		return 1./(1+cv::mean(fuzzy_mat).val[0])+left_dist;
 
 	}else{
-
-		return 1./(1+cv::mean(fuzzy_mat).val[0]) * 1./(1+cv::mean(result).val[0]);
+		return 1./(1+cv::mean(fuzzy_mat).val[0]) * 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]);// * 1./(1+cv::mean(result).val[0]);
+		//return 1./(1+cv::mean(fuzzy_mat).val[0])*cv::mean(fuzzy_mat3).val[0]/cv::mean(fuzzy_mat2).val[0] * 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]);// * 1./(1+cv::mean(result).val[0]);
+		//return cv::mean(fuzzy_mat3,particle_inst.particle_depth).val[0] * 1./(1+cv::mean(fuzzy_mat).val[0]);// * 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]);// * 1./(1+cv::mean(result).val[0]);
 
 		//return 1./(1+abs(stddev.val[0])) * 1./(1+abs(mean.val[0])) * result_and_count/countNonZero(result_or);
 		//return 1./(1+abs(mean.val[0])) * result_and_count/countNonZero(result_or);
@@ -800,10 +805,17 @@ void pose_estimator::get_instructions(){
 /*
  * Finds and returns best global solution of pose estimator.
  */
-particle pose_estimator::find_pose(cv::Mat disparity_frame, bool track, cv::Point left_marker, cv::Point right_marker)
+particle pose_estimator::find_pose(cv::Mat disparity_frame, bool track, cv::Rect user_bounds,cv::Point left_marker, cv::Point right_marker)
 {
 	left_hand = left_marker;
 	right_hand =right_marker;
+
+	distance_penalty = cv::Mat::ones(disparity_frame.size(), CV_8UC1)*255;
+	cv::rectangle(distance_penalty,user_bounds,cv::Scalar(0),CV_FILLED);
+	distanceTransform(distance_penalty, distance_penalty, CV_DIST_L2, 3);
+	//cv::threshold(distance_penalty,distance_penalty,50,255,CV_THRESH_TRUNC);
+	cv::normalize(distance_penalty, distance_penalty, 0, 9, cv::NORM_MINMAX, CV_32FC1);
+	//imshow("distance_penalty",distance_penalty);
 
 	disparity_frame.copyTo(input_depth);
 	tracking_mode = track;
