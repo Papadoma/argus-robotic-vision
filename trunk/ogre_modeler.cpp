@@ -314,32 +314,90 @@ void ogre_model::rotate_bones(cv::Mat bones_rotation){
 
 }
 
+/**
+ * 2D position of every joint, in 16bit unsigned 2 channel cv::mat
+ */
 cv::Mat ogre_model::get_2D_pos(){
-	cv::Mat pos2D = cv::Mat::zeros(5,2,CV_16UC1);
+	cv::Mat pos2D = cv::Mat::zeros(19,1,CV_16UC2);
 
 	Ogre::Vector3 head2d = modelNode->_getDerivedPosition() +  modelNode->_getDerivedOrientation() * model_skeleton.Head->_getDerivedPosition()*modelNode->_getDerivedScale();
-	Ogre::Vector3 handL2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Arm[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
-	Ogre::Vector3 handR2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Arm[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
-	Ogre::Vector3 footL2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Leg[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
-	Ogre::Vector3 footR2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Leg[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
-
+	Ogre::Vector3 u_torso2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[0]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_torsod = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[1]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_shoulder2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_shoulder2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[3]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_hip2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[4]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_hip2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[5]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_arm2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Arm[0]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_forearm2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Arm[1]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_hand2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Arm[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_arm2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Arm[0]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_forearm2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Arm[1]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_hand2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Arm[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_thigh2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Leg[0]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_calf2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Leg[1]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_foot2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Right_Leg[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_thigh2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Leg[0]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_calf2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Leg[1]->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_foot2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Leg[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
 
 	head2d = camera->getProjectionMatrix()*camera->getViewMatrix()*head2d;
-	handL2d = camera->getProjectionMatrix()*camera->getViewMatrix()*handL2d;
-	handR2d = camera->getProjectionMatrix()*camera->getViewMatrix()*handR2d;
-	footL2d = camera->getProjectionMatrix()*camera->getViewMatrix()*footL2d;
-	footR2d = camera->getProjectionMatrix()*camera->getViewMatrix()*footR2d;
+	u_torso2d = camera->getProjectionMatrix()*camera->getViewMatrix()*u_torso2d;
+	l_torsod = camera->getProjectionMatrix()*camera->getViewMatrix()*l_torsod;
+	r_shoulder2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_shoulder2d;
+	l_shoulder2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_shoulder2d;
+	r_hip2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_hip2d;
+	l_hip2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_hip2d;
+	r_arm2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_arm2d;
+	r_forearm2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_forearm2d;
+	r_hand2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_hand2d;
+	l_arm2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_arm2d;
+	l_forearm2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_forearm2d;
+	l_hand2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_hand2d;
+	r_thigh2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_thigh2d;
+	r_calf2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_calf2d;
+	r_foot2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_foot2d;
+	l_thigh2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_thigh2d;
+	l_calf2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_calf2d;
+	l_foot2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_foot2d;
 
-	pos2D.at<ushort>(0,0) = (0.5 + head2d.x/2)*render_width;
-	pos2D.at<ushort>(0,1) = (0.5 - head2d.y/2)*render_height;
-	pos2D.at<ushort>(1,0) = (0.5 + handR2d.x/2)*render_width;
-	pos2D.at<ushort>(1,1) = (0.5 - handR2d.y/2)*render_height;
-	pos2D.at<ushort>(2,0) = (0.5 + handL2d.x/2)*render_width;
-	pos2D.at<ushort>(2,1) = (0.5 - handL2d.y/2)*render_height;
-	pos2D.at<ushort>(3,0) = (0.5 + footR2d.x/2)*render_width;
-	pos2D.at<ushort>(3,1) = (0.5 - footR2d.y/2)*render_height;
-	pos2D.at<ushort>(4,0) = (0.5 + footL2d.x/2)*render_width;
-	pos2D.at<ushort>(4,1) = (0.5 - footL2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(0)[0] = (0.5 + head2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(0)[1] = (0.5 - head2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(1)[0] = (0.5 + u_torso2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(1)[1] = (0.5 - u_torso2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(2)[0] = (0.5 + l_torsod.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(2)[1] = (0.5 - l_torsod.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(3)[0] = (0.5 + r_shoulder2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(3)[1] = (0.5 - r_shoulder2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(4)[0] = (0.5 + l_shoulder2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(4)[1] = (0.5 - l_shoulder2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(5)[0] = (0.5 + r_hip2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(5)[1] = (0.5 - r_hip2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(6)[0] = (0.5 + l_hip2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(6)[1] = (0.5 - l_hip2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(7)[0] = (0.5 + r_arm2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(7)[1] = (0.5 - r_arm2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(8)[0] = (0.5 + r_forearm2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(8)[1] = (0.5 - r_forearm2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(9)[0] = (0.5 + r_hand2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(9)[1] = (0.5 - r_hand2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(10)[0] = (0.5 + l_arm2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(10)[1] = (0.5 - l_arm2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(11)[0] = (0.5 + l_forearm2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(11)[1] = (0.5 - l_forearm2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(12)[0] = (0.5 + l_hand2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(12)[1] = (0.5 - l_hand2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(13)[0] = (0.5 + r_thigh2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(13)[1] = (0.5 - r_thigh2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(14)[0] = (0.5 + r_calf2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(14)[1] = (0.5 - r_calf2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(15)[0] = (0.5 + r_foot2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(15)[1] = (0.5 - r_foot2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(16)[0] = (0.5 + l_thigh2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(16)[1] = (0.5 - l_thigh2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(17)[0] = (0.5 + l_calf2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(17)[1] = (0.5 - l_calf2d.y/2)*render_height;
+	pos2D.at<cv::Vec2w>(18)[0] = (0.5 + l_foot2d.x/2)*render_width;
+	pos2D.at<cv::Vec2w>(18)[1] = (0.5 - l_foot2d.y/2)*render_height;
 
 	return pos2D;
 }
