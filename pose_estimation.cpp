@@ -383,20 +383,17 @@ inline void pose_estimator::calc_evolution(){
 	score_change_count = 0;
 	evolution_num = 0;
 
-	while(evolution_num<MAX_EVOLS && score_change_count<MAX_SCORE_CHANGE_COUNT){
+	//std::deque<double> time_deque;
 
+	while(evolution_num<MAX_EVOLS && score_change_count<MAX_SCORE_CHANGE_COUNT){
 		evolution_num++;
 		best_solution_updated = false;
+		//double t = (double)cv::getTickCount();
 
-		double t = (double)cv::getTickCount();
 		//Call modeler to generate poses
 		for(int i=0;i<swarm_size;i++){
-
 			paint_particle(swarm[i]);
-
 		}
-
-
 
 #if NUM_THREADS>1
 		//parallel evaluation of particles
@@ -409,6 +406,7 @@ inline void pose_estimator::calc_evolution(){
 		//serial evaluation of particles
 		evaluate_particles(0,swarm_size);
 #endif
+
 
 		//update the best solution
 		int best_pos = 0;
@@ -425,18 +423,13 @@ inline void pose_estimator::calc_evolution(){
 		if(!best_solution_updated)score_change_count++;	//count how many time the score hasn't change
 		obsolete_counter = 0;							//initialize obsolete counter before counting
 
-#if NUM_THREADS>1
-		//parallel evolution of particles
-		//		for(int i=0;i<NUM_THREADS-1;i++){
-		//			thread_group.create_thread(boost::bind(&pose_estimator::calc_next_position_loop, this, i*swarm_size/NUM_THREADS, (i+1)*swarm_size/NUM_THREADS));
-		//		}
-		//		thread_group.create_thread(boost::bind(&pose_estimator::calc_next_position_loop, this, (NUM_THREADS-1)*swarm_size/NUM_THREADS, swarm_size));
-		//		thread_group.join_all();
-		calc_next_position_loop(0,swarm_size);
-#else
-		//serial evolution of particles
-		calc_next_position_loop(0,swarm_size);
-#endif
+		//evolution of particles
+		for(int i=0;i<swarm_size;i++){
+			calc_next_position(swarm[i]);
+			if(swarm[i].obsolete){
+				obsolete_counter++;
+			}
+		}
 
 		//Bones will be enabled after all particles are rendered obsolete at least once
 		if(obsolete_counter==swarm_size && !enable_bones){
@@ -452,11 +445,18 @@ inline void pose_estimator::calc_evolution(){
 			best_global_depth = swarm[best_pos].particle_depth.clone();
 			human_position = best_global_position.model_position;
 		}
-		t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
-		std::cout<<"[Pose Estimator] execution time: "<<t<<"ms"<<std::endl;
 
 		std::cout<< "[Pose Estimator]evol:"<<evolution_num<<" best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
+
+		//		t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+		//		time_deque.push_back(t);
+		//		//if((int)time_deque.size()>40)time_deque.pop_front();
+		//		double mean = 0;
+		//		for(int i=0; i<(int)time_deque.size(); i++)mean+=time_deque[i];
+		//		std::cout<<"[Pose Estimator]Mean execution time: "<<mean/(time_deque.size()?time_deque.size():1)<<"ms"<<std::endl;
+
 #if DEBUG_WIND_POSE
+		//Remove this if not needed. It wastes 18ms!
 		get_instructions();
 		show_best_solution();
 #endif
@@ -490,25 +490,6 @@ inline void pose_estimator::paint_particle(particle& particle_inst){
 
 	particle_inst.particle_depth = model->get_depth()->clone();
 	particle_inst.extremas = model->get_2D_pos().clone();
-}
-
-/**
- * Loop used to calculate the next position of a particle. Useful when executing
- * in parallel.
- */
-inline void pose_estimator::calc_next_position_loop(int start, int end){
-	for(int i=start;i<end;i++){
-		calc_next_position(swarm[i]);
-		if(swarm[i].obsolete){
-#if NUM_THREADS>1
-			//obsolete_counter_mutex.lock();
-			obsolete_counter++;
-			//obsolete_counter_mutex.unlock();
-#else
-			obsolete_counter++;
-#endif
-		}
-	}
 }
 
 /**
@@ -708,9 +689,6 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 		found_lhand = true;
 	}
 
-	//		float dist4 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(3,0)-input_foot_r.x),2) + pow((particle_inst.extremas.at<ushort>(3,1)-input_foot_r.y),2)));
-	//		float dist5 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(4,0)-input_foot_l.x),2) + pow((particle_inst.extremas.at<ushort>(4,1)-input_foot_l.y),2)));
-
 	//cv::Mat window_boundaries_violation;
 	//bitwise_and(particle_inst.particle_silhouette,window_boundaries,window_boundaries_violation);
 
@@ -725,8 +703,8 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 	cv::Mat fuzzy_mat,fuzzy_mat2,fuzzy_mat3;
 	//cv::Scalar fuzzy_mean, fuzzy_stddev;
 	cv::bitwise_xor(particle_inst.particle_depth, input_depth,fuzzy_mat);
-//	cv::bitwise_or(particle_inst.particle_depth, input_depth,fuzzy_mat2);
-//	cv::bitwise_and(particle_inst.particle_depth, input_depth,fuzzy_mat3);
+	//	cv::bitwise_or(particle_inst.particle_depth, input_depth,fuzzy_mat2);
+	//	cv::bitwise_and(particle_inst.particle_depth, input_depth,fuzzy_mat3);
 
 
 	//fuzzy_mat.convertTo(fuzzy_mat,CV_64FC1,1./255);
@@ -765,9 +743,6 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 		//return cv::mean(fuzzy_mat2).val[0]/(1+cv::mean(fuzzy_mat3).val[0]);
 		//return  cv::mean(input_depth).val[0]/(1+fuzzy_mean.val[0]) * 1./(1+fuzzy_stddev.val[0]);// *1./(1+abs(mean.val[0]));
 	}
-	//}else{
-	//return 0;
-	//}
 }
 
 /**
@@ -779,12 +754,7 @@ void pose_estimator::show_best_solution(){
 	bitwise_xor(input_depth, best_global_depth, result);
 	cv::Mat jet_depth_map2;
 	cv::applyColorMap(best_global_depth, jet_depth_map2, cv::COLORMAP_JET );
-
-	//	cv::Mat extremas = model->get_2D_pos();
-	//	for(int i=0;i<5;i++){
-	//		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),3,cv::Scalar(0,255,255),2);
-	//		cv::circle(jet_depth_map2,cv::Point(extremas.at<ushort>(i,0),extremas.at<ushort>(i,1)),1,cv::Scalar(0,0,255),2);
-	//	}
+	cv::rectangle(jet_depth_map2,get_model_bound_rect(),cv::Scalar(255,255,255));
 	imshow("best global depth", jet_depth_map2);
 	imshow("best global diff", result);
 	cv::applyColorMap(swarm[0].particle_depth, jet_depth_map2, cv::COLORMAP_JET );
@@ -802,6 +772,7 @@ void pose_estimator::get_instructions(){
 	}
 }
 
+
 /*
  * Finds and returns best global solution of pose estimator.
  */
@@ -814,7 +785,7 @@ particle pose_estimator::find_pose(cv::Mat disparity_frame, bool track, cv::Rect
 	cv::rectangle(distance_penalty,user_bounds,cv::Scalar(0),CV_FILLED);
 	distanceTransform(distance_penalty, distance_penalty, CV_DIST_L2, 3);
 	//cv::threshold(distance_penalty,distance_penalty,50,255,CV_THRESH_TRUNC);
-	cv::normalize(distance_penalty, distance_penalty, 0, 9, cv::NORM_MINMAX, CV_32FC1);
+	cv::normalize(distance_penalty, distance_penalty, 0, 10, cv::NORM_MINMAX, CV_32FC1);
 	//imshow("distance_penalty",distance_penalty);
 
 	disparity_frame.copyTo(input_depth);

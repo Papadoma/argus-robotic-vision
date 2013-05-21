@@ -20,7 +20,7 @@
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 20;
+const int swarm_size = 30;
 const float w = 0.5;
 const float c1 = 1.5;//1.5
 const float c2 = 1.5;//1.5
@@ -68,7 +68,6 @@ private:
 	cv::Mat calculate_depth_limit();
 
 	cv::Point3f estimate_starting_position();
-	void calc_next_position_loop(int, int);
 	void calc_next_position(particle&);
 	void round_position(particle_position&);
 	double calc_score(particle&);
@@ -135,6 +134,10 @@ public:
 	void get_instructions();
 	void show_best_solution();
 	void set_human_position(cv::Point3f est_pos){human_position=est_pos;};
+	cv::Rect get_model_bound_rect(){
+		best_global_extremas.convertTo(best_global_extremas,CV_32FC2);
+		return cv::boundingRect(best_global_extremas);
+	};
 };
 
 #endif
