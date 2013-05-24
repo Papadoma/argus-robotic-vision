@@ -3,7 +3,7 @@
 
 int main(){
 	//	module_eye input;
-	module_eye input;
+	module_eye input("left.mpg","right.mpg");
 
 	cv::Mat input_frame,l;
 
@@ -14,10 +14,10 @@ int main(){
 		if ( key_pressed == 27 ) break;			//ESC
 
 		input.getFrame(input_frame,l);
-		cv::Point mark_green = tracker_green.get_marker_center(input_frame);
+		//cv::Point mark_green = tracker_green.get_marker_center(input_frame);
 		cv::Point mark_red = tracker_red.get_marker_center(input_frame);
 
-		if(tracker_green.is_visible())cv::circle(input_frame,mark_green,2,cv::Scalar(0,255,0),2);
+		//if(tracker_green.is_visible())cv::circle(input_frame,mark_green,2,cv::Scalar(0,255,0),2);
 		if(tracker_red.is_visible())cv::circle(input_frame,mark_red,2,cv::Scalar(0,0,255),2);
 
 		cv::imshow("output",input_frame);

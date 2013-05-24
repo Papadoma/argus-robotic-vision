@@ -16,13 +16,13 @@ private:
 	cv::Mat backproj;
 	bool marker_found;
 	bool marker_visible;
+	bool previous_state;
 	cv::Rect marker_bounding_rect;
 	float marker_density;
 
 	cv::KalmanFilter* KF;
 
 	cv::Point measured_center, filtered_center;
-
 
 
 	void filter_image();

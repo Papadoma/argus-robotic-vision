@@ -3,11 +3,13 @@
 #define POSE_ESTIMATION_HPP
 
 #define NUM_THREADS		4//4
+#define USE_GPU			false
 #if NUM_THREADS > 1
 #include <boost/thread.hpp>
 #endif
 
 #include "ogre_modeler.hpp"
+#include <opencv2/ocl/ocl.hpp>
 
 #include <math.h>
 #include <stdlib.h>
@@ -15,12 +17,12 @@
 
 //#define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8f	//0.8
-#define N 15
+#define N 12
 #define MAX_EVOLS 100				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 30;
+const int swarm_size = 20;
 const float w = 0.5;
 const float c1 = 1.5;//1.5
 const float c2 = 1.5;//1.5
@@ -93,6 +95,7 @@ private:
 	cv::Point3f human_position;			//Estimated human position;
 	cv::Point	left_hand;
 	cv::Point	right_hand;
+	cv::Rect user_bounds;
 
 	bool enable_bones;
 	bool tracking_mode;

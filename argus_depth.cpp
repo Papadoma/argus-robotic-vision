@@ -5,9 +5,10 @@
 
 #define USE_GPU false
 #define DEBUG_MODE true
-#define HUMAN_DET_RATE 10
+#define HUMAN_DET_RATE 5
 #define DEPTH_COLOR_SRC false
 #define USE_SGBM true
+#define FIND_POSE true
 #define SEGMENTATION_CONTOURS_SIZE 0.05
 
 #include "module_input.hpp"
@@ -15,8 +16,8 @@
 #include "track_marker.hpp"
 //#include "GeodesicDistMap.h"
 
-#define NUM_THREADS		4
-#if NUM_THREADS > 1
+#define USE_THREADS		true
+#if USE_THREADS
 #include <boost/thread.hpp>
 #endif
 
@@ -46,7 +47,7 @@ struct user_struct :public human_struct{
 class argus_depth{
 private:
 
-#if NUM_THREADS > 1
+#if USE_THREADS
 	boost::mutex user_mutex;
 	boost::thread_group thread_group;
 #endif
@@ -207,12 +208,12 @@ argus_depth::argus_depth()
 #endif
 #if USE_SGBM
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 3;
+	sgbm.SADWindowSize = 5;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = numberOfDisparities;
-	sgbm.uniquenessRatio = 0;
+	sgbm.uniquenessRatio = 25;
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
@@ -223,7 +224,7 @@ argus_depth::argus_depth()
 
 	pose_tracker = new pose_estimator(width,height,numberOfDisparities);
 	left_tracker = new marker_tracker("green_histogram.yml");
-	//right_tracker = new marker_tracker();
+	right_tracker = new marker_tracker("red_histogram.yml");
 
 	//clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
 	clearview_mask = roi1 & roi2;
@@ -404,7 +405,7 @@ void argus_depth::load_param(){
  */
 inline void argus_depth::compute_depth(){
 	//Will have to widen the user bounding rectangle a bit, so we wont loose any disparity
-#if NUM_THREADS > 1
+#if USE_THREADS
 	user_mutex.lock();
 	cv::Rect refined_human_anchor = user.body_bounding_rect;
 	user_mutex.unlock();
@@ -430,9 +431,9 @@ inline void argus_depth::compute_depth(){
 
 #if	USE_SGBM
 #if DEPTH_COLOR_SRC
-	sgbm(BW_rect_mat_left(refined_human_anchor),BW_rect_mat_right(refined_human_anchor),local_depth);
-#else
 	sgbm(rect_mat_left(refined_human_anchor),rect_mat_right(refined_human_anchor),local_depth);
+#else
+	sgbm(BW_rect_mat_left(refined_human_anchor),BW_rect_mat_right(refined_human_anchor),local_depth);
 #endif
 #else
 	bm(BW_rect_mat_left,BW_rect_mat_right,local_depth);
@@ -441,7 +442,7 @@ inline void argus_depth::compute_depth(){
 	local_depth.convertTo(local_depth, CV_32FC1, 1./16);				//Scale down to normal disparity
 	//smooth_depth_map(local_depth);
 
-#if NUM_THREADS > 1
+#if USE_THREADS
 	user_mutex.lock();
 #endif
 	user.disparity = cv::Mat::zeros(rect_mat_left.size(), CV_32FC1);	//Prepare for copying
@@ -452,7 +453,7 @@ inline void argus_depth::compute_depth(){
 #endif
 	reprojectImageTo3D(user.disparity, user.point_cloud, Q, false, -1);	//Get the point cloud in WCS
 	user.disparity.convertTo(user.disparity_viewable, CV_8UC1, 255./(numberOfDisparities));	//Get the viewable version of disparity
-#if NUM_THREADS > 1
+#if USE_THREADS
 	user_mutex.unlock();
 #endif
 }
@@ -568,7 +569,7 @@ inline void argus_depth::detect_human(){
 
 	if(possible_user.propability > 0.9 * user.propability){
 		tracking = false;
-#if NUM_THREADS > 1
+#if USE_THREADS
 		user_mutex.lock();
 		user.body_bounding_rect = possible_user.body_bounding_rect;
 		user.head_center = possible_user.head_center;
@@ -590,15 +591,23 @@ inline void argus_depth::detect_human(){
 }
 
 inline void argus_depth::find_markers(){
-	user.left_marker = left_tracker->get_marker_center(rect_mat_left);
-	//right_tracker->get_marker_center(rect_mat_left);
+	if(user.body_bounding_rect.area()){
+		cv::Mat tracker_cropped = cv::Mat::zeros(rect_mat_left.size(), CV_8UC3);
+		user_mutex.lock();
+		rect_mat_left(user.body_bounding_rect).copyTo(tracker_cropped(user.body_bounding_rect));
+		user_mutex.unlock();
+		cv::Point l_marker = left_tracker->get_marker_center(tracker_cropped);
+		cv::Point r_marker = right_tracker->get_marker_center(tracker_cropped);
+		if(left_tracker->is_visible())user.left_marker = l_marker;
+		if(right_tracker->is_visible())user.right_marker = r_marker;
+	}
 }
 
 /**
  * Segments the user from the overall bounding rectangle. Calculates his mask and mass center
  */
 inline void argus_depth::segment_user(){
-#if NUM_THREADS > 1
+#if USE_THREADS
 	user_mutex.lock();
 	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
 	cv::Mat local_point_cloud = user.point_cloud.clone();
@@ -719,11 +728,12 @@ inline void argus_depth::segment_user(){
 		new_user_rect.y -= new_user_rect.height*0.1/2;
 		new_user_rect.width = new_user_rect.width*1.3;
 		new_user_rect.height = new_user_rect.height*1.1;
-		new_user_rect |= cv::Rect(user.left_marker.x,user.left_marker.y,1,1);
+		new_user_rect |= cv::Rect(user.left_marker.x-4,user.left_marker.y-4,9,9);
+		new_user_rect |= cv::Rect(user.right_marker.x-4,user.right_marker.y-4,9,9);
 		new_user_rect &= clearview_mask;
 
 		if(new_user_rect.area()>0.5*user.body_bounding_rect.area()){
-#if NUM_THREADS > 1
+#if USE_THREADS
 			user_mutex.lock();
 			user.body_bounding_rect = new_user_rect;
 			user_mutex.unlock();
@@ -760,7 +770,7 @@ inline void argus_depth::segment_user(){
 }
 
 inline void argus_depth::segment_user2(){
-#if NUM_THREADS > 1
+#if USE_THREADS
 	user_mutex.lock();
 	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
 	user_mutex.unlock();
@@ -868,7 +878,7 @@ inline void argus_depth::segment_user2(){
 		new_user_rect &= clearview_mask;
 
 		if(new_user_rect.area()){
-#if NUM_THREADS > 1
+#if USE_THREADS
 			user_mutex.lock();
 			user.body_bounding_rect = new_user_rect;
 			user_mutex.unlock();
@@ -905,7 +915,7 @@ inline void argus_depth::segment_user2(){
 }
 
 inline void argus_depth::track_user(){
-#if NUM_THREADS > 1
+#if USE_THREADS
 	user_mutex.lock();
 	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
 	user_mutex.unlock();
@@ -917,7 +927,8 @@ inline void argus_depth::track_user(){
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
 	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(local_user_bounding_rect)){
-		user.mask_mass_center = cv::Point(local_user_bounding_rect.x + local_user_bounding_rect.width/2, local_user_bounding_rect.y + local_user_bounding_rect.height/2);
+		//user.mask_mass_center = cv::Point(local_user_bounding_rect.x + local_user_bounding_rect.width/2, local_user_bounding_rect.y + local_user_bounding_rect.height/2);
+		user.mask_mass_center = (local_user_bounding_rect.tl() + local_user_bounding_rect.br())*0.5;
 	}
 
 	cv::Mat floodfill_mask = cv::Mat::zeros(height + 2, width + 2, CV_8U);
@@ -970,16 +981,19 @@ inline void argus_depth::track_user(){
 		//Add previous edge mask information
 		cv::RotatedRect detection = CamShift(backproj_img, local_rect, criteria);
 
+		//find_markers();
 		//Shape the detected rectangle a bit
 		cv::Rect new_user_rect=detection.boundingRect();
 		new_user_rect.x -= new_user_rect.width*0.4/2;
-		new_user_rect.y -= new_user_rect.height*0.1/2;
+		new_user_rect.y -= new_user_rect.height*0.2/2;
 		new_user_rect.width = new_user_rect.width*1.4;
-		new_user_rect.height = new_user_rect.height*1.1;
+		new_user_rect.height = new_user_rect.height*1.2;
+		new_user_rect |= cv::Rect(user.left_marker.x-4,user.left_marker.y-4,9,9);
+		new_user_rect |= cv::Rect(user.right_marker.x-4,user.right_marker.y-4,9,9);
 		new_user_rect &= clearview_mask;
 
 		if(new_user_rect.area()){
-#if NUM_THREADS > 1
+#if USE_THREADS
 			user_mutex.lock();
 			user.body_bounding_rect = new_user_rect;
 			user_mutex.unlock();
@@ -1125,32 +1139,48 @@ inline void argus_depth::start(){
 #endif
 
 
-#if NUM_THREADS > 1
-	thread_group.create_thread(boost::bind(&argus_depth::find_markers, this));
+#if USE_THREADS
 	thread_group.create_thread(boost::bind(&argus_depth::compute_depth, this));
 	thread_group.create_thread(boost::bind(&argus_depth::track_user, this));
-
+	thread_group.create_thread(boost::bind(&argus_depth::find_markers, this));
 #else
-	find_markers();
+	double t = (double)cv::getTickCount();
 	compute_depth();
-	segment_user3();
+	t = (double)cv::getTickCount() - t;
+	std::cout<<"depth ms"<< t*1000./cv::getTickFrequency()<<std::endl;//for fps
+
+	t = (double)cv::getTickCount();
+	track_user();
+	t = (double)cv::getTickCount() - t;
+	std::cout<<"track ms"<<t*1000./cv::getTickFrequency()<<std::endl;//for fps
+
+	t = (double)cv::getTickCount();
+	find_markers();
+	t = (double)cv::getTickCount() - t;
+	std::cout<<"marker ms"<< t*1000./cv::getTickFrequency()<<std::endl;//for fps
 #endif
 	//cv::Mat trackable_user_disparity;
 	//cv::bitwise_and(user.user_mask,user.disparity_viewable,trackable_user_disparity);
 
 	particle detected_pose;
 	if(tracking){
-		//thread_group.create_thread(boost::bind(&argus_depth::skeletonize, this));
-		detected_pose = pose_tracker->find_pose(user.disparity_viewable,true);
+#if FIND_POSE
+		detected_pose = pose_tracker->find_pose(user.disparity_viewable,true,user.body_bounding_rect);
 		imshow("human_pose",detected_pose.particle_depth);
+#endif
 	}
 	if(!detect_user_flag && !tracking){
+#if FIND_POSE
 		pose_tracker->set_human_position(user.human_position);
-		detected_pose = pose_tracker->find_pose(user.disparity_viewable,false);
+		detected_pose = pose_tracker->find_pose(user.disparity_viewable,false,user.body_bounding_rect);
 		imshow("human_pose",detected_pose.particle_depth);
+#endif
 		tracking = true;
+	}else{
+		if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 	}
-#if NUM_THREADS > 1
+
+#if USE_THREADS
 	thread_group.join_all();
 #endif
 
@@ -1170,7 +1200,7 @@ inline void argus_depth::main_loop(){
 	int key_pressed=255;
 	bool pause=false;
 
-#if NUM_THREADS > 1
+#if USE_THREADS
 	boost::thread t1(boost::bind(&argus_depth::detect_human_loop, this));
 #endif
 	while(1){
@@ -1188,7 +1218,7 @@ inline void argus_depth::main_loop(){
 		start();
 		refresh_window();
 	}
-#if NUM_THREADS > 1
+#if USE_THREADS
 	detect_user_flag=false;
 	t1.join();
 #endif
