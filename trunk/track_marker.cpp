@@ -3,6 +3,7 @@
 marker_tracker::marker_tracker(std::string filename)
 :marker_found(false),
  marker_visible(false),
+ previous_state(false),
  marker_density(0)
 {
 
@@ -41,13 +42,15 @@ inline void marker_tracker::filter_image(){
 	int channels[] = {0,1};
 	const float* ranges[] = { hue_range, sat_range };
 	calcBackProject( &hsv, 1, channels, marker_hist, backproj, ranges, 1, true );
-	normalize( backproj, backproj, 0, 255, cv::NORM_MINMAX, -1, cv::Mat() );
+	//normalize( backproj, backproj, 0, 255, cv::NORM_MINMAX, -1, cv::Mat() );
 
-#if DEBUG_COUT_MARKER
-	imshow("right_backproj",backproj);
+	cv::Mat local_back_proj;
+	normalize( backproj, local_back_proj, 0, 255, cv::NORM_MINMAX, -1, cv::Mat() );
+#if DEBUG_COUT
+	imshow("right_backproj",local_back_proj);
 #endif
 
-	cv::threshold(backproj,marker_mask,10,255,cv::THRESH_BINARY);
+	cv::threshold(local_back_proj,marker_mask,10,255,cv::THRESH_BINARY);
 	cv::morphologyEx(marker_mask,marker_mask,cv::MORPH_CLOSE,cv::Mat(),cv::Point(),1);
 	cv::morphologyEx(marker_mask,marker_mask,cv::MORPH_OPEN,cv::Mat(),cv::Point(),2);
 }
@@ -89,23 +92,30 @@ void marker_tracker::track_marker(){
 	cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
 	cv::RotatedRect detection;
 	if(marker_bounding_rect.area()>1){
-		detection = CamShift(backproj, marker_bounding_rect, criteria);
-		if(detection.boundingRect().area())marker_bounding_rect = detection.boundingRect() & cv::Rect(0,0,color_frame.cols,color_frame.rows);
-
+		cv::Rect local_rect = marker_bounding_rect;
+		detection = CamShift(backproj, local_rect, criteria);
+		cv::Rect new_marker_bounding_rect  = detection.boundingRect() & cv::Rect(0,0,color_frame.cols,color_frame.rows);
+		if(new_marker_bounding_rect.area()){
+			marker_bounding_rect = new_marker_bounding_rect;
+		}
 	}
 	marker_density = (float)cv::countNonZero(backproj(marker_bounding_rect))/(detection.size.height*detection.size.width+1);
 	if(marker_density>1)marker_density=1;
 
-#if DEBUG_COUT_MARKER
+#if DEBUG_COUT
 	std::cout<<marker_density<<std::endl;
 #endif
-
 	if(marker_density>MARKER_DENSITY){
 		marker_visible = true;
+		if(previous_state==false){
+			KF->statePost.at<float>(0) = detection.center.x;
+			KF->statePost.at<float>(1) = detection.center.y;
+		}
 	}else{
 		marker_visible = false;
 		find_marker();
 	}
+	previous_state = marker_visible;
 
 	// First predict, to update the internal statePre variable
 	cv::Mat prediction = KF->predict();
@@ -152,7 +162,7 @@ void marker_tracker::recalc_hist(){
 	const float* ranges[] = { hue_range, sat_range };
 
 	calcHist( &local_color_frame, 1, channels, marker_mask(marker_bounding_rect), marker_hist, 2, histSize, ranges, true, true );
-#if DEBUG_COUT_MARKER
+#if DEBUG_COUT
 	cv::MatND local_marker_hist;
 	normalize( marker_hist, local_marker_hist, 0, 255, cv::NORM_MINMAX, CV_8UC1, cv::Mat() );
 	imshow("histogram",local_marker_hist);
@@ -192,15 +202,16 @@ cv::Point marker_tracker::get_marker_center(cv::Mat input_frame){
 		if(marker_visible){
 			recalc_hist();
 		}
-#if DEBUG_COUT_MARKER
+#if DEBUG_COUT
 		debug_view();
 #endif
 		return filtered_center;
 	}else{
-#if DEBUG_COUT_MARKER
+#if DEBUG_COUT
 		debug_view();
 #endif
-		return cv::Point(-1,-1);
+		return filtered_center;
+		//return cv::Point(-1,-1);
 	}
 }
 

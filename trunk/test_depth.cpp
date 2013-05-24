@@ -55,8 +55,8 @@ public:
 
 
 test_depth::test_depth(){
-	//input_module=new module_eye("left.mpg","right.mpg");
-	input_module=new module_eye();
+	input_module=new module_eye("left.mpg","right.mpg");
+	//input_module=new module_eye();
 	cv::Size framesize = input_module->getSize();
 	height=framesize.height;
 	width=framesize.width;
@@ -65,7 +65,7 @@ test_depth::test_depth(){
 	int cn = 1;
 #if DEPTH_ALG == 0
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 1;
+	sgbm.SADWindowSize = 3;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;

@@ -15,8 +15,17 @@ int main(){
 		//instance->find_pose(input_frame, false, cv::Point(461,200), cv::Point(291,215));
 		//instance->find_pose(input_frame, false, cv::Point(433,79), cv::Point(226,83));
 
-		instance->find_pose(input_frame, false, cv::Rect(194,36,263,419));
-		//instance->find_pose(input_frame, true, cv::Rect(194,36,263,419));
+//		instance->find_pose(input_frame, false, cv::Rect(194,36,263,419));	Main PC, snap_depth3
+//		//instance->find_pose(input_frame, true, cv::Rect(194,36,263,419));
+
+		instance->find_pose(input_frame, false, cv::Rect(167,24,305,430));	//laptop, snap_depth3
+		instance->find_pose(input_frame, true, cv::Rect(167,24,305,430));
+		instance->find_pose(input_frame, true, cv::Rect(167,24,305,430));
+		instance->find_pose(input_frame, true, cv::Rect(167,24,305,430));
+		instance->find_pose(input_frame, true, cv::Rect(167,24,305,430));
+
+//		instance->find_pose(input_frame, false, cv::Rect(280,142,210,230));	//laptop, woman dancing
+
 		//instance->find_pose(input_frame, false, cv::Point(435,88) , cv::Point(223,92) );
 		//instance->find_pose(input_frame, true, cv::Point(424,149) , cv::Point(222,158) );
 		//instance->find_pose(input_frame, true, cv::Point(424,149) , cv::Point(222,158) );
