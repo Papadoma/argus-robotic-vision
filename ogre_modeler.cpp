@@ -68,7 +68,8 @@ void ogre_model::setupRenderer(void){
 	}
 	Ogre::RenderSystem *lRenderSystem = lRenderSystemList[0]; //Set first renderer, using only OpenGL
 	root->setRenderSystem(lRenderSystem);
-
+	lRenderSystem->setConfigOption("VSync", "No");
+	lRenderSystem->setConfigOption("Full Screen", "Yes");
 }
 
 void ogre_model::setup_bones(){
@@ -202,6 +203,8 @@ void ogre_model::setup(){
 
 	renderToTexture->getBuffer()->getRenderTarget()->update();
 	set_depth_limits(-1,-1,-1);
+
+
 }
 
 inline void ogre_model::reset_bones(){
@@ -403,11 +406,194 @@ cv::Mat ogre_model::get_2D_pos(){
 }
 
 inline void ogre_model::get_opencv_snap(){
-	//double t = (double)cv::getTickCount();
+//	Ogre::TexturePtr targettex1 = Ogre::TextureManager::getSingleton().createManual("targettex1",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_DYNAMIC_WRITE_ONLY);
+//
+//	Ogre::TexturePtr targettex2 = Ogre::TextureManager::getSingleton().createManual("targettex2",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_DYNAMIC_WRITE_ONLY);
+//
+//	Ogre::TexturePtr targettex3 = Ogre::TextureManager::getSingleton().createManual("targettex3",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_DYNAMIC_WRITE_ONLY);
+//
+//	Ogre::TexturePtr rtt1 = Ogre::TextureManager::getSingleton().createManual("rtt1",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_RENDERTARGET);
+//	Ogre::TexturePtr rtt2 = Ogre::TextureManager::getSingleton().createManual("rtt2",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_RENDERTARGET);
+//	Ogre::TexturePtr rtt3 = Ogre::TextureManager::getSingleton().createManual("rtt3",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_RENDERTARGET);
+//	Ogre::TexturePtr rtt4 = Ogre::TextureManager::getSingleton().createManual("rtt4",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_RENDERTARGET);
+//	Ogre::TexturePtr rtt5 = Ogre::TextureManager::getSingleton().createManual("rtt5",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_RENDERTARGET);
+//	Ogre::TexturePtr rtt6 = Ogre::TextureManager::getSingleton().createManual("rtt6",
+//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+//			Ogre::TEX_TYPE_2D,
+//			render_width,
+//			render_height,
+//			0,
+//			Ogre::PF_L8,
+//			Ogre::TU_RENDERTARGET);
+//
+//	rtt1->getBuffer()->getRenderTarget()->addViewport(camera);
+//	rtt2->getBuffer()->getRenderTarget()->addViewport(camera);
+//	rtt3->getBuffer()->getRenderTarget()->addViewport(camera);
+//	rtt4->getBuffer()->getRenderTarget()->addViewport(camera);
+//	rtt5->getBuffer()->getRenderTarget()->addViewport(camera);
+//	rtt6->getBuffer()->getRenderTarget()->addViewport(camera);
+
 	renderToTexture->getBuffer()->getRenderTarget()->update();
 	renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
-	//t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
-	//std::cout<<"[Modeler] execution time: "<<t<<"ms"<<std::endl;
+
+//	double t = (double)cv::getTickCount();
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt2->getBuffer()->getRenderTarget()->update();
+//	rtt2->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt3->getBuffer()->getRenderTarget()->update();
+//	rtt3->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt2->getBuffer()->getRenderTarget()->update();
+//	rtt3->getBuffer()->getRenderTarget()->update();
+//	t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+//	std::cout<<"[Modeler]Dual render time: "<<t<<"ms"<<std::endl;
+
+//	double t = (double)cv::getTickCount();
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 100);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 200);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 300);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 400);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 500);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 600);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+////	rtt1->getBuffer()->getRenderTarget()->update();
+////	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+////	rtt1->getBuffer()->getRenderTarget()->update();
+////	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+////	rtt1->getBuffer()->getRenderTarget()->update();
+////	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+//	std::cout<<"[Modeler]Classic render time: "<<t<<"ms"<<std::endl;
+
+//	t = (double)cv::getTickCount();
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	rtt2->getBuffer()->getRenderTarget()->update();
+//	rtt3->getBuffer()->getRenderTarget()->update();
+//	rtt4->getBuffer()->getRenderTarget()->update();
+//	rtt5->getBuffer()->getRenderTarget()->update();
+//	rtt6->getBuffer()->getRenderTarget()->update();
+//	rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt2->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt3->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt4->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt5->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	rtt6->getBuffer()->getRenderTarget()->copyContentsToMemory(pb, Ogre::RenderTarget::FB_AUTO);
+//	t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+//	std::cout<<"[Modeler]Dual render time: "<<t<<"ms"<<std::endl;
+
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 700);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	targettex1->getBuffer()->blit(rtt1->getBuffer());
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 800);
+//	rtt2->getBuffer()->getRenderTarget()->update();
+//	targettex2->getBuffer()->blit(rtt2->getBuffer());
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 900);
+//	rtt3->getBuffer()->getRenderTarget()->update();
+//	targettex3->getBuffer()->blit(rtt3->getBuffer());
+//
+//	t = (double)cv::getTickCount();
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 100);
+//	targettex1->getBuffer()->blitToMemory(pb);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	targettex1->getBuffer()->blit(rtt1->getBuffer());
+//
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 200);
+//	targettex2->getBuffer()->blitToMemory(pb);
+//	rtt2->getBuffer()->getRenderTarget()->update();
+//	targettex2->getBuffer()->blit(rtt2->getBuffer());
+//
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 300);
+//	targettex3->getBuffer()->blitToMemory(pb);
+//	rtt3->getBuffer()->getRenderTarget()->update();
+//	targettex3->getBuffer()->blit(rtt3->getBuffer());
+//
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 400);
+//	targettex1->getBuffer()->blitToMemory(pb);
+//	rtt1->getBuffer()->getRenderTarget()->update();
+//	targettex1->getBuffer()->blit(rtt1->getBuffer());
+//
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 500);
+//	targettex2->getBuffer()->blitToMemory(pb);
+//	rtt2->getBuffer()->getRenderTarget()->update();
+//	targettex2->getBuffer()->blit(rtt2->getBuffer());
+//
+//	move_model( cv::Point3f(0,0,300.0f),  cv::Point3f(0,0,0), 600);
+//	targettex3->getBuffer()->blitToMemory(pb);
+//	rtt3->getBuffer()->getRenderTarget()->update();
+//	targettex3->getBuffer()->blit(rtt3->getBuffer());
+//
+//	t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+//	std::cout<<"[Modeler]Multiplexed copy time: "<<t<<"ms"<<std::endl;
+
+
 #if DEBUG_WINDOW
 	render_window();
 	std::cout << "[Modeler] Main window fps"<<Window->getLastFPS()<<std::endl;
