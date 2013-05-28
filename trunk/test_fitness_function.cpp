@@ -1,5 +1,7 @@
 #include "ogre_modeler.hpp"
+#include "edges_distance.hpp"
 
+#define HISTORY 20
 int model_position[3];
 int model_rotation[3];
 int bone_rotation[3];
@@ -38,41 +40,70 @@ void calculate_result(cv::Mat input, cv::Mat estimation, std::vector<double>& re
 	cv::Mat temp, temp2;
 	input.convertTo(input,CV_32FC1,1./255);
 	estimation.convertTo(estimation,CV_32FC1,1./255);
-	//************absdiff*********
+	//************1/absdiff*********
 	cv::absdiff(input*255,estimation*255,temp);
-	result[0] = 1./(cv::mean(temp).val[0]);
-	desc[0]="1/mean(absdiff):";
+	result.push_back( 1./(cv::mean(temp).val[0]));
+	desc.push_back("1/mean(absdiff):");
 
-	//**********bitwise_xor: mean***********
+	//**********1/bitwise_xor: mean***********
 	cv::bitwise_xor(input*255, estimation*255,temp);
-	result[1] = 1./(cv::mean(temp).val[0]);
-	desc[1] = "1/mean(bitwise_xor):";
+	result.push_back( 1./(cv::mean(temp).val[0]));
+	desc.push_back( "1/mean(bitwise_xor):");
 
 	//************bitwise and/or per element: mean*********
 	cv::bitwise_or(input, estimation,temp);
 	cv::bitwise_and(input, estimation,temp2);
 	cv::divide(temp2,temp,temp);
-	result[2] = cv::mean(temp).val[0];
-	desc[2] = "mean(AND/OR):";
+	result.push_back( cv::mean(temp).val[0]);
+	desc.push_back( "mean(AND/OR):");
 
 	//************bitwise and/or: mean*********
 	cv::bitwise_or(input, estimation,temp);
 	cv::bitwise_and(input, estimation,temp2);
-	result[3] = cv::mean(temp2).val[0]/cv::mean(temp).val[0];
-	desc[3] = "mean(AND)/mean(OR):";
+	result.push_back( cv::mean(temp2).val[0]/cv::mean(temp).val[0]);
+	desc.push_back( "mean(AND)/mean(OR):");
 
 	//************fuzzy and/or*********
 	cv::max(input,estimation,temp);	//or
 	cv::min(input,estimation,temp2); //and
-	result[4] = cv::sum(temp2).val[0]/cv::sum(temp).val[0];
-	desc[4] = "sum(fAND)/sum(fOR):";
+	result.push_back( cv::sum(temp2).val[0]/cv::sum(temp).val[0]);
+	desc.push_back("sum(fAND)/sum(fOR):");
 
-	//************fuzzy xor*********
+	//************1/fuzzy xor*********
 	cv::min(input,1-estimation,temp);
 	cv::min(1-input,estimation,temp2);
 	cv::max(temp,temp2,temp);
-	result[5] = 1./(cv::sum(temp).val[0]);
-	desc[5] = "1/sum(fXOR):";
+	result.push_back( 1./(cv::sum(temp).val[0]));
+	desc.push_back( "1/sum(fXOR):");
+
+	//************edges_sobel_distance*********
+	edge_similarity estimator;
+	cv::Mat color_input = cv::imread("fitness_color.png");
+	cvtColor( color_input, color_input, CV_RGB2GRAY );
+	color_input.convertTo(color_input, CV_32FC1, 1./255);
+	double dist = estimator.calculate_edge_distance(color_input, estimation);
+	dist = 1-fabs(dist);
+	result.push_back( dist);
+	desc.push_back( "edges_sobel_distance:");
+
+
+
+	//************1-absdiff*********
+	cv::absdiff(input,estimation,temp);
+	result.push_back( 1-(cv::mean(temp).val[0]));
+	desc.push_back("1-mean(absdiff):");
+	//**********1-bitwise_xor: mean***********
+	cv::bitwise_xor(input, estimation,temp);
+	result.push_back( 1-(cv::mean(temp).val[0]));
+	desc.push_back( "1-mean(bitwise_xor):");
+	//************1-fuzzy xor/size*********
+	cv::min(input,1-estimation,temp);
+	cv::min(1-input,estimation,temp2);
+	cv::max(temp,temp2,temp);
+	result.push_back( 1-cv::sum(temp).val[0]/(input.cols*input.rows));
+	desc.push_back( "1-sum(fXOR)/size:");
+
+
 }
 
 void show_results(std::vector<double>& result, std::vector<std::string>& desc){
@@ -104,11 +135,90 @@ void save_pose(cv::Mat estimation,std::vector<double>& result, std::vector<std::
 
 	for(int i=0;i<(int)result.size();i++){
 		if(desc[i]!=""){
-			fs<<"Desc"<<desc[i]<<"Score"<<result[i];
+			ss.str( std::string() );
+			ss.clear();
+			ss<<"Desc"<<i;
+			fs<<ss.str()<<desc[i];
+
+			ss.str( std::string() );
+			ss.clear();
+			ss<<"Score"<<i;
+			fs<<ss.str()<<result[i];
 		}
 	}
 	fs.release();
 	pose_num++;
+}
+
+void load_poses(std::vector<cv::Point3f>& positions,  std::vector<cv::Point3f>& rotations, std::vector<float>& scales, std::vector<cv::Mat>& mat_bones_rotations){
+	std::stringstream ss;
+
+	bool loop = true;
+	int i=0;
+	while(loop){
+		ss.str( std::string() );
+		ss.clear();
+		ss<<"pose"<<i++<<".yml";
+		cv::FileStorage fs(ss.str(), CV_STORAGE_READ);
+
+		if( fs.isOpened() )
+		{
+			std::cout<<"Loaded file "<<ss.str()<<std::endl;
+			cv::Point3f local_position;
+			cv::Point3f local_rotation;
+			float local_scale;
+			cv::Mat local_mat_bones_rotation;
+
+
+			cv::FileNode node = fs["Model position"];
+			cv::FileNodeIterator it = node.begin();
+
+			local_position.x = (float)(*it++);
+			local_position.y = (float)(*it++);
+			local_position.z = (float)(*it);
+
+			node = fs["Model rotation"];
+			it = node.begin();
+
+			local_rotation.x = (float)(*it++);
+			local_rotation.y = (float)(*it++);
+			local_rotation.z = (float)(*it);
+
+			fs["Model scale"] >> local_scale;
+			fs["Bones rotation"] >> local_mat_bones_rotation;
+
+			positions.push_back(local_position);
+			rotations.push_back(local_rotation);
+			scales.push_back(local_scale);
+			mat_bones_rotations.push_back(local_mat_bones_rotation);
+
+			fs.release();
+		}else{
+			loop = false;
+		}
+	}
+}
+
+void refresh_old_poses_calc(ogre_model& model, cv::Mat input){
+	std::vector<cv::Point3f> positions;
+	std::vector<cv::Point3f> rotations;
+	std::vector<float> scales;
+	std::vector<cv::Mat> mat_bones_rotations;
+
+	load_poses(positions,  rotations, scales, mat_bones_rotations);
+	for(int i=0;i<(int)positions.size();i++){
+		std::cout<<"Pose"<<i<<" refreshed"<<std::endl;
+		model.move_model(positions[i], rotations[i], scales[i]);
+		model.rotate_bones(mat_bones_rotations[i]);
+		cv::Mat output = model.get_depth()->clone();
+
+		output = 255-output;
+		std::vector<double> result(10);
+		std::vector<std::string> text(10);
+		calculate_result(input, output, result,text);
+		save_pose( output,result, text, positions[i], rotations[i], scales[i], mat_bones_rotations[i]);
+	}
+	pose_num = HISTORY+1;
 }
 
 int main(){
@@ -130,8 +240,9 @@ int main(){
 	int prev = 0;
 	std::deque<double> mean_time;
 
-	cv::Mat input = cv::imread("snap_depth3.png",0);
+	cv::Mat input = cv::imread("fitness_input.png",0);
 
+	refresh_old_poses_calc( model, input);
 	while(1)
 	{
 		int key = cv::waitKey(1) & 255;;
@@ -171,26 +282,28 @@ int main(){
 
 		model.move_model(position, rotation, scale);
 		model.rotate_bones(mat_bones_rotation);
-		double t = (double)cv::getTickCount();
+		//		double t = (double)cv::getTickCount();
 		cv::Mat output = model.get_depth()->clone();
-		t = (double)cv::getTickCount() - t;
-		t = t*1000./cv::getTickFrequency();
+		//		t = (double)cv::getTickCount() - t;
+		//		t = t*1000./cv::getTickFrequency();
 
-		mean_time.push_back(t);
-		if((int)mean_time.size()>240)mean_time.pop_front();
-		double mean_value=0;
-		for(int i=0;i<(int)mean_time.size();i++) mean_value += mean_time[i];
+		//		mean_time.push_back(t);
+		//		if((int)mean_time.size()>240)mean_time.pop_front();
+		//		double mean_value=0;
+		//		for(int i=0;i<(int)mean_time.size();i++) mean_value += mean_time[i];
 
-		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total ms "<< mean_value/(int)mean_time.size() << std::endl;//for fps
+		//		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total ms "<< mean_value/(int)mean_time.size() << std::endl;//for fps
 
 		output = 255-output;
 
 		//*******************************
-		std::vector<double> result(10);
-		std::vector<std::string> text(10);
+		std::vector<double> result;
+		std::vector<std::string> text;
 		calculate_result(input, output, result,text);
 		show_results(result,text);
 		if ( key == 's' )save_pose( output,result, text, position, rotation, scale, mat_bones_rotation);
+		result.clear();
+		text.clear();
 
 		cv::cvtColor(output,output,CV_GRAY2BGR);
 
