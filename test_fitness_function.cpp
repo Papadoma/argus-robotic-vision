@@ -38,72 +38,129 @@ void make_sliders(){
 
 void calculate_result(cv::Mat input, cv::Mat estimation, std::vector<double>& result, std::vector<std::string>& desc){
 	cv::Mat temp, temp2;
+	cv::Mat color_input = cv::imread("fitness_color.png");
+	cvtColor( color_input, color_input, CV_RGB2GRAY );
+
 	input.convertTo(input,CV_32FC1,1./255);
 	estimation.convertTo(estimation,CV_32FC1,1./255);
-	//************1/absdiff*********
+	//************1/absdiff*********							2.8ms
 	cv::absdiff(input*255,estimation*255,temp);
 	result.push_back( 1./(cv::mean(temp).val[0]));
 	desc.push_back("1/mean(absdiff):");
 
-	//**********1/bitwise_xor: mean***********
+	//**********1/bitwise_xor: mean***********					3.6ms
 	cv::bitwise_xor(input*255, estimation*255,temp);
 	result.push_back( 1./(cv::mean(temp).val[0]));
 	desc.push_back( "1/mean(bitwise_xor):");
 
-	//************bitwise and/or per element: mean*********
+	//************bitwise and/or per element: mean*********		2.6ms
 	cv::bitwise_or(input, estimation,temp);
 	cv::bitwise_and(input, estimation,temp2);
 	cv::divide(temp2,temp,temp);
 	result.push_back( cv::mean(temp).val[0]);
 	desc.push_back( "mean(AND/OR):");
 
-	//************bitwise and/or: mean*********
+	//************bitwise and/or: mean*********					1.5ms
+
 	cv::bitwise_or(input, estimation,temp);
 	cv::bitwise_and(input, estimation,temp2);
 	result.push_back( cv::mean(temp2).val[0]/cv::mean(temp).val[0]);
 	desc.push_back( "mean(AND)/mean(OR):");
 
-	//************fuzzy and/or*********
+	//************fuzzy and/or*********							1.4ms
 	cv::max(input,estimation,temp);	//or
 	cv::min(input,estimation,temp2); //and
 	result.push_back( cv::sum(temp2).val[0]/cv::sum(temp).val[0]);
 	desc.push_back("sum(fAND)/sum(fOR):");
 
-	//************1/fuzzy xor*********
+	//************1/fuzzy xor*********							3.5ms
 	cv::min(input,1-estimation,temp);
 	cv::min(1-input,estimation,temp2);
 	cv::max(temp,temp2,temp);
 	result.push_back( 1./(cv::sum(temp).val[0]));
 	desc.push_back( "1/sum(fXOR):");
 
-	//************edges_sobel_distance*********
+	//************CosineSimilarity*********						9ms, 3.8ms canny
 	edge_similarity estimator;
-	cv::Mat color_input = cv::imread("fitness_color.png");
-	cvtColor( color_input, color_input, CV_RGB2GRAY );
-	color_input.convertTo(color_input, CV_32FC1, 1./255);
-	double dist = estimator.calculate_edge_distance(color_input, estimation);
-	dist = 1-fabs(dist);
+	cv::Mat local_estimation;
+	estimation.convertTo(local_estimation, CV_8UC1,255);
+	double dist = estimator.calculate_edge_distance(color_input, local_estimation,0);
 	result.push_back( dist);
-	desc.push_back( "edges_sobel_distance:");
+	desc.push_back( "CosineSimilarity:");
 
 
+	//************HausdorffDistance*********					11 ms, 3.8ms canny
+	dist = estimator.calculate_edge_distance(color_input, local_estimation,1);
+	result.push_back( dist);
+	desc.push_back( "HausdorffDistance:");
 
-	//************1-absdiff*********
+
+	//************ChamferDistance*********						12ms, 3.8ms canny
+	dist = estimator.calculate_edge_distance(color_input, local_estimation,2);
+	result.push_back( dist);
+	desc.push_back( "ChamferDistance:");
+
+	//************1-absdiff*********							1ms
 	cv::absdiff(input,estimation,temp);
 	result.push_back( 1-(cv::mean(temp).val[0]));
 	desc.push_back("1-mean(absdiff):");
-	//**********1-bitwise_xor: mean***********
+	//**********1-bitwise_xor: mean***********					2ms
 	cv::bitwise_xor(input, estimation,temp);
 	result.push_back( 1-(cv::mean(temp).val[0]));
 	desc.push_back( "1-mean(bitwise_xor):");
-	//************1-fuzzy xor/size*********
+	//************1-fuzzy xor/size*********						3ms
 	cv::min(input,1-estimation,temp);
 	cv::min(1-input,estimation,temp2);
 	cv::max(temp,temp2,temp);
 	result.push_back( 1-cv::sum(temp).val[0]/(input.cols*input.rows));
 	desc.push_back( "1-sum(fXOR)/size:");
 
+	//ALTERNATIVE FUZZY STUFF AND OR
+	//************yager*********								8ms
+	double w = 2;
+	cv::pow(1-input,w,temp);
+	cv::pow(1-estimation,w,temp2);
+	cv::pow(temp+temp2,1./w,temp);
+	cv::Mat mat_and = 1-cv::min(temp,1);
 
+	cv::pow(input,w,temp);
+	cv::pow(estimation,w,temp2);
+	cv::pow(temp+temp2,1./w,temp);
+	cv::Mat mat_or = cv::min(temp,1);
+
+	result.push_back( cv::sum(mat_and).val[0]/cv::sum(mat_or).val[0]);
+	desc.push_back("yager fAND/fOR:");
+
+	//************weber*********								6ms
+	double l = 2;
+	temp = input.mul(estimation);
+	cv::max((input+estimation+ l*temp -1)/(1+l),0, mat_and);
+	cv::min(input+estimation+l/(1-l)*temp,1,mat_or);
+	result.push_back( cv::sum(mat_and).val[0]/cv::sum(mat_or).val[0]);
+	desc.push_back("weber fAND/fOR:");
+
+	//************Yu*********									6ms
+	l = 0.5;
+	temp = input.mul(estimation);
+	cv::max((1+l)*(input+estimation-1)-l*temp,0, mat_and);
+	cv::min(input+estimation+l*temp,1,mat_or);
+
+	result.push_back( cv::sum(mat_and).val[0]/cv::sum(mat_or).val[0]);
+	desc.push_back("Yu fAND/fOR:");
+
+	//ALTERNATIVE fAND fOR
+	//************algebraic product*********					2.6ms
+	temp2=input.mul(estimation);//and
+	temp = input + estimation - temp2;	//or
+	result.push_back( cv::sum(temp2).val[0]/cv::sum(temp).val[0]);
+	desc.push_back("algebraic product");
+
+	//************Bounded difference*********					3.6ms
+
+	cv::min(input+estimation, 1,temp); //or
+	cv::max(input+estimation-1,0,temp2); //and
+	result.push_back( cv::sum(temp2).val[0]/cv::sum(temp).val[0]);
+	desc.push_back("Bounded difference");
 }
 
 void show_results(std::vector<double>& result, std::vector<std::string>& desc){
