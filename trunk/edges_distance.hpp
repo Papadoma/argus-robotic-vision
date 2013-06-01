@@ -101,19 +101,11 @@ inline double edge_similarity::ChamferDistance(cv::Mat array1,cv::Mat array2)
 
 inline double edge_similarity::calculate_edge_distance(cv::Mat input, cv::Mat estimation, int type){
 	double result;
-	cv::Mat sobel_input, sobel_estimation;
 
-	Canny( input, sobel_input, 50, 150, 3 );
-	Canny( estimation, sobel_estimation, 50, 150, 3 );
+	if(type == 0)result = CosineSimilarity(input,estimation);
+	else if(type == 1)result = HausdorffDistance(input,estimation);
+	else result = ChamferDistance(input,estimation);
 
-	if(type == 0)result = CosineSimilarity(sobel_input,sobel_estimation);
-	else if(type == 1)result = HausdorffDistance(sobel_input,sobel_estimation);
-	else result = ChamferDistance(sobel_input,sobel_estimation);
-
-//	sobel_input.convertTo(sobel_input,CV_8UC1,255);
-//	sobel_estimation.convertTo(sobel_estimation,CV_8UC1,255);
-	//imshow("edges_input",sobel_input);
-	//imshow("edges_estimation",sobel_estimation);
 	return result;
 }
 

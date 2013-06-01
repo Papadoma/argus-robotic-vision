@@ -38,8 +38,7 @@ void make_sliders(){
 
 void calculate_result(cv::Mat input, cv::Mat estimation, std::vector<double>& result, std::vector<std::string>& desc){
 	cv::Mat temp, temp2;
-	cv::Mat color_input = cv::imread("fitness_color.png");
-	cvtColor( color_input, color_input, CV_RGB2GRAY );
+	cv::Mat color_input = cv::imread("fitness_color.png",0);
 
 	input.convertTo(input,CV_32FC1,1./255);
 	estimation.convertTo(estimation,CV_32FC1,1./255);
@@ -80,24 +79,34 @@ void calculate_result(cv::Mat input, cv::Mat estimation, std::vector<double>& re
 	result.push_back( 1./(cv::sum(temp).val[0]));
 	desc.push_back( "1/sum(fXOR):");
 
-	//************CosineSimilarity*********						9ms, 3.8ms canny
+	//************CosineSimilarity*********						2ms
 	edge_similarity estimator;
 	cv::Mat local_estimation;
 	estimation.convertTo(local_estimation, CV_8UC1,255);
-	double dist = estimator.calculate_edge_distance(color_input, local_estimation,0);
+
+	cv::Mat sobel_input, sobel_estimation;
+	Canny( color_input, sobel_input, 50, 150, 3 );				//3.8ms
+	Canny( local_estimation, sobel_estimation, 50, 150, 3 );
+
+	double dist = estimator.calculate_edge_distance(sobel_input, sobel_estimation,0);
 	result.push_back( dist);
 	desc.push_back( "CosineSimilarity:");
 
 
-	//************HausdorffDistance*********					11 ms, 3.8ms canny
-	dist = estimator.calculate_edge_distance(color_input, local_estimation,1);
+	//************HausdorffDistance*********					4ms
+
+	dist = estimator.calculate_edge_distance(sobel_input, sobel_estimation,1);
+
 	result.push_back( dist);
 	desc.push_back( "HausdorffDistance:");
 
 
-	//************ChamferDistance*********						12ms, 3.8ms canny
-	dist = estimator.calculate_edge_distance(color_input, local_estimation,2);
+	//************ChamferDistance*********						4ms
+
+	dist = estimator.calculate_edge_distance(sobel_input, sobel_estimation,2);
 	result.push_back( dist);
+
+
 	desc.push_back( "ChamferDistance:");
 
 	//************1-absdiff*********							1ms

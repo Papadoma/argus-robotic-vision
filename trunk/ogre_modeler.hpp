@@ -9,6 +9,7 @@
 #define DEBUG_CONSOLE true
 #define DEBUG_WINDOW false
 #define DEPTH_MODE 1		//1: 1 byte, 2: 2 byte, 3: 4 byte
+#define MAX_RENDER_REQUESTS 100
 
 struct skeleton_struct{
 	Ogre::Bone*	Head;
@@ -29,9 +30,15 @@ private:
 	Ogre::Entity* body;
 	Ogre::Technique* mDepthTechnique;
 	Ogre::SkeletonInstance *modelSkeleton;
-	Ogre::PixelBox pb;
 	Ogre::RenderWindow* Window;
-	cv::Mat image_depth;
+	cv::Mat* depth_list;
+
+	Ogre::TexturePtr rtt1;
+	Ogre::TexturePtr rtt2;
+	Ogre::TexturePtr rtt3;
+	Ogre::TexturePtr targettex1;
+	Ogre::TexturePtr targettex2;
+	Ogre::TexturePtr targettex3;
 
 	void setupResources(void);
 	void setupRenderer(void);
@@ -40,7 +47,6 @@ private:
 	void setMaxMinDepth();
 	void render_window(){	root->renderOneFrame();};
 	void setup();
-	void get_opencv_snap();
 	void getMeshInformation(const Ogre::MeshPtr mesh,
 			size_t &vertex_count,
 			Ogre::Vector3* &vertices,
@@ -50,35 +56,36 @@ private:
 			const Ogre::Quaternion &orient,
 			const Ogre::Vector3 &scale);
 
+	void reset_model();
+	void move_model(const cv::Point3f& position, const cv::Point3f& rot_vector, const float& angle_w);
+	void rotate_bones(const cv::Mat&);
+
+	void copy_thread(int, int);
+
 	int render_width, render_height;
 	float min,max,center; //depth limits
-
-#if DEPTH_MODE == 1
-	char *data;
-
-#elif DEPTH_MODE == 2
-	unsigned short *data;
-#else
-	float *data;
-#endif
-
 public:
 	ogre_model(int, int);
 	~ogre_model();
+
+	struct particle_position{
+		cv::Mat bones_rotation;
+		cv::Point3f model_position;
+		cv::Point3f model_rotation;
+		float scale;
+	};
 
 	void set_depth_limits(float min_set, float center_set, float max_set);
 	void set_camera_clip(float, float);
 	cv::Mat_<cv::Point3f> get_camera_viewspace();
 
-	void reset_model();
-	void move_model(cv::Point3f position, cv::Point3f rot_vector, float angle_w);
-	void rotate_bones(cv::Mat);
-
 	float get_fps();
 
 	cv::Mat get_2D_pos();
-	cv::Mat* get_depth();
+	cv::Mat* get_depth(const std::vector<particle_position>&);
 	cv::Mat get_segmentation();
+
+
 };
 
 
