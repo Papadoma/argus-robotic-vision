@@ -8,10 +8,8 @@ void make_sliders(){
 	cv::createTrackbar("Roll", "sliders", & angles[2],300);
 }
 
-
-
 int main(){
-	ogre_model model(800,600);
+	ogre_model model(640,480);
 
 	cv::namedWindow("test");
 	cv::namedWindow("sliders");
@@ -66,11 +64,34 @@ int main(){
 		bones_rotation.at<float>(pos,1) = angles[1]-150;
 		bones_rotation.at<float>(pos,2) = angles[2]-150;
 
-		model.move_model(position, rot_vector, 700);
-		model.rotate_bones(bones_rotation);
-
+		std::vector<ogre_model::particle_position> particles_list;
+		ogre_model::particle_position particle_sample;
+		particle_sample.model_position = position;
+		particle_sample.model_rotation = rot_vector;
+		particle_sample.bones_rotation = bones_rotation;
+		particle_sample.scale = 700;
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
+		particles_list.push_back(particle_sample);
 		double t = (double)cv::getTickCount();
-		cv::Mat output = model.get_depth()->clone();
+		cv::Mat* output = model.get_depth(particles_list);
 		t = (double)cv::getTickCount() - t;
 		cv::Mat seg;
 		cv::applyColorMap(model.get_segmentation(), seg, cv::COLORMAP_JET );
@@ -79,25 +100,27 @@ int main(){
 		float fps = 1/(t/cv::getTickFrequency());
 		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total ms "<< 1000./fps << std::endl;//for fps
 
-		output = 255-output;
-		cv::cvtColor(output,output,CV_GRAY2RGB);
+
+		cv::Mat local_depth = 255-output[0];
+		cv::cvtColor(local_depth,local_depth,CV_GRAY2RGB);
 
 		std::ostringstream str;
 		str << "Yaw:" << angles[0]-150 << " Pitch:" << angles[1]-150 << " Roll:" << angles[2]-150 << "  pos:" << pos;
-		putText(output, str.str(), cv::Point(5,30), CV_FONT_HERSHEY_PLAIN, 2,CV_RGB(0,0,255));
+		putText(local_depth, str.str(), cv::Point(5,30), CV_FONT_HERSHEY_PLAIN, 2,CV_RGB(0,0,255));
 
 		//std::cout << model.get_2D_pos()<<std::endl;
-		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(0,0),model.get_2D_pos().at<ushort>(0,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(1,0),model.get_2D_pos().at<ushort>(1,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(2,0),model.get_2D_pos().at<ushort>(2,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(3,0),model.get_2D_pos().at<ushort>(3,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(output,cv::Point(model.get_2D_pos().at<ushort>(4,0),model.get_2D_pos().at<ushort>(4,1)),2,cv::Scalar(0,0,255),-6);
+		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(0,0),model.get_2D_pos().at<ushort>(0,1)),2,cv::Scalar(0,0,255),-6);
+		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(1,0),model.get_2D_pos().at<ushort>(1,1)),2,cv::Scalar(0,0,255),-6);
+		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(2,0),model.get_2D_pos().at<ushort>(2,1)),2,cv::Scalar(0,0,255),-6);
+		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(3,0),model.get_2D_pos().at<ushort>(3,1)),2,cv::Scalar(0,0,255),-6);
+		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(4,0),model.get_2D_pos().at<ushort>(4,1)),2,cv::Scalar(0,0,255),-6);
 
 		cv::Mat jet_depth_map2;
-		cv::applyColorMap(output, jet_depth_map2, cv::COLORMAP_JET );
+		cv::applyColorMap(local_depth, jet_depth_map2, cv::COLORMAP_JET );
 		//cv::imshow( "depth2", jet_depth_map2 );
 
 		imshow("test",jet_depth_map2);
+		imshow("test2",output[1]);
 	}
 
 
