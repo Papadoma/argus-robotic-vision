@@ -162,14 +162,14 @@ void ogre_model::setup(){
 	//SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
 
 #if DEPTH_MODE == 1
-	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
-			0,
-			Ogre::PF_L8,
-			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
+	//	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
+	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+	//			Ogre::TEX_TYPE_2D,
+	//			render_width,
+	//			render_height,
+	//			0,
+	//			Ogre::PF_L8,
+	//			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
 #elif DEPTH_MODE == 2
 	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
@@ -190,20 +190,20 @@ void ogre_model::setup(){
 			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
 #endif
 
-	Ogre::RenderTexture* renderTexture = renderToTexture->getBuffer()->getRenderTarget();
-	renderTexture->addViewport(camera);
-	renderTexture->getViewport(0)->setClearEveryFrame(true);
-	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-	renderTexture->getViewport(0)->setOverlaysEnabled(false);
-	renderTexture->getViewport(0)->setShadowsEnabled(false);
+	//	Ogre::RenderTexture* renderTexture = renderToTexture->getBuffer()->getRenderTarget();
+	//	renderTexture->addViewport(camera);
+	//	renderTexture->getViewport(0)->setClearEveryFrame(true);
+	//	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	//	renderTexture->getViewport(0)->setOverlaysEnabled(false);
+	//	renderTexture->getViewport(0)->setShadowsEnabled(false);
 
 	Ogre::MaterialPtr mDepthMaterial = Ogre::MaterialManager::getSingleton().getByName("DoF_Depth");
 	mDepthMaterial->load(); // needs to be loaded manually
 	mDepthTechnique = mDepthMaterial->getBestTechnique();
 	body->setMaterial(mDepthMaterial);
 
-	renderToTexture->getBuffer()->getRenderTarget()->update();
-	set_depth_limits(-1,-1,-1);
+	//	renderToTexture->getBuffer()->getRenderTarget()->update();
+	//	set_depth_limits(-1,-1,-1);
 
 	targettex1 = Ogre::TextureManager::getSingleton().createManual("targettex1",
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
@@ -232,50 +232,50 @@ void ogre_model::setup(){
 			Ogre::PF_L8,
 			Ogre::TU_DEFAULT  );
 
-//	rtt1 = Ogre::TextureManager::getSingleton().createManual("rtt1",
-//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-//			Ogre::TEX_TYPE_2D,
-//			render_width,
-//			render_height,
-//			0,
-//			Ogre::PF_L8,
-//			Ogre::TU_RENDERTARGET);
-//
-//	rtt2 = Ogre::TextureManager::getSingleton().createManual("rtt2",
-//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-//			Ogre::TEX_TYPE_2D,
-//			render_width,
-//			render_height,
-//			0,
-//			Ogre::PF_L8,
-//			Ogre::TU_RENDERTARGET);
-//
-//	rtt3 = Ogre::TextureManager::getSingleton().createManual("rtt3",
-//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-//			Ogre::TEX_TYPE_2D,
-//			render_width,
-//			render_height,
-//			0,
-//			Ogre::PF_L8,
-//			Ogre::TU_RENDERTARGET);
-//
-//	rtt1->getBuffer()->getRenderTarget()->addViewport(camera);
-//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
-//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
-//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
-//
-//	rtt2->getBuffer()->getRenderTarget()->addViewport(camera);
-//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
-//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
-//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
-//
-//	rtt3->getBuffer()->getRenderTarget()->addViewport(camera);
-//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
-//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
-//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
+	rtt1 = Ogre::TextureManager::getSingleton().createManual("rtt1",
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+			Ogre::TEX_TYPE_2D,
+			render_width,
+			render_height,
+			0,
+			Ogre::PF_L8,
+			Ogre::TU_RENDERTARGET);
+
+	rtt2 = Ogre::TextureManager::getSingleton().createManual("rtt2",
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+			Ogre::TEX_TYPE_2D,
+			render_width,
+			render_height,
+			0,
+			Ogre::PF_L8,
+			Ogre::TU_RENDERTARGET);
+
+	rtt3 = Ogre::TextureManager::getSingleton().createManual("rtt3",
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+			Ogre::TEX_TYPE_2D,
+			render_width,
+			render_height,
+			0,
+			Ogre::PF_L8,
+			Ogre::TU_RENDERTARGET);
+
+	rtt1->getBuffer()->getRenderTarget()->addViewport(camera);
+	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
+	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
+	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
+
+	rtt2->getBuffer()->getRenderTarget()->addViewport(camera);
+	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
+	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
+	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
+
+	rtt3->getBuffer()->getRenderTarget()->addViewport(camera);
+	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
+	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
+	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
 }
 
 inline void ogre_model::reset_bones(){
@@ -477,75 +477,133 @@ cv::Mat ogre_model::get_2D_pos(){
 cv::Mat* ogre_model::get_depth(const std::vector<particle_position>& particles_list){
 
 	//double t = (double)cv::getTickCount();
-//		for(int i=0 ; i<(int)particles_list.size() ; i++){
-//			move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
-//			rotate_bones(particles_list[i].bones_rotation);
-//			renderToTexture->getBuffer()->getRenderTarget()->update();
-//			renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
-//		}
+	//		for(int i=0 ; i<(int)particles_list.size() ; i++){
+	//			move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
+	//			rotate_bones(particles_list[i].bones_rotation);
+	//			rtt1->getBuffer()->getRenderTarget()->update();
+	//			rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
+	//		}
 	//t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
 	//std::cout<<"[Modeler]Simple render time: "<<t<<"ms"<<std::endl;
 
-	//	boost::thread_group thread_group;
-	//	double t = (double)cv::getTickCount();
-	//	for(int i=0 ; i<(int)particles_list.size(); i=i+3){
-	//		move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
-	//		rotate_bones(particles_list[i].bones_rotation);
-	//		rtt1->getBuffer()->getRenderTarget()->update();
-	//		if(i+1<(int)particles_list.size())move_model(particles_list[i+1].model_position, particles_list[i+1].model_rotation, particles_list[i+1].scale);
-	//		if(i+1<(int)particles_list.size())rotate_bones(particles_list[i+1].bones_rotation);
-	//		if(i+1<(int)particles_list.size())rtt2->getBuffer()->getRenderTarget()->update();
-	//		if(i+2<(int)particles_list.size())move_model(particles_list[i+2].model_position, particles_list[i+2].model_rotation, particles_list[i+2].scale);
-	//		if(i+2<(int)particles_list.size())rotate_bones(particles_list[i+2].bones_rotation);
-	//		if(i+2<(int)particles_list.size())rtt3->getBuffer()->getRenderTarget()->update();
-	//		thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this, 0, i));
-	//		if(i+1<(int)particles_list.size())thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this, 1, i));
-	//		if(i+2<(int)particles_list.size())thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this, 2, i));
-	//		thread_group.join_all();
-	//	}
-	//	t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
-	//	std::cout<<"[Modeler]Simple render time: "<<t<<"ms"<<std::endl;
+	boost::thread_group thread_group;
 
-
-
-	move_model(particles_list[0].model_position, particles_list[0].model_rotation, particles_list[0].scale);
-	rotate_bones(particles_list[0].bones_rotation);
-	renderToTexture->getBuffer()->getRenderTarget()->update();
-	//double t = (double)cv::getTickCount();
-	targettex1->getBuffer()->blit(renderToTexture->getBuffer());
-	//t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
-	//std::cout<<"[Modeler]Simple render time: "<<t<<"ms"<<std::endl;
-
-	move_model(particles_list[1].model_position, particles_list[1].model_rotation, particles_list[1].scale);
-	rotate_bones(particles_list[1].bones_rotation);
-	renderToTexture->getBuffer()->getRenderTarget()->update();
-	targettex2->getBuffer()->blit(renderToTexture->getBuffer());
-
-	move_model(particles_list[2].model_position, particles_list[2].model_rotation, particles_list[2].scale);
-	rotate_bones(particles_list[2].bones_rotation);
-	renderToTexture->getBuffer()->getRenderTarget()->update();
-	targettex3->getBuffer()->blit(renderToTexture->getBuffer());
-
-	for(int i=3 ; i<(int)particles_list.size()-2 ; i++){
+	for(int i=0 ; i<(int)particles_list.size() ; i+=3){
 		move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
 		rotate_bones(particles_list[i].bones_rotation);
-		targettex1->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i-3].data));
-		renderToTexture->getBuffer()->getRenderTarget()->update();
-		targettex1->getBuffer()->blit(renderToTexture->getBuffer());
+		rtt1->getBuffer()->getRenderTarget()->update();
 
-		move_model(particles_list[i+1].model_position, particles_list[i+1].model_rotation, particles_list[i+1].scale);
-		rotate_bones(particles_list[i+1].bones_rotation);
-		targettex2->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i-2].data));
-		renderToTexture->getBuffer()->getRenderTarget()->update();
-		targettex2->getBuffer()->blit(renderToTexture->getBuffer());
+		if(i+1<(int)particles_list.size()){
+			move_model(particles_list[i+1].model_position, particles_list[i+1].model_rotation, particles_list[i+1].scale - 200);
+			rotate_bones(particles_list[i+1].bones_rotation);
+			rtt2->getBuffer()->getRenderTarget()->update();
+		}
 
-		move_model(particles_list[i+2].model_position, particles_list[i+2].model_rotation, particles_list[i+2].scale);
-		rotate_bones(particles_list[i+2].bones_rotation);
-		targettex3->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i-1].data));
-		renderToTexture->getBuffer()->getRenderTarget()->update();
-		targettex3->getBuffer()->blit(renderToTexture->getBuffer());
+		if(i+2<(int)particles_list.size()){
+			move_model(particles_list[i+2].model_position, particles_list[i+2].model_rotation, particles_list[i+2].scale);
+			rotate_bones(particles_list[i+2].bones_rotation);
+			rtt3->getBuffer()->getRenderTarget()->update();
+		}
+
+//		rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
+//		if(i+1<(int)particles_list.size())rtt2->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i+1].data), Ogre::RenderTarget::FB_AUTO);
+//		if(i+2<(int)particles_list.size())rtt3->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i+2].data), Ogre::RenderTarget::FB_AUTO);
+
+		thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this,0,i));
+		//if(i+1<(int)particles_list.size())thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this,1,i));
+		//if(i+2<(int)particles_list.size())thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this,2,i));
+		thread_group.join_all();
 	}
 
+
+	//	move_model(particles_list[0].model_position, particles_list[0].model_rotation, particles_list[0].scale);
+	//	rotate_bones(particles_list[0].bones_rotation);
+	//	rtt1->getBuffer()->getRenderTarget()->update();
+	//	//double t = (double)cv::getTickCount();
+	//	targettex1->getBuffer()->blit(rtt1->getBuffer());
+	//	//t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+	//	//std::cout<<"[Modeler]Simple render time: "<<t<<"ms"<<std::endl;
+	//
+	//	move_model(particles_list[1].model_position, particles_list[1].model_rotation, particles_list[1].scale);
+	//	rotate_bones(particles_list[1].bones_rotation);
+	//	rtt2->getBuffer()->getRenderTarget()->update();
+	//	targettex2->getBuffer()->blit(rtt2->getBuffer());
+	//
+	//	move_model(particles_list[2].model_position, particles_list[2].model_rotation, particles_list[2].scale);
+	//	rotate_bones(particles_list[2].bones_rotation);
+	//	rtt3->getBuffer()->getRenderTarget()->update();
+	//	targettex3->getBuffer()->blit(rtt3->getBuffer());
+	//
+	//	//TODO fix limits of rendering
+	//	for(int i=3 ; i<(int)particles_list.size()-2 ; i+=3){
+	//		move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
+	//		rotate_bones(particles_list[i].bones_rotation);
+	//		targettex1->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i-3].data));
+	//		rtt1->getBuffer()->getRenderTarget()->update();
+	//		targettex1->getBuffer()->blit(rtt1->getBuffer());
+	//
+	//		move_model(particles_list[i+1].model_position, particles_list[i+1].model_rotation, particles_list[i+1].scale);
+	//		rotate_bones(particles_list[i+1].bones_rotation);
+	//		targettex2->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i-2].data));
+	//		rtt2->getBuffer()->getRenderTarget()->update();
+	//		targettex2->getBuffer()->blit(rtt2->getBuffer());
+	//
+	//		move_model(particles_list[i+2].model_position, particles_list[i+2].model_rotation, particles_list[i+2].scale);
+	//		rotate_bones(particles_list[i+2].bones_rotation);
+	//		targettex3->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i-1].data));
+	//		rtt3->getBuffer()->getRenderTarget()->update();
+	//		targettex3->getBuffer()->blit(rtt3->getBuffer());
+	//	}
+
+	//MADMARX's PROPOSED METHOD
+	//	move_model(particles_list[0].model_position, particles_list[0].model_rotation, particles_list[0].scale);
+	//	rotate_bones(particles_list[0].bones_rotation);
+	//	rtt1->getBuffer()->getRenderTarget()->update();
+	//
+	//	for(int i=1 ; i<(int)particles_list.size() ; i+=3){
+	//		//std::cout<<"i:"<<i<<std::endl;
+	//		move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
+	//		rotate_bones(particles_list[i].bones_rotation);
+	//		rtt2->getBuffer()->getRenderTarget()->update();
+	//		double t = (double)cv::getTickCount();
+	//		targettex1->getBuffer()->blit(rtt1->getBuffer());
+	//		t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+	//		std::cout<<"[Modeler]Copy time: "<<t<<"ms"<<std::endl;
+	//
+	//
+	//		if(i+1<(int)particles_list.size()){
+	//			move_model(particles_list[i+1].model_position, particles_list[i+1].model_rotation, particles_list[i+1].scale);
+	//			rotate_bones(particles_list[i+1].bones_rotation);
+	//			rtt3->getBuffer()->getRenderTarget()->update();
+	//		}
+	//		targettex2->getBuffer()->blit(rtt2->getBuffer());
+	//
+	//		if(i+2<(int)particles_list.size()){
+	//			move_model(particles_list[i+2].model_position, particles_list[i+2].model_rotation, particles_list[i+2].scale);
+	//			rotate_bones(particles_list[i+2].bones_rotation);
+	//			rtt1->getBuffer()->getRenderTarget()->update();
+	//		}
+	//		if(i+1<(int)particles_list.size())
+	//			targettex3->getBuffer()->blit(rtt3->getBuffer());
+	//
+	//
+	//		targettex1->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i-1].data));
+	//		targettex2->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data));
+	//		if(i+1<(int)particles_list.size())
+	//			targettex3->getBuffer()->blitToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i+1].data));
+	//
+	//		//		double t = (double)cv::getTickCount();
+	//		//		memcpy(static_cast<uchar*>(targettex1->getBuffer()->lock(Ogre::Box(0, 0, render_width, render_height),Ogre::HardwareBuffer::HBL_READ_ONLY).data), depth_list[i-1].data, targettex1-> getBuffer() ->getSizeInBytes());
+	//		//		t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+	//		//		std::cout<<"[Modeler]Copy time: "<<t<<"ms"<<std::endl;
+	//		//		memcpy(static_cast<uchar*>(targettex2->getBuffer()->lock(Ogre::Box(0, 0, render_width, render_height),Ogre::HardwareBuffer::HBL_READ_ONLY).data), depth_list[i].data, targettex2-> getBuffer() ->getSizeInBytes());
+	//		//		if(i+1<(int)particles_list.size())
+	//		//			memcpy(static_cast<uchar*>(targettex3->getBuffer()->lock(Ogre::Box(0, 0, render_width, render_height),Ogre::HardwareBuffer::HBL_READ_ONLY).data), depth_list[i+1].data, targettex3-> getBuffer() ->getSizeInBytes());
+	//		//		targettex1->getBuffer()->unlock();
+	//		//		targettex2->getBuffer()->unlock();
+	//		//		if(i+1<(int)particles_list.size())
+	//		//			targettex3->getBuffer()->unlock();
+	//	}
 
 #if DEBUG_WINDOW
 	render_window();
@@ -570,6 +628,7 @@ cv::Mat* ogre_model::get_depth(const std::vector<particle_position>& particles_l
 void ogre_model::copy_thread(int id,int i){
 	switch(id){
 	case 0:
+		std::cout<<id<<" "<<i<<std::endl;
 		rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
 
 		break;
