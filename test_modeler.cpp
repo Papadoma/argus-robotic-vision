@@ -1,6 +1,7 @@
 #include "ogre_modeler.hpp"
 
 int angles[3];
+std::deque<double>mean_time;
 
 void make_sliders(){
 	cv::createTrackbar("Yaw", "sliders", & angles[0],300);
@@ -94,11 +95,14 @@ int main(){
 		cv::Mat* output = model.get_depth(particles_list);
 		t = (double)cv::getTickCount() - t;
 		cv::Mat seg;
-		cv::applyColorMap(model.get_segmentation(), seg, cv::COLORMAP_JET );
-		imshow("segmentation",seg);
+		//cv::applyColorMap(model.get_segmentation(), seg, cv::COLORMAP_JET );
+		//imshow("segmentation",seg);
 
-		float fps = 1/(t/cv::getTickFrequency());
-		std::cout << "[Modeler] Render fps " <<  model.get_fps() <<" Total ms "<< 1000./fps << std::endl;//for fps
+		mean_time.push_front(1000*(t/cv::getTickFrequency()));
+		if(mean_time.size()>240)mean_time.pop_back();
+		double mean_value = 0;
+		for(int i=0;i<(int)mean_time.size();i++)mean_value+=mean_time[i];
+		std::cout << "[Modeler] Render fps " <<  /*model.get_fps()*/"" <<" Total ms "<< 1000*(t/cv::getTickFrequency()) << "Mean ms "<< mean_value/(int)mean_time.size() << std::endl;//for fps
 
 
 		cv::Mat local_depth = 255-output[0];
