@@ -20,6 +20,12 @@ int main(){
 //		instance->find_pose(input_frame, false, cv::Rect(194,36,263,419));	Main PC, snap_depth3
 //		//instance->find_pose(input_frame, true, cv::Rect(194,36,263,419));
 
+//		instance->find_pose(input_frame, input_disp, false, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));	//laptop, snap_depth3
+//		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
+//		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
+//		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
+//		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
+
 		instance->find_pose(input_frame, input_disp, false, cv::Rect(167,24,305,430));	//laptop, snap_depth3
 		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430));
 		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430));
