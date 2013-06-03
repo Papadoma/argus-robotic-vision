@@ -138,6 +138,13 @@ void ogre_model::setup(){
 	camera->setNearClipDistance(1000);
 	camera->setFarClipDistance(10000);
 
+	Ogre::Matrix4 cam_mat = camera->getProjectionMatrix();
+	cam_mat[0][0] = 539.65684452821188 / 640;
+	cam_mat[1][1] = 539.28421750515940 / 480;
+//	cam_mat[2][2] = -0.100;
+//	cam_mat[3][2] = -1.000;
+	cam_mat[3][3] = 0.000;
+	//camera->setCustomProjectionMatrix(true, cam_mat);
 	// add viewport
 #if DEBUG_WINDOW
 	Window->addViewport(camera);
