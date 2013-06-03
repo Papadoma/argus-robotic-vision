@@ -94,7 +94,8 @@ int main(){
 		double t = (double)cv::getTickCount();
 		cv::Mat* output = model.get_depth(particles_list);
 		t = (double)cv::getTickCount() - t;
-		cv::Mat seg;
+		cv::Mat_<cv::Point>* extremas = model.get_extremas();
+		//cv::Mat seg;
 		//cv::applyColorMap(model.get_segmentation(), seg, cv::COLORMAP_JET );
 		//imshow("segmentation",seg);
 
@@ -113,11 +114,8 @@ int main(){
 		putText(local_depth, str.str(), cv::Point(5,30), CV_FONT_HERSHEY_PLAIN, 2,CV_RGB(0,0,255));
 
 		//std::cout << model.get_2D_pos()<<std::endl;
-		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(0,0),model.get_2D_pos().at<ushort>(0,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(1,0),model.get_2D_pos().at<ushort>(1,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(2,0),model.get_2D_pos().at<ushort>(2,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(3,0),model.get_2D_pos().at<ushort>(3,1)),2,cv::Scalar(0,0,255),-6);
-		cv::circle(local_depth,cv::Point(model.get_2D_pos().at<ushort>(4,0),model.get_2D_pos().at<ushort>(4,1)),2,cv::Scalar(0,0,255),-6);
+		for(int i=0;i<19;i++)cv::circle(local_depth,extremas[0].at<cv::Point>(i),2,cv::Scalar(0,0,255),-6);
+
 
 		cv::Mat jet_depth_map2;
 		cv::applyColorMap(local_depth, jet_depth_map2, cv::COLORMAP_JET );

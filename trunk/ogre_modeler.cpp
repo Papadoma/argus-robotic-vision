@@ -8,9 +8,12 @@ ogre_model::ogre_model(int render_width, int render_height)
 	root = new Ogre::Root("plugins_d.cfg");
 
 	depth_list = new cv::Mat[MAX_RENDER_REQUESTS];		//640x480x100x1Byte = 30MB
+	extremas_list = new cv::Mat_<cv::Point>[MAX_RENDER_REQUESTS];
 	for(int i=0 ; i<MAX_RENDER_REQUESTS ; i++){
 		depth_list[i] = cv::Mat(render_height, render_width, CV_8UC1);
+		extremas_list[i] = cv::Mat_<cv::Point>::zeros(19,1);
 	}
+
 	//#if DEPTH_MODE == 1
 	//image_depth = cv::Mat(render_height, render_width, CV_8UC1);
 	//#elif DEPTH_MODE == 2
@@ -162,14 +165,14 @@ void ogre_model::setup(){
 	//SceneMgr->setAmbientLight(Ogre::ColourValue(1.0f, 1.0f, 1.0f));
 
 #if DEPTH_MODE == 1
-	//	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
-	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-	//			Ogre::TEX_TYPE_2D,
-	//			render_width,
-	//			render_height,
-	//			0,
-	//			Ogre::PF_L8,
-	//			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
+	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
+			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+			Ogre::TEX_TYPE_2D,
+			render_width,
+			render_height,
+			0,
+			Ogre::PF_L8,
+			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
 #elif DEPTH_MODE == 2
 	renderToTexture = Ogre::TextureManager::getSingleton().createManual("RttTex",
 			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
@@ -190,92 +193,90 @@ void ogre_model::setup(){
 			Ogre::TU_RENDERTARGET | Ogre::TU_DYNAMIC_WRITE_ONLY_DISCARDABLE);
 #endif
 
-	//	Ogre::RenderTexture* renderTexture = renderToTexture->getBuffer()->getRenderTarget();
-	//	renderTexture->addViewport(camera);
-	//	renderTexture->getViewport(0)->setClearEveryFrame(true);
-	//	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-	//	renderTexture->getViewport(0)->setOverlaysEnabled(false);
-	//	renderTexture->getViewport(0)->setShadowsEnabled(false);
+	Ogre::RenderTexture* renderTexture = renderToTexture->getBuffer()->getRenderTarget();
+	renderTexture->addViewport(camera);
+	renderTexture->getViewport(0)->setClearEveryFrame(true);
+	renderTexture->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	renderTexture->getViewport(0)->setOverlaysEnabled(false);
+	renderTexture->getViewport(0)->setShadowsEnabled(false);
 
 	Ogre::MaterialPtr mDepthMaterial = Ogre::MaterialManager::getSingleton().getByName("DoF_Depth");
 	mDepthMaterial->load(); // needs to be loaded manually
 	mDepthTechnique = mDepthMaterial->getBestTechnique();
 	body->setMaterial(mDepthMaterial);
 
-	//	renderToTexture->getBuffer()->getRenderTarget()->update();
-	//	set_depth_limits(-1,-1,-1);
 
-	targettex1 = Ogre::TextureManager::getSingleton().createManual("targettex1",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
-			0,
-			Ogre::PF_L8,
-			Ogre::TU_DEFAULT  );
-
-	targettex2 = Ogre::TextureManager::getSingleton().createManual("targettex2",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
-			0,
-			Ogre::PF_L8,
-			Ogre::TU_DEFAULT );
-
-	targettex3 = Ogre::TextureManager::getSingleton().createManual("targettex3",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
-			0,
-			Ogre::PF_L8,
-			Ogre::TU_DEFAULT  );
-
-	rtt1 = Ogre::TextureManager::getSingleton().createManual("rtt1",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
-			0,
-			Ogre::PF_L8,
-			Ogre::TU_RENDERTARGET);
-
-	rtt2 = Ogre::TextureManager::getSingleton().createManual("rtt2",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
-			0,
-			Ogre::PF_L8,
-			Ogre::TU_RENDERTARGET);
-
-	rtt3 = Ogre::TextureManager::getSingleton().createManual("rtt3",
-			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
-			Ogre::TEX_TYPE_2D,
-			render_width,
-			render_height,
-			0,
-			Ogre::PF_L8,
-			Ogre::TU_RENDERTARGET);
-
-	rtt1->getBuffer()->getRenderTarget()->addViewport(camera);
-	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
-	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
-	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
-
-	rtt2->getBuffer()->getRenderTarget()->addViewport(camera);
-	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
-	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
-	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
-
-	rtt3->getBuffer()->getRenderTarget()->addViewport(camera);
-	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
-	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
-	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
-	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
+	//	targettex1 = Ogre::TextureManager::getSingleton().createManual("targettex1",
+	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+	//			Ogre::TEX_TYPE_2D,
+	//			render_width,
+	//			render_height,
+	//			0,
+	//			Ogre::PF_L8,
+	//			Ogre::TU_DEFAULT  );
+	//
+	//	targettex2 = Ogre::TextureManager::getSingleton().createManual("targettex2",
+	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+	//			Ogre::TEX_TYPE_2D,
+	//			render_width,
+	//			render_height,
+	//			0,
+	//			Ogre::PF_L8,
+	//			Ogre::TU_DEFAULT );
+	//
+	//	targettex3 = Ogre::TextureManager::getSingleton().createManual("targettex3",
+	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+	//			Ogre::TEX_TYPE_2D,
+	//			render_width,
+	//			render_height,
+	//			0,
+	//			Ogre::PF_L8,
+	//			Ogre::TU_DEFAULT  );
+	//
+	//	rtt1 = Ogre::TextureManager::getSingleton().createManual("rtt1",
+	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+	//			Ogre::TEX_TYPE_2D,
+	//			render_width,
+	//			render_height,
+	//			0,
+	//			Ogre::PF_L8,
+	//			Ogre::TU_RENDERTARGET);
+	//
+	//	rtt2 = Ogre::TextureManager::getSingleton().createManual("rtt2",
+	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+	//			Ogre::TEX_TYPE_2D,
+	//			render_width,
+	//			render_height,
+	//			0,
+	//			Ogre::PF_L8,
+	//			Ogre::TU_RENDERTARGET);
+	//
+	//	rtt3 = Ogre::TextureManager::getSingleton().createManual("rtt3",
+	//			Ogre::ResourceGroupManager::DEFAULT_RESOURCE_GROUP_NAME,
+	//			Ogre::TEX_TYPE_2D,
+	//			render_width,
+	//			render_height,
+	//			0,
+	//			Ogre::PF_L8,
+	//			Ogre::TU_RENDERTARGET);
+	//
+	//	rtt1->getBuffer()->getRenderTarget()->addViewport(camera);
+	//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
+	//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
+	//	rtt1->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
+	//
+	//	rtt2->getBuffer()->getRenderTarget()->addViewport(camera);
+	//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
+	//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
+	//	rtt2->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
+	//
+	//	rtt3->getBuffer()->getRenderTarget()->addViewport(camera);
+	//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setClearEveryFrame(true);
+	//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setBackgroundColour(Ogre::ColourValue::White);
+	//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setOverlaysEnabled(false);
+	//	rtt3->getBuffer()->getRenderTarget()->getViewport(0)->setShadowsEnabled(false);
 }
 
 inline void ogre_model::reset_bones(){
@@ -389,9 +390,7 @@ inline void ogre_model::rotate_bones(const cv::Mat& bones_rotation){
 /**
  * 2D position of every joint, in 16bit unsigned 2 channel cv::mat
  */
-cv::Mat ogre_model::get_2D_pos(){
-	cv::Mat pos2D = cv::Mat::zeros(19,1,CV_16UC2);
-
+inline void ogre_model::get_2D_pos(const int& id){
 	Ogre::Vector3 head2d = modelNode->_getDerivedPosition() +  modelNode->_getDerivedOrientation() * model_skeleton.Head->_getDerivedPosition()*modelNode->_getDerivedScale();
 	Ogre::Vector3 u_torso2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[0]->_getDerivedPosition()*modelNode->_getDerivedScale();
 	Ogre::Vector3 l_torsod = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Torso[1]->_getDerivedPosition()*modelNode->_getDerivedScale();
@@ -432,90 +431,56 @@ cv::Mat ogre_model::get_2D_pos(){
 	l_calf2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_calf2d;
 	l_foot2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_foot2d;
 
-	pos2D.at<cv::Vec2w>(0)[0] = (0.5 + head2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(0)[1] = (0.5 - head2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(1)[0] = (0.5 + u_torso2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(1)[1] = (0.5 - u_torso2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(2)[0] = (0.5 + l_torsod.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(2)[1] = (0.5 - l_torsod.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(3)[0] = (0.5 + r_shoulder2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(3)[1] = (0.5 - r_shoulder2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(4)[0] = (0.5 + l_shoulder2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(4)[1] = (0.5 - l_shoulder2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(5)[0] = (0.5 + r_hip2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(5)[1] = (0.5 - r_hip2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(6)[0] = (0.5 + l_hip2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(6)[1] = (0.5 - l_hip2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(7)[0] = (0.5 + r_arm2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(7)[1] = (0.5 - r_arm2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(8)[0] = (0.5 + r_forearm2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(8)[1] = (0.5 - r_forearm2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(9)[0] = (0.5 + r_hand2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(9)[1] = (0.5 - r_hand2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(10)[0] = (0.5 + l_arm2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(10)[1] = (0.5 - l_arm2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(11)[0] = (0.5 + l_forearm2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(11)[1] = (0.5 - l_forearm2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(12)[0] = (0.5 + l_hand2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(12)[1] = (0.5 - l_hand2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(13)[0] = (0.5 + r_thigh2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(13)[1] = (0.5 - r_thigh2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(14)[0] = (0.5 + r_calf2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(14)[1] = (0.5 - r_calf2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(15)[0] = (0.5 + r_foot2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(15)[1] = (0.5 - r_foot2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(16)[0] = (0.5 + l_thigh2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(16)[1] = (0.5 - l_thigh2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(17)[0] = (0.5 + l_calf2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(17)[1] = (0.5 - l_calf2d.y/2)*render_height;
-	pos2D.at<cv::Vec2w>(18)[0] = (0.5 + l_foot2d.x/2)*render_width;
-	pos2D.at<cv::Vec2w>(18)[1] = (0.5 - l_foot2d.y/2)*render_height;
-
-	return pos2D;
+	extremas_list[id].at<cv::Point>(0).x = (0.5 + head2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(0).y = (0.5 - head2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(1).x = (0.5 + u_torso2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(1).y = (0.5 - u_torso2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(2).x = (0.5 + l_torsod.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(2).y = (0.5 - l_torsod.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(3).x = (0.5 + r_shoulder2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(3).y = (0.5 - r_shoulder2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(4).x = (0.5 + l_shoulder2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(4).y = (0.5 - l_shoulder2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(5).x = (0.5 + r_hip2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(5).y = (0.5 - r_hip2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(6).x = (0.5 + l_hip2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(6).y = (0.5 - l_hip2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(7).x = (0.5 + r_arm2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(7).y = (0.5 - r_arm2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(8).x = (0.5 + r_forearm2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(8).y = (0.5 - r_forearm2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(9).x = (0.5 + r_hand2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(9).y = (0.5 - r_hand2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(10).x = (0.5 + l_arm2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(10).y = (0.5 - l_arm2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(11).x = (0.5 + l_forearm2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(11).y = (0.5 - l_forearm2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(12).x = (0.5 + l_hand2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(12).y = (0.5 - l_hand2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(13).x = (0.5 + r_thigh2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(13).y = (0.5 - r_thigh2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(14).x = (0.5 + r_calf2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(14).y = (0.5 - r_calf2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(15).x = (0.5 + r_foot2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(15).y = (0.5 - r_foot2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(16).x = (0.5 + l_thigh2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(16).y = (0.5 - l_thigh2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(17).x = (0.5 + l_calf2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(17).y = (0.5 - l_calf2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(18).x = (0.5 + l_foot2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(18).y = (0.5 - l_foot2d.y/2)*render_height;
 }
 
 cv::Mat* ogre_model::get_depth(const std::vector<particle_position>& particles_list){
 
-	//double t = (double)cv::getTickCount();
-	//		for(int i=0 ; i<(int)particles_list.size() ; i++){
-	//			move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
-	//			rotate_bones(particles_list[i].bones_rotation);
-	//			rtt1->getBuffer()->getRenderTarget()->update();
-	//			rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
-	//		}
-	//t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
-	//std::cout<<"[Modeler]Simple render time: "<<t<<"ms"<<std::endl;
-
-	boost::thread_group thread_group;
-
-	for(int i=0 ; i<(int)particles_list.size() ; i+=3){
+	for(int i=0 ; i<(int)particles_list.size() ; i++){
 		move_model(particles_list[i].model_position, particles_list[i].model_rotation, particles_list[i].scale);
 		rotate_bones(particles_list[i].bones_rotation);
-		rtt1->getBuffer()->getRenderTarget()->update();
-
-		if(i+1<(int)particles_list.size()){
-			move_model(particles_list[i+1].model_position, particles_list[i+1].model_rotation, particles_list[i+1].scale - 200);
-			rotate_bones(particles_list[i+1].bones_rotation);
-			rtt2->getBuffer()->getRenderTarget()->update();
-		}
-
-		if(i+2<(int)particles_list.size()){
-			move_model(particles_list[i+2].model_position, particles_list[i+2].model_rotation, particles_list[i+2].scale);
-			rotate_bones(particles_list[i+2].bones_rotation);
-			rtt3->getBuffer()->getRenderTarget()->update();
-		}
-
-//		rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
-//		if(i+1<(int)particles_list.size())rtt2->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i+1].data), Ogre::RenderTarget::FB_AUTO);
-//		if(i+2<(int)particles_list.size())rtt3->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i+2].data), Ogre::RenderTarget::FB_AUTO);
-
-		thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this,0,i));
-		//if(i+1<(int)particles_list.size())thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this,1,i));
-		//if(i+2<(int)particles_list.size())thread_group.create_thread(boost::bind(&ogre_model::copy_thread, this,2,i));
-		thread_group.join_all();
+		renderToTexture->getBuffer()->getRenderTarget()->update();
+		get_2D_pos(i);
+		renderToTexture->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
 	}
-
-
+	return depth_list;
 	//	move_model(particles_list[0].model_position, particles_list[0].model_rotation, particles_list[0].scale);
 	//	rotate_bones(particles_list[0].bones_rotation);
 	//	rtt1->getBuffer()->getRenderTarget()->update();
@@ -623,24 +588,6 @@ cv::Mat* ogre_model::get_depth(const std::vector<particle_position>& particles_l
 	//		image_depth = 1 - image_depth;
 	//		threshold(image_depth, image_depth, 0.99, 1, cv::THRESH_TOZERO_INV);
 	//	#endif
-}
-
-void ogre_model::copy_thread(int id,int i){
-	switch(id){
-	case 0:
-		std::cout<<id<<" "<<i<<std::endl;
-		rtt1->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i].data), Ogre::RenderTarget::FB_AUTO);
-
-		break;
-	case 1:
-		rtt2->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i+1].data), Ogre::RenderTarget::FB_AUTO);
-
-		break;
-	case 2:
-		rtt3->getBuffer()->getRenderTarget()->copyContentsToMemory(Ogre::PixelBox(Ogre::Box(0, 0, render_width, render_height), Ogre::PF_L8, depth_list[i+2].data), Ogre::RenderTarget::FB_AUTO);
-
-		break;
-	}
 }
 
 float ogre_model::get_fps(){
