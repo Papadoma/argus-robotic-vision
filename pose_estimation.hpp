@@ -23,7 +23,7 @@
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 40;
+const int swarm_size = 20;
 const float w = 0.5;
 const float c1 = 1.5;//1.5
 const float c2 = 1.5;//1.5
@@ -37,7 +37,7 @@ struct particle{
 	cv::Mat bones_violation;
 //	cv::Mat position_violation;
 //	cv::Mat rotation_violation;
-	cv::Mat extremas;
+	cv::Mat_<cv::Point> extremas;
 
 	ogre_model::particle_position current_position;	//Current particle position
 	ogre_model::particle_position next_position;	//Next particle position (velocity)
@@ -67,8 +67,7 @@ private:
 	cv::Point3f estimate_starting_position();
 	void calc_next_position(particle&);
 	void round_position(ogre_model::particle_position&);
-	double calc_score(particle&);
-	void paint_particle(particle&);
+	double calc_score(const particle&);
 
 	cv::Mat get_random_bones_rot(bool);
 	cv::Mat get_random_19x3_mat(bool);
@@ -105,7 +104,7 @@ private:
 
 	//cv::Mat best_global_silhouette;
 	cv::Mat best_global_depth;
-	cv::Mat best_global_extremas;
+	cv::Mat_<cv::Point> best_global_extremas;
 
 	enum init_type { POSITION, ROTATION, BONES, SCALE, ALL };
 
@@ -134,7 +133,7 @@ public:
 	void show_best_solution();
 	void set_human_position(cv::Point3f est_pos){human_position=est_pos;};
 	cv::Rect get_model_bound_rect(){
-		best_global_extremas.convertTo(best_global_extremas,CV_32FC2);
+		//best_global_extremas.convertTo(best_global_extremas,CV_32FC2);
 		return cv::boundingRect(best_global_extremas);
 	};
 };

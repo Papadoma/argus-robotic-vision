@@ -183,12 +183,11 @@ inline void pose_estimator::init_particles()
 		best_global_position.model_rotation = cv::Point3f(0,0,0);
 		best_global_position.scale = 800;
 
-		model->move_model(best_global_position.model_position,best_global_position.model_rotation, best_global_position.scale);
-		model->rotate_bones(best_global_position.bones_rotation);
-
-		best_global_depth = model->get_depth()->clone();
+		std::vector<ogre_model::particle_position> list(1);
+		list[0] = best_global_position;
+		best_global_depth = model->get_depth(list)[0].clone();
 		best_global_depth = 255-best_global_depth;
-		best_global_extremas = model->get_2D_pos().clone();
+		best_global_extremas = model->get_extremas()[0].clone();
 
 		best_global_score = 0;
 		std::cout<< "[Pose Estimator] best solution reseted"<<std::endl;
@@ -399,7 +398,7 @@ inline void pose_estimator::calc_evolution(){
 	score_change_count = 0;
 	evolution_num = 0;
 
-	//std::deque<double> time_deque;
+	std::deque<double> time_deque;
 
 	while(evolution_num<MAX_EVOLS && score_change_count<MAX_SCORE_CHANGE_COUNT){
 		cv::theRNG().state = time(0);
@@ -408,9 +407,17 @@ inline void pose_estimator::calc_evolution(){
 		//double t = (double)cv::getTickCount();
 
 		//Call modeler to generate poses
+		std::vector<ogre_model::particle_position> list(swarm_size);
 		for(int i=0;i<swarm_size;i++){
-			paint_particle(swarm[i]);
+			list[i]=swarm[i].current_position;
 		}
+		cv::Mat* depth_list = model->get_depth(list);
+		cv::Mat_<cv::Point>* extremas_list =  model->get_extremas();
+		for(int i=0;i<swarm_size;i++){
+			swarm[i].particle_depth = depth_list[i];
+			swarm[i].extremas = extremas_list[i];
+		}
+
 
 #if NUM_THREADS>1
 		//parallel evaluation of particles
@@ -436,6 +443,13 @@ inline void pose_estimator::calc_evolution(){
 				best_pos = i;
 			}
 		}
+		//update global best depth and extremas
+		if(best_solution_updated){
+			best_global_extremas = swarm[best_pos].extremas.clone();
+			best_global_depth = swarm[best_pos].particle_depth.clone();
+			human_position = best_global_position.model_position;
+		}
+
 
 		if(!best_solution_updated)score_change_count++;	//count how many time the score hasn't change
 		obsolete_counter = 0;							//initialize obsolete counter before counting
@@ -456,13 +470,6 @@ inline void pose_estimator::calc_evolution(){
 			}
 		}
 
-		//update global best depth, extremas and silhouette
-		if(best_solution_updated){
-			best_global_extremas = swarm[best_pos].extremas.clone();
-			best_global_depth = swarm[best_pos].particle_depth.clone();
-			human_position = best_global_position.model_position;
-		}
-
 		std::cout<< "[Pose Estimator]evol:"<<evolution_num<<" best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
 
 		//		t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
@@ -478,6 +485,7 @@ inline void pose_estimator::calc_evolution(){
 		show_best_solution();
 #endif
 	}
+
 }
 
 /**
@@ -486,7 +494,11 @@ inline void pose_estimator::calc_evolution(){
 inline void pose_estimator::evaluate_particles(int start, int end){
 	for(int i=start;i<end;i++){
 		swarm[i].particle_depth = 255 - swarm[i].particle_depth;	//Inverting disparity map;
+
+		double t = (double)cv::getTickCount();
 		double score = calc_score(swarm[i]);
+		std::cout<<"[Pose Estimator]Mean execution time: "<<((double)cv::getTickCount() - t)*1000./cv::getTickFrequency()<<"ms"<<std::endl;
+
 		if(score > swarm[i].best_score){
 			swarm[i].best_score = score;
 			if(enable_bones)swarm[i].best_position.bones_rotation = swarm[i].current_position.bones_rotation.clone();
@@ -495,18 +507,6 @@ inline void pose_estimator::evaluate_particles(int start, int end){
 			swarm[i].best_position.scale = swarm[i].current_position.scale;
 		}
 	}
-}
-
-/**
- * Call the modeler and get the depth. Also get the silhouette.
- */
-inline void pose_estimator::paint_particle(particle& particle_inst){
-	//round_position(particle_inst.current_position);
-	model->move_model(particle_inst.current_position.model_position,particle_inst.current_position.model_rotation, particle_inst.current_position.scale);
-	model->rotate_bones(particle_inst.current_position.bones_rotation);
-
-	particle_inst.particle_depth = model->get_depth()->clone();
-	particle_inst.extremas = model->get_2D_pos().clone();
 }
 
 /**
@@ -702,17 +702,16 @@ inline void pose_estimator::round_position(ogre_model::particle_position& positi
 /**
  *Calculates fitness score
  */
-inline double pose_estimator::calc_score(particle& particle_inst){
+inline double pose_estimator::calc_score(const particle& particle_inst){
 	//float dist1 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(0,0)-input_head.x),2) + pow((particle_inst.extremas.at<ushort>(0,1)-input_head.y),2)));
 	double right_dist = FLT_MAX, left_dist = FLT_MAX;
 	bool found_rhand=false, found_lhand=false;
 	if(right_hand!=cv::Point(-1,-1)) {
-		right_dist = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(1,0)-right_hand.x),2) + pow((particle_inst.extremas.at<ushort>(1,1)-right_hand.y),2)));
+		right_dist = 1./(1 + sqrt(pow((particle_inst.extremas.at<cv::Point>(9).x-right_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(9).y-right_hand.y),2)));
 		found_rhand = true;
-
 	}
 	if(left_hand!=cv::Point(-1,-1)) {
-		left_dist = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(2,0)-left_hand.x),2) + pow((particle_inst.extremas.at<ushort>(2,1)-left_hand.y),2)));
+		left_dist = 1./(1 + sqrt(pow((particle_inst.extremas.at<cv::Point>(12).x-left_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(12).y-left_hand.y),2)));
 		found_lhand = true;
 	}
 
@@ -720,26 +719,27 @@ inline double pose_estimator::calc_score(particle& particle_inst){
 	cv::Mat fuzzy_mat;
 
 	cv::bitwise_xor(particle_inst.particle_depth, input_depth,fuzzy_mat);
-	fuzzy_mat.convertTo(fuzzy_mat,CV_32FC1,1./127);
 
-	cv::Mat penalty_mask = particle_inst.particle_depth.clone();
-	cv::rectangle(penalty_mask,user_bounds,cv::Scalar(0),CV_FILLED);
+	cv::Mat temp, temp2;
+	cv::min(particle_inst.particle_depth,255-input_depth,temp);
+	cv::min(255-particle_inst.particle_depth,input_depth,temp2);
+	cv::max(temp,temp2,temp);
+	//cv::Mat penalty_mask = particle_inst.particle_depth.clone();
+	//cv::rectangle(penalty_mask,user_bounds,cv::Scalar(0),CV_FILLED);
 
 	if(found_rhand&&found_lhand&&enable_bones){
-		return 1./(1+cv::mean(fuzzy_mat).val[0]) + right_dist*left_dist;
-
+		return (1 - mean(fuzzy_mat).val[0]/127.)* 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]) + right_dist*left_dist;
 	}else if(found_rhand&&enable_bones){
-		return 1./(1+cv::mean(fuzzy_mat).val[0])+right_dist;
-
+		return (1 - mean(fuzzy_mat).val[0]/127.)* 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]) + right_dist;
 	}else if(found_lhand&&enable_bones){
-		return 1./(1+cv::mean(fuzzy_mat).val[0])+left_dist;
-
+		return (1 - mean(fuzzy_mat).val[0]/127.)* 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]) + left_dist;
 	}else{
-		cv::Mat edges_particle;
-		Canny( particle_inst.particle_depth, edges_particle, 50, 150, 3 );
-		double edge_dist = edge_estimator.calculate_edge_distance(input_frame, edges_particle,2);
-		return edge_dist;
-		return edge_dist*(1 - mean(fuzzy_mat).val[0])* 1./(1+cv::mean(distance_penalty,penalty_mask).val[0]);
+
+		//		cv::Mat edges_particle;
+		//		Canny( particle_inst.particle_depth, edges_particle, 50, 150, 3 );
+		//		double edge_dist = edge_estimator.calculate_edge_distance(input_frame, edges_particle,2);
+		//		return edge_dist;
+		return (1-cv::sum(temp).val[0]/127.)*(1 - mean(fuzzy_mat).val[0]/127.)* 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]);
 
 	}
 #else
@@ -764,10 +764,14 @@ void pose_estimator::show_best_solution(){
 	cv::rectangle(local_input,user_bounds,cv::Scalar(255));
 	imshow("input frame", local_input);
 	cv::Mat result;
+
 	bitwise_xor(input_depth, best_global_depth, result);
 	cv::Mat jet_depth_map2;
+
 	cv::applyColorMap(best_global_depth, jet_depth_map2, cv::COLORMAP_JET );
+
 	cv::rectangle(jet_depth_map2,get_model_bound_rect(),cv::Scalar(255,255,255));
+
 	imshow("best global depth", jet_depth_map2);
 	imshow("best global diff", result);
 

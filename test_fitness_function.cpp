@@ -272,17 +272,24 @@ void refresh_old_poses_calc(ogre_model& model, cv::Mat input){
 	std::vector<cv::Mat> mat_bones_rotations;
 
 	load_poses(positions,  rotations, scales, mat_bones_rotations);
+	std::vector<ogre_model::particle_position> list(positions.size());
+	for(int i=0;i<(int)positions.size();i++){
+
+		list[i].bones_rotation = mat_bones_rotations[i];
+		list[i].model_position = positions[i];
+		list[i].model_rotation = rotations[i];
+		list[i].scale = scales[i];
+	}
+	std::cout<<"Beginning refreshing"<<std::endl;
+	cv::Mat* output = model.get_depth(list);
+
 	for(int i=0;i<(int)positions.size();i++){
 		std::cout<<"Pose"<<i<<" refreshed"<<std::endl;
-		model.move_model(positions[i], rotations[i], scales[i]);
-		model.rotate_bones(mat_bones_rotations[i]);
-		cv::Mat output = model.get_depth()->clone();
-
-		output = 255-output;
+		cv::Mat depth = 255-output[i];
 		std::vector<double> result(10);
 		std::vector<std::string> text(10);
-		calculate_result(input, output, result,text);
-		save_pose( output,result, text, positions[i], rotations[i], scales[i], mat_bones_rotations[i]);
+		calculate_result(input, depth, result,text);
+		save_pose( depth,result, text, positions[i], rotations[i], scales[i], mat_bones_rotations[i]);
 	}
 	pose_num = HISTORY+1;
 }
@@ -346,10 +353,14 @@ int main(){
 		position = cv::Point3f(model_position[0]-1000,model_position[1]-1000,model_position[2]);
 		rotation = cv::Point3f(model_rotation[0]-180,model_rotation[1]-180,model_rotation[2]-180);
 
-		model.move_model(position, rotation, scale);
-		model.rotate_bones(mat_bones_rotation);
+		std::vector<ogre_model::particle_position> list(1);
+		list[0].bones_rotation = mat_bones_rotation;
+		list[0].model_position = position;
+		list[0].model_rotation = rotation;
+		list[0].scale = scale;
+
 		//		double t = (double)cv::getTickCount();
-		cv::Mat output = model.get_depth()->clone();
+		cv::Mat output = model.get_depth(list)[0].clone();
 		//		t = (double)cv::getTickCount() - t;
 		//		t = t*1000./cv::getTickFrequency();
 

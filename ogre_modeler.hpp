@@ -32,13 +32,14 @@ private:
 	Ogre::SkeletonInstance *modelSkeleton;
 	Ogre::RenderWindow* Window;
 	cv::Mat* depth_list;
+	cv::Mat_<cv::Point>* extremas_list;
 
-	Ogre::TexturePtr rtt1;
-	Ogre::TexturePtr rtt2;
-	Ogre::TexturePtr rtt3;
-	Ogre::TexturePtr targettex1;
-	Ogre::TexturePtr targettex2;
-	Ogre::TexturePtr targettex3;
+//	Ogre::TexturePtr rtt1;
+//	Ogre::TexturePtr rtt2;
+//	Ogre::TexturePtr rtt3;
+//	Ogre::TexturePtr targettex1;
+//	Ogre::TexturePtr targettex2;
+//	Ogre::TexturePtr targettex3;
 
 	void setupResources(void);
 	void setupRenderer(void);
@@ -59,8 +60,7 @@ private:
 	void reset_model();
 	void move_model(const cv::Point3f& position, const cv::Point3f& rot_vector, const float& angle_w);
 	void rotate_bones(const cv::Mat&);
-
-	void copy_thread(int, int);
+	void get_2D_pos(const int&);
 
 	int render_width, render_height;
 	float min,max,center; //depth limits
@@ -81,11 +81,9 @@ public:
 
 	float get_fps();
 
-	cv::Mat get_2D_pos();
 	cv::Mat* get_depth(const std::vector<particle_position>&);
+	cv::Mat_<cv::Point>* get_extremas(){return extremas_list;};
 	cv::Mat get_segmentation();
-
-
 };
 
 
