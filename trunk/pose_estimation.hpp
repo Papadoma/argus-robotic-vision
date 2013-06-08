@@ -11,6 +11,7 @@
 #include "ogre_modeler.hpp"
 #include <opencv2/ocl/ocl.hpp>
 #include "edges_distance.hpp"
+#include "pose_predictor.hpp"
 
 #include <math.h>
 #include <stdlib.h>
@@ -19,11 +20,11 @@
 //#define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8f	//0.8
 #define N 15
-#define MAX_EVOLS 100				//How many evolutions will cause the search to stop
-#define DEBUG_WIND_POSE true
+#define MAX_EVOLS 40				//How many evolutions will cause the search to stop
+#define DEBUG_WIND_POSE false
 #define DEBUG_COUT_POSE false
 
-const int swarm_size = 30;
+const int swarm_size = 20;
 const float w = 0.5;
 const float c1 = 1.5;//1.5
 const float c2 = 1.5;//1.5
@@ -59,6 +60,7 @@ private:
 
 	cv::RNG rand_gen;
 	edge_similarity edge_estimator;
+	pose_prediction* pose_predictor;
 
 	void load_param();
 	void set_modeler_depth();
@@ -77,6 +79,7 @@ private:
 
 	particle swarm[swarm_size];
 	ogre_model::particle_position best_global_position;
+	ogre_model::particle_position best_global_position_predicted;
 
 	cv::Mat window_boundaries;		//Window boundaries, to avoid the model being moved off the screen
 
@@ -126,7 +129,7 @@ public:
 	pose_estimator(int, int, int);
 	~pose_estimator();
 
-	particle find_pose(cv::Mat color_frame, cv::Mat disparity_frame, bool track, cv::Rect, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
+	particle find_pose(cv::Mat disparity_frame, bool track, cv::Rect, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
 	//cv::Mat get_silhouette(){return best_global_silhouette;};
 	cv::Mat get_depth(){return best_global_depth;};
 	void get_instructions();

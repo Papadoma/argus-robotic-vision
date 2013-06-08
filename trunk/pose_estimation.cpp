@@ -43,6 +43,7 @@ pose_estimator::pose_estimator(int frame_width, int frame_height, int noDisparit
 	cv::rectangle(window_boundaries,cv::Point(1,1),cv::Point(frame_width-2,frame_height-2),cv::Scalar(255),2);
 
 	model = new ogre_model(frame_width,frame_height);
+	pose_predictor = new pose_prediction(0);
 	set_modeler_depth();
 	camera_viewspace = model->get_camera_viewspace();
 
@@ -70,6 +71,7 @@ pose_estimator::~pose_estimator()
 {
 	cv::destroyAllWindows();
 	delete(model);
+	delete(pose_predictor);
 }
 
 /**
@@ -177,31 +179,39 @@ inline void pose_estimator::init_particles()
 
 	if(human_position==cv::Point3f())human_position = estimate_starting_position();
 	if(!tracking_mode){
+		//Since we are in detection mode, search for user facing camera
 		rotation_max = cv::Point3f(15,15,15);
 		rotation_min = cv::Point3f(-15,-15,-15);
 
 		std::cout<< "[Pose Estimator] estimated starting position" << human_position <<std::endl;
 
+		//Initialize best particle position
 		best_global_position.bones_rotation = cv::Mat(19,3,CV_32FC1,H_pose);
 		//best_global_position.bones_rotation = cv::Mat::zeros(19,3,CV_32FC1);
 		best_global_position.model_position = cv::Point3f(human_position.x,human_position.y,human_position.z);
 		best_global_position.model_rotation = cv::Point3f(0,0,0);
 		best_global_position.scale = 800;
 
-		std::vector<ogre_model::particle_position> list(1);
-		list[0] = best_global_position;
-		best_global_depth = model->get_depth(list)[0].clone();
-		best_global_depth = 255-best_global_depth;
-		best_global_extremas = model->get_extremas()[0].clone();
-
-		best_global_score = 0;
+		//reset particle position predictor
+		pose_predictor->reset_predictor();
 		std::cout<< "[Pose Estimator] best solution reseted"<<std::endl;
 	}
+	std::vector<ogre_model::particle_position> list(1);
+	list[0] = best_global_position;
+
+	best_global_depth = model->get_depth(list)[0].clone();	//Refresh depth and extremas best solution
+	best_global_depth = 255-best_global_depth;
+	best_global_extremas = model->get_extremas()[0].clone();
+
 	particle previous_best_particle;
 	previous_best_particle.particle_depth = best_global_depth.clone();			//Last best disparity
 	previous_best_particle.extremas = best_global_extremas.clone();				//Last best extremas
-	best_global_score = calc_score(previous_best_particle);				//Calculate score of last best position on new given frame
+	best_global_score = calc_score(previous_best_particle);						//Calculate score of last best position on new given frame
 
+	if(tracking_mode){
+		best_global_position_predicted = best_global_position;
+		pose_predictor->predict(best_global_position_predicted);		//Predict where the best particle position should be
+	}
 
 	for(int i = 0; i<swarm_size; i++){
 		if(!tracking_mode){
@@ -229,7 +239,7 @@ inline void pose_estimator::init_single_particle(particle& singleParticle, int t
 	//singleParticle.x=0;					//'x' variable is responsible for forcing the particle to converge to a local solution
 	if( type==POSITION || type==ALL ){
 		if(!fine){
-			if(tracking_mode)singleParticle.current_position.model_position = best_global_position.model_position;
+			if(tracking_mode)singleParticle.current_position.model_position = best_global_position_predicted.model_position;
 			else singleParticle.current_position.model_position = get_random_model_position(false);
 		}
 		singleParticle.next_position.model_position = get_random_model_position(true);
@@ -239,7 +249,7 @@ inline void pose_estimator::init_single_particle(particle& singleParticle, int t
 
 	if( type==ROTATION || type==ALL ){
 		if(!fine){
-			if(tracking_mode)singleParticle.current_position.model_rotation = best_global_position.model_rotation;
+			if(tracking_mode)singleParticle.current_position.model_rotation = best_global_position_predicted.model_rotation;
 			else singleParticle.current_position.model_rotation = get_random_model_rot(false);
 		}
 		singleParticle.next_position.model_rotation = get_random_model_rot(true);
@@ -249,7 +259,7 @@ inline void pose_estimator::init_single_particle(particle& singleParticle, int t
 
 	if( type==BONES || type==ALL ){
 		if(!fine){
-			if(tracking_mode)singleParticle.current_position.bones_rotation = best_global_position.bones_rotation.clone();
+			if(tracking_mode)singleParticle.current_position.bones_rotation = best_global_position_predicted.bones_rotation.clone();
 			else singleParticle.current_position.bones_rotation += get_random_bones_rot(true).clone();
 		}
 		singleParticle.next_position.bones_rotation = get_random_bones_rot(true).clone();
@@ -259,7 +269,7 @@ inline void pose_estimator::init_single_particle(particle& singleParticle, int t
 
 	if( type==SCALE || type==ALL ){
 		if(!fine){
-			if(tracking_mode)singleParticle.current_position.scale = best_global_position.scale;
+			if(tracking_mode)singleParticle.current_position.scale = best_global_position_predicted.scale;
 			else singleParticle.current_position.scale = round(200 + rand_gen.uniform(0.f,1.1f)*(1400));
 		}
 		singleParticle.next_position.scale = round((rand_gen.uniform(0.f,1.1f)-0.5)*(200));
@@ -319,7 +329,7 @@ inline cv::Mat pose_estimator::get_random_bones_rot(bool velocity)
 		cv::Mat result;
 		result = get_random_19x3_mat(velocity).clone();
 		if(velocity){
-			result = 0.5*(bone_max-bone_min).mul(result);
+			result = 0.5*(bone_max-bone_min).mul(result.mul(mat_weights/4));
 			//std::cout<<result<<std::endl;
 			//result = 60*result.mul(mat_weights/4);
 			//result = 40*result;
@@ -509,9 +519,9 @@ inline void pose_estimator::evaluate_particles(int start, int end){
 	for(int i=start;i<end;i++){
 		swarm[i].particle_depth = 255 - swarm[i].particle_depth;	//Inverting disparity map;
 
-		double t = (double)cv::getTickCount();
+		//double t = (double)cv::getTickCount();
 		double score = calc_score(swarm[i]);
-		std::cout<<"[Pose Estimator]Mean execution time: "<<((double)cv::getTickCount() - t)*1000./cv::getTickFrequency()<<"ms"<<std::endl;
+		//std::cout<<"[Pose Estimator]Mean execution time: "<<((double)cv::getTickCount() - t)*1000./cv::getTickFrequency()<<"ms"<<std::endl;
 
 		if(score > swarm[i].best_score){
 			swarm[i].best_score = score;
@@ -718,14 +728,18 @@ inline void pose_estimator::round_position(ogre_model::particle_position& positi
  */
 inline double pose_estimator::calc_score(const particle& particle_inst){
 	//float dist1 = 1./(1 + sqrt(pow((particle_inst.extremas.at<ushort>(0,0)-input_head.x),2) + pow((particle_inst.extremas.at<ushort>(0,1)-input_head.y),2)));
-	double right_dist = FLT_MAX, left_dist = FLT_MAX;
+	double right_dist = 0, left_dist = 0;
 	bool found_rhand=false, found_lhand=false;
 	if(right_hand!=cv::Point(-1,-1)) {
-		right_dist = (1 - sqrt(pow((particle_inst.extremas.at<cv::Point>(9).x-right_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(9).y-right_hand.y),2))/800);
+		right_dist = (1 - sqrt(pow((particle_inst.extremas.at<cv::Point>(9).x-right_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(9).y-right_hand.y),2))/300);
+		if(right_dist>1)right_dist=1;
+		if(right_dist<0)right_dist=0;
 		found_rhand = true;
 	}
 	if(left_hand!=cv::Point(-1,-1)) {
-		left_dist = (1 - sqrt(pow((particle_inst.extremas.at<cv::Point>(12).x-left_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(12).y-left_hand.y),2))/800);
+		left_dist = (1 - sqrt(pow((particle_inst.extremas.at<cv::Point>(12).x-left_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(12).y-left_hand.y),2))/300);
+		if(left_dist>1)left_dist=1;
+		if(left_dist<0)left_dist=0;
 		found_lhand = true;
 	}
 
@@ -734,6 +748,7 @@ inline double pose_estimator::calc_score(const particle& particle_inst){
 
 	cv::absdiff(particle_inst.particle_depth, input_depth,diff_mat);
 	cv::bitwise_xor(particle_inst.particle_depth, input_depth,fuzzy_mat);
+
 	double fuzzy_max, diff_max;
 	cv::minMaxLoc(diff_mat,0,&diff_max);
 	cv::minMaxLoc(fuzzy_mat,0,&fuzzy_max);
@@ -742,22 +757,27 @@ inline double pose_estimator::calc_score(const particle& particle_inst){
 	cv::max(particle_inst.particle_depth,input_depth,temp);	//or
 	cv::min(particle_inst.particle_depth,input_depth,temp2); //and
 
+	//cv::Mat silhouette;
+	//cv::threshold(particle_inst.particle_depth, silhouette, 1, 255, CV_THRESH_BINARY);
+	//cv::bitwise_and(temp,silhouette,temp);
+	//cv::bitwise_and(temp2,silhouette,temp2);
+
 	cv::Mat penalty_mask = particle_inst.particle_depth.clone();
 	cv::rectangle(penalty_mask,user_bounds,cv::Scalar(0),CV_FILLED);
 
 	if(found_rhand&&found_lhand&&enable_bones){
-		return (1 - mean(fuzzy_mat).val[0]/127.)* 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]) * right_dist*left_dist;
+		return 0.7*(1 - mean(fuzzy_mat).val[0]/fuzzy_max) *(1 - mean(diff_mat).val[0]/diff_max) * 1./(1+cv::mean(distance_penalty,penalty_mask).val[0]) + 0.3* right_dist*left_dist;
 	}else if(found_rhand&&enable_bones){
-		return (1 - mean(fuzzy_mat).val[0]/127.)* 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]) * right_dist;
+		return 0.7*(1 - mean(fuzzy_mat).val[0]/fuzzy_max) *(1 - mean(diff_mat).val[0]/diff_max) * 1./(1+cv::mean(distance_penalty,penalty_mask).val[0]) + 0.3 * right_dist;
 	}else if(found_lhand&&enable_bones){
-		return (1 - mean(fuzzy_mat).val[0]/127.)* 1./(1+cv::mean(distance_penalty,particle_inst.particle_depth).val[0]) * left_dist;
+		return 0.7*(1 - mean(fuzzy_mat).val[0]/fuzzy_max) *(1 - mean(diff_mat).val[0]/diff_max) * 1./(1+cv::mean(distance_penalty,penalty_mask).val[0]) + 0.3 * left_dist;
 	}else{
 
 		//		cv::Mat edges_particle;
 		//		Canny( particle_inst.particle_depth, edges_particle, 50, 150, 3 );
 		//		double edge_dist = edge_estimator.calculate_edge_distance(input_frame, edges_particle,2);
 		//		return edge_dist; (1 - mean(fuzzy_mat).val[0]/fuzzy_max)
-		return (1 - mean(diff_mat,particle_inst.particle_depth).val[0]/diff_max)* (1 - mean(fuzzy_mat).val[0]/fuzzy_max)*  cv::sum(temp2).val[0]/cv::sum(temp).val[0] * 1./(1+cv::mean(distance_penalty,penalty_mask).val[0]);
+		return (1 - mean(fuzzy_mat).val[0]/fuzzy_max) *(1 - mean(diff_mat).val[0]/diff_max) * 1./(1+cv::mean(distance_penalty,penalty_mask).val[0]);
 
 	}
 #else
@@ -817,9 +837,9 @@ void pose_estimator::get_instructions(){
 /*
  * Finds and returns best global solution of pose estimator.
  */
-particle pose_estimator::find_pose(cv::Mat color_frame, cv::Mat disparity_frame, bool track, cv::Rect local_user_bounds,cv::Point left_marker, cv::Point right_marker)
+particle pose_estimator::find_pose(cv::Mat disparity_frame, bool track, cv::Rect local_user_bounds,cv::Point left_marker, cv::Point right_marker)
 {
-
+	double t = (double)cv::getTickCount();
 	user_bounds = local_user_bounds;
 	left_hand = left_marker;
 	right_hand =right_marker;
@@ -831,15 +851,18 @@ particle pose_estimator::find_pose(cv::Mat color_frame, cv::Mat disparity_frame,
 	cv::normalize(distance_penalty, distance_penalty, 0, 100, cv::NORM_MINMAX, CV_32FC1);
 	//imshow("distance_penalty",distance_penalty);
 
-	Canny( color_frame, input_frame, 50, 150, 3 );
+	//Canny( color_frame, input_frame, 50, 150, 3 );
 	disparity_frame.copyTo(input_depth);
 	tracking_mode = track;
-	if(tracking_mode)MAX_SCORE_CHANGE_COUNT=15;
-	else MAX_SCORE_CHANGE_COUNT=20;
+	if(tracking_mode)MAX_SCORE_CHANGE_COUNT=10;
+	else MAX_SCORE_CHANGE_COUNT=30;
 	init_particles();
 	calc_evolution();
 
 	call_num++;
+
+	t = ((double)cv::getTickCount() - t)*1000./cv::getTickFrequency();
+	std::cout<< "[Pose Estimator]Swarm searching finished. Time:"<< t << "s Best global score: " <<best_global_score << " best global position: " << best_global_position.model_position <<" best global scale: "<<best_global_position.scale <<std::endl;
 
 	particle final_solution;
 	final_solution.particle_depth = best_global_depth.clone();
