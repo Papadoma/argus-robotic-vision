@@ -333,7 +333,9 @@ inline void argus_depth::refresh_window(){
 	rect_mat_right.copyTo(roiImgResult_Right);
 
 	std::stringstream ss;//create a stringstream
-	ss << fps;//add number to the stream
+	if(detect_user_flag)ss<<"Searching user... ";
+	else ss<<"Tracking user ";
+	ss << "fps:"<<fps;//add number to the stream
 	cv::putText(imgResult, ss.str(), cv::Point (10,20), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2, 8, false );
 
 	imshow( "Camera", imgResult );
@@ -1177,7 +1179,7 @@ inline void argus_depth::start(){
 #endif
 		tracking = true;
 	}else{
-		if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
+		//if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 	}
 
 #if USE_THREADS
