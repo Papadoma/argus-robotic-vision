@@ -5,7 +5,7 @@ int main(){
 	pose_estimator* instance;
 	instance = new pose_estimator(640,480, 32);
 	//cv::Mat input_frame = cv::imread("woman_dancing.png",0);
-	cv::Mat input_disp = cv::imread("fitness_input2.png",0);
+	cv::Mat input_disp = cv::imread("fitness_input.png",0);
 
 	//cv::Mat input_frame = cv::imread("test_human2.png",0);
 	//cv::Mat input_frame = cv::imread("snap_depth2.png",0);
@@ -24,7 +24,6 @@ int main(){
 //		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
 //		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
 //		instance->find_pose(input_frame, input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
-
 		instance->find_pose(input_disp, false, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));	//laptop, snap_depth3
 		instance->find_pose(input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));
 		instance->find_pose(input_disp, true, cv::Rect(167,24,305,430), cv::Point(427,149), cv::Point(222,155));

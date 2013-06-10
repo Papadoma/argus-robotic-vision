@@ -10,12 +10,12 @@ private:
 	ogre_model::particle_position position_old;
 	bool history_known;
 
-	void naive(ogre_model::particle_position&);
-	void kalman(ogre_model::particle_position&);
+	ogre_model::particle_position naive(const ogre_model::particle_position&);
+	ogre_model::particle_position kalman(const ogre_model::particle_position&);
 
 public:
 	pose_prediction(int);
-	void predict(ogre_model::particle_position&);
+	ogre_model::particle_position predict(const ogre_model::particle_position&);
 	void reset_predictor();
 };
 
