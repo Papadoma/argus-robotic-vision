@@ -21,7 +21,7 @@
 #define A 0.8f	//0.8
 #define N 15
 #define MAX_EVOLS 40				//How many evolutions will cause the search to stop
-#define DEBUG_WIND_POSE false
+#define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
 
 const int swarm_size = 20;
@@ -136,8 +136,13 @@ public:
 	void show_best_solution();
 	void set_human_position(cv::Point3f est_pos){human_position=est_pos;};
 	cv::Rect get_model_bound_rect(){
-		//best_global_extremas.convertTo(best_global_extremas,CV_32FC2);
-		return cv::boundingRect(best_global_extremas);
+		cv::Rect box = cv::boundingRect(best_global_extremas);
+		box.x -= box.width/6;
+		box.width += box.width/3;
+		box.y -= box.height/6;
+		box.height += box.height/3;
+		box &= cv::Rect(0,0,frame_width, frame_height);
+		return box;
 	};
 };
 
