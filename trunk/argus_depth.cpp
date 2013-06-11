@@ -929,7 +929,6 @@ inline void argus_depth::track_user(){
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
 	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(local_user_bounding_rect)){
-		//user.mask_mass_center = cv::Point(local_user_bounding_rect.x + local_user_bounding_rect.width/2, local_user_bounding_rect.y + local_user_bounding_rect.height/2);
 		user.mask_mass_center = (local_user_bounding_rect.tl() + local_user_bounding_rect.br())*0.5;
 	}
 
@@ -962,7 +961,7 @@ inline void argus_depth::track_user(){
 
 	//Calculate back projection (if there is a previously calculated histogram)
 	cv::Mat backproj_img;
-	if(cv::countNonZero(user_hist)){
+	if(user_hist.data){
 		calcBackProject(&user.point_cloud, 1, channels, user_hist, backproj_img, ranges, 1, true );
 		//cv::threshold(backproj_img,backproj_img,50,255,cv::THRESH_BINARY);
 		normalize(backproj_img, backproj_img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
@@ -1168,6 +1167,7 @@ inline void argus_depth::start(){
 	if(tracking){
 #if FIND_POSE
 		detected_pose = pose_tracker->find_pose(user.disparity_viewable,true,user.body_bounding_rect);
+		if(detected_pose.best_score < 0.75)tracking = false;
 		imshow("human_pose",detected_pose.particle_depth);
 #endif
 	}
@@ -1179,7 +1179,7 @@ inline void argus_depth::start(){
 #endif
 		tracking = true;
 	}else{
-		//if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
+		if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 	}
 
 #if USE_THREADS

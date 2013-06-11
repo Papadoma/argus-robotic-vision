@@ -128,6 +128,7 @@ public:
 
 	pose_estimator(int, int, int);
 	~pose_estimator();
+	enum oper_mode {FIRST_RUN, SEARCH, TRACK};
 
 	particle find_pose(cv::Mat disparity_frame, bool track, cv::Rect, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
 	//cv::Mat get_silhouette(){return best_global_silhouette;};
