@@ -19,7 +19,7 @@
 
 //#define rand_num ((double) rand() / (RAND_MAX))
 #define A 0.8f	//0.8
-#define N 15
+#define N 12
 #define MAX_EVOLS 40				//How many evolutions will cause the search to stop
 #define DEBUG_WIND_POSE true
 #define DEBUG_COUT_POSE false
@@ -95,7 +95,7 @@ private:
 	cv::Rect user_bounds;
 
 	bool enable_bones;
-	bool tracking_mode;
+
 	int evolution_num;					//Total number of evolutions
 	int score_change_count;				//No of evolutions since last best score calculation
 	int startX, startY, endX, endY;		//2D search space for positioning the model
@@ -128,9 +128,10 @@ public:
 
 	pose_estimator(int, int, int);
 	~pose_estimator();
-	enum oper_mode {FIRST_RUN, SEARCH, TRACK};
+	enum operation_mode {FIRST_RUN, SEARCH, TRACK};
+	pose_estimator::operation_mode mode;
 
-	particle find_pose(cv::Mat disparity_frame, bool track, cv::Rect, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
+	particle find_pose(cv::Mat, pose_estimator::operation_mode , cv::Rect, cv::Point left_marker=cv::Point(-1,-1), cv::Point right_marker=cv::Point(-1,-1));		//Evolve particles based on new frame. If reset flag is set, then it resets everything.
 	//cv::Mat get_silhouette(){return best_global_silhouette;};
 	cv::Mat get_depth(){return best_global_depth;};
 	void get_instructions();
