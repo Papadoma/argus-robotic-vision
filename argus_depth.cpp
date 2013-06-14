@@ -21,6 +21,8 @@
 #include <boost/thread.hpp>
 #endif
 
+bool trigger = false;
+
 struct human_struct{
 	float propability;				//Propability that a detection is indeed a human
 	cv::Rect body_bounding_rect;	//Bounding rectagle of the human
@@ -103,7 +105,7 @@ private:
 	int frame_counter;
 	int fps;
 
-	bool tracking;			//Tracking flag, to be enabled after 1st allignment
+	pose_estimator::operation_mode mode;
 
 	void load_param();
 
@@ -155,7 +157,7 @@ public:
 //Constructor
 argus_depth::argus_depth()
 :frame_counter(0)
-,tracking(false)
+,mode(pose_estimator::FIRST_RUN)
 ,detect_user_flag(true)
 {
 	std::cout << "[Argus] Initializing detectors" << std::endl;
@@ -208,12 +210,12 @@ argus_depth::argus_depth()
 #endif
 #if USE_SGBM
 	sgbm.preFilterCap = 63; //previously 31
-	sgbm.SADWindowSize = 5;
+	sgbm.SADWindowSize = 3;
 	sgbm.P1 = 8*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.P2 = 32*cn*sgbm.SADWindowSize*sgbm.SADWindowSize;
 	sgbm.minDisparity = 0;
 	sgbm.numberOfDisparities = numberOfDisparities;
-	sgbm.uniquenessRatio = 25;
+	sgbm.uniquenessRatio = 15;
 	sgbm.speckleWindowSize = 100;//previously 50
 	sgbm.speckleRange = 32;
 	sgbm.disp12MaxDiff = 2;
@@ -229,7 +231,7 @@ argus_depth::argus_depth()
 	//clearview_mask= cv::Rect(numberOfDisparities,0,width,height);
 	clearview_mask = roi1 & roi2;
 
-	Xu_value=7,Xl_value=7,Yu_value=20,Yl_value=20,Zu_value=30,Zl_value=60;
+	Xu_value=7,Xl_value=7,Yu_value=8,Yl_value=8,Zu_value=30,Zl_value=60;
 	canny = 30;
 
 	cv::namedWindow("XYZ floodfill",CV_WINDOW_NORMAL );
@@ -333,7 +335,8 @@ inline void argus_depth::refresh_window(){
 	rect_mat_right.copyTo(roiImgResult_Right);
 
 	std::stringstream ss;//create a stringstream
-	if(detect_user_flag)ss<<"Searching user... ";
+	if(mode==pose_estimator::FIRST_RUN)ss<<"Searching user... ";
+	else if(mode==pose_estimator::SEARCH)ss<<"Lost user ";
 	else ss<<"Tracking user ";
 	ss << "fps:"<<fps;//add number to the stream
 	cv::putText(imgResult, ss.str(), cv::Point (10,20), cv::FONT_HERSHEY_SIMPLEX, 0.7, cv::Scalar(0,0,255), 2, 8, false );
@@ -570,7 +573,6 @@ inline void argus_depth::detect_human(){
 	}
 
 	if(possible_user.propability > 0.9 * user.propability){
-		tracking = false;
 #if USE_THREADS
 		user_mutex.lock();
 		user.body_bounding_rect = possible_user.body_bounding_rect;
@@ -1164,28 +1166,40 @@ inline void argus_depth::start(){
 	//cv::bitwise_and(user.user_mask,user.disparity_viewable,trackable_user_disparity);
 
 	particle detected_pose;
-	if(tracking){
-#if FIND_POSE
-		detected_pose = pose_tracker->find_pose(user.disparity_viewable,true,user.body_bounding_rect);
-		if(detected_pose.best_score < 0.75)tracking = false;
-		imshow("human_pose",detected_pose.particle_depth);
-#endif
-	}
-	if(!detect_user_flag && !tracking){
-#if FIND_POSE
-		pose_tracker->set_human_position(user.human_position);
-		detected_pose = pose_tracker->find_pose(user.disparity_viewable,false,user.body_bounding_rect);
-		imshow("human_pose",detected_pose.particle_depth);
-#endif
-		tracking = true;
-	}else{
-		if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
-	}
+	if(!detect_user_flag && trigger){
+		switch(mode){
+		case pose_estimator::FIRST_RUN:
+			pose_tracker->set_human_position(user.human_position);
+			detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,user.right_marker);
+			imshow("human_pose",detected_pose.particle_depth);
+			if(detected_pose.best_score > 0.64)mode = pose_estimator::TRACK;
+			break;
+		case pose_estimator::SEARCH:
+			pose_tracker->set_human_position(user.human_position);
+			if(left_tracker->is_visible() && right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,user.right_marker);
+			else if(left_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,cv::Point(-1,-1));
+			else if(right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,cv::Point(-1,-1),user.right_marker);
+			else detected_pose = pose_tracker->find_pose(user.disparity_viewable,pose_estimator::TRACK,user.body_bounding_rect);
+
+			imshow("human_pose",detected_pose.particle_depth);
+			mode = pose_estimator::TRACK;
+			break;
+		case pose_estimator::TRACK:
+			if(left_tracker->is_visible() && right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,user.right_marker);
+			else if(left_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,cv::Point(-1,-1));
+			else if(right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,cv::Point(-1,-1),user.right_marker);
+			else detected_pose = pose_tracker->find_pose(user.disparity_viewable,pose_estimator::TRACK,user.body_bounding_rect);
+
+			imshow("human_pose",detected_pose.particle_depth);
+			//if(detected_pose.best_score < 0.7)mode = pose_estimator::SEARCH;
+			break;
+		}
+	}else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 
 #if USE_THREADS
 	thread_group.join_all();
 #endif
-
+	imshow("floodfill mask", user.user_mask);
 	t = (double)cv::getTickCount() - t;
 	std::cout<<"fps"<< 1/(t/cv::getTickFrequency())<<std::endl;//for fps
 	//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms
@@ -1213,8 +1227,10 @@ inline void argus_depth::main_loop(){
 		}while (pause);
 		if ( key_pressed == 27 ) break;				//ESC
 		if ( key_pressed == 13 ) take_snapshot();	//ENTER
-		if ( key_pressed == 't' ) detect_user_flag=!detect_user_flag;
-		if ( key_pressed == 'f' ) detect_user_flag=!detect_user_flag;
+		if ( key_pressed == 't' ) trigger=!trigger;
+		if ( key_pressed == '1' ) mode = pose_estimator::FIRST_RUN;
+		if ( key_pressed == '2' ) mode = pose_estimator::SEARCH;
+		if ( key_pressed == '3' ) mode = pose_estimator::TRACK;
 
 		refresh_frame();
 		start();
