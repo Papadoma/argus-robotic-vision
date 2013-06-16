@@ -13,6 +13,8 @@ private:
 	ogre_model::particle_position naive(const ogre_model::particle_position&);
 	ogre_model::particle_position kalman(const ogre_model::particle_position&);
 
+	cv::KalmanFilter* KF;
+
 public:
 	pose_prediction(int);
 	ogre_model::particle_position predict(const ogre_model::particle_position&);
