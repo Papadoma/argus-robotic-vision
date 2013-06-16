@@ -452,7 +452,8 @@ inline void argus_depth::compute_depth(){
 #endif
 	user.disparity = cv::Mat::zeros(rect_mat_left.size(), CV_32FC1);	//Prepare for copying
 #if USE_SGBM
-	local_depth.copyTo(user.disparity(refined_human_anchor));			//Copy disparity
+
+	(local_depth).copyTo(user.disparity(refined_human_anchor));			//Copy disparity
 #else
 	local_depth.copyTo(user.disparity);			//Copy disparity
 #endif
@@ -603,7 +604,9 @@ inline void argus_depth::find_markers(){
 		cv::Point l_marker = left_tracker->get_marker_center(tracker_cropped);
 		cv::Point r_marker = right_tracker->get_marker_center(tracker_cropped);
 		if(left_tracker->is_visible())user.left_marker = l_marker;
+		else user.left_marker = cv::Point(-1,-1);
 		if(right_tracker->is_visible())user.right_marker = r_marker;
+		else user.right_marker = cv::Point(-1,-1);
 	}
 }
 
@@ -1162,8 +1165,6 @@ inline void argus_depth::start(){
 	t = (double)cv::getTickCount() - t;
 	std::cout<<"marker ms"<< t*1000./cv::getTickFrequency()<<std::endl;//for fps
 #endif
-	//cv::Mat trackable_user_disparity;
-	//cv::bitwise_and(user.user_mask,user.disparity_viewable,trackable_user_disparity);
 
 	particle detected_pose;
 	if(!detect_user_flag && trigger){
@@ -1176,24 +1177,22 @@ inline void argus_depth::start(){
 			break;
 		case pose_estimator::SEARCH:
 			pose_tracker->set_human_position(user.human_position);
-			if(left_tracker->is_visible() && right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,user.right_marker);
-			else if(left_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,cv::Point(-1,-1));
-			else if(right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,cv::Point(-1,-1),user.right_marker);
-			else detected_pose = pose_tracker->find_pose(user.disparity_viewable,pose_estimator::TRACK,user.body_bounding_rect);
-
+			detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,user.right_marker);
 			imshow("human_pose",detected_pose.particle_depth);
 			mode = pose_estimator::TRACK;
 			break;
 		case pose_estimator::TRACK:
-			if(left_tracker->is_visible() && right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,user.right_marker);
-			else if(left_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,cv::Point(-1,-1));
-			else if(right_tracker->is_visible())detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,cv::Point(-1,-1),user.right_marker);
-			else detected_pose = pose_tracker->find_pose(user.disparity_viewable,pose_estimator::TRACK,user.body_bounding_rect);
-
+			detected_pose = pose_tracker->find_pose(user.disparity_viewable,mode,user.body_bounding_rect,user.left_marker,user.right_marker);
 			imshow("human_pose",detected_pose.particle_depth);
 			//if(detected_pose.best_score < 0.7)mode = pose_estimator::SEARCH;
 			break;
 		}
+		double min_val, max_val;
+		cv::minMaxIdx(detected_pose.particle_depth,&min_val,&max_val,0,0,detected_pose.particle_depth);
+		cv::Mat silhouette;
+		cv::inRange(user.disparity_viewable,min_val,max_val,silhouette);
+		cv::imshow("silhouette",silhouette);
+
 	}else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 
 #if USE_THREADS
