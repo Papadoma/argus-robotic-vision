@@ -139,11 +139,11 @@ public:
 	void set_human_position(cv::Point3f est_pos){human_position=est_pos;};
 	cv::Rect get_model_bound_rect(){
 		cv::Rect box = cv::boundingRect(best_global_extremas);
-		box.x -= box.width/6;
-		box.width += box.width/3;
-		box.y -= box.height/6;
-		box.height += box.height/3;
-		box &= cv::Rect(0,0,frame_width, frame_height);
+//		box.x -= box.width/6;
+//		box.width += box.width/3;
+//		box.y -= box.height/6;
+//		box.height += box.height/3;
+//		box &= cv::Rect(0,0,frame_width, frame_height);
 		return box;
 	};
 };
