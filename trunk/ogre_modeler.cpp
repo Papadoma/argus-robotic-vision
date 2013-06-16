@@ -11,7 +11,7 @@ ogre_model::ogre_model(int render_width, int render_height)
 	extremas_list = new cv::Mat_<cv::Point>[MAX_RENDER_REQUESTS];
 	for(int i=0 ; i<MAX_RENDER_REQUESTS ; i++){
 		depth_list[i] = cv::Mat(render_height, render_width, CV_8UC1);
-		extremas_list[i] = cv::Mat_<cv::Point>::zeros(19,1);
+		extremas_list[i] = cv::Mat_<cv::Point>::zeros(24,1);
 	}
 
 	//#if DEPTH_MODE == 1
@@ -418,6 +418,13 @@ inline void ogre_model::get_2D_pos(const int& id){
 	Ogre::Vector3 l_calf2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Leg[1]->_getDerivedPosition()*modelNode->_getDerivedScale();
 	Ogre::Vector3 l_foot2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * model_skeleton.Left_Leg[2]->_getDerivedPosition()*modelNode->_getDerivedScale();
 
+	Ogre::Vector3 r_hand_edge2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * modelSkeleton->getBone( "Right_Hand_Edge" )->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_hand_edge2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * modelSkeleton->getBone( "Left_Hand_Edge" )->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 r_foot_edge2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * modelSkeleton->getBone( "Right_Foot_Edge" )->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 l_foot_edge2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * modelSkeleton->getBone( "Left_Foot_Edge" )->_getDerivedPosition()*modelNode->_getDerivedScale();
+	Ogre::Vector3 head_edge2d = modelNode->_getDerivedPosition() + modelNode->_getDerivedOrientation() * modelSkeleton->getBone( "Head_Edge" )->_getDerivedPosition()*modelNode->_getDerivedScale();
+
+
 	head2d = camera->getProjectionMatrix()*camera->getViewMatrix()*head2d;
 	u_torso2d = camera->getProjectionMatrix()*camera->getViewMatrix()*u_torso2d;
 	l_torsod = camera->getProjectionMatrix()*camera->getViewMatrix()*l_torsod;
@@ -437,6 +444,11 @@ inline void ogre_model::get_2D_pos(const int& id){
 	l_thigh2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_thigh2d;
 	l_calf2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_calf2d;
 	l_foot2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_foot2d;
+	r_hand_edge2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_hand_edge2d;
+	l_hand_edge2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_hand_edge2d;
+	r_foot_edge2d = camera->getProjectionMatrix()*camera->getViewMatrix()*r_foot_edge2d;
+	l_foot_edge2d = camera->getProjectionMatrix()*camera->getViewMatrix()*l_foot_edge2d;
+	head_edge2d = camera->getProjectionMatrix()*camera->getViewMatrix()*head_edge2d;
 
 	extremas_list[id].at<cv::Point>(0).x = (0.5 + head2d.x/2)*render_width;
 	extremas_list[id].at<cv::Point>(0).y = (0.5 - head2d.y/2)*render_height;
@@ -476,6 +488,17 @@ inline void ogre_model::get_2D_pos(const int& id){
 	extremas_list[id].at<cv::Point>(17).y = (0.5 - l_calf2d.y/2)*render_height;
 	extremas_list[id].at<cv::Point>(18).x = (0.5 + l_foot2d.x/2)*render_width;
 	extremas_list[id].at<cv::Point>(18).y = (0.5 - l_foot2d.y/2)*render_height;
+
+	extremas_list[id].at<cv::Point>(19).x = (0.5 + head_edge2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(19).y = (0.5 - head_edge2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(20).x = (0.5 + r_hand_edge2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(20).y = (0.5 - r_hand_edge2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(21).x = (0.5 + l_hand_edge2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(21).y = (0.5 - l_hand_edge2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(22).x = (0.5 + r_foot_edge2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(22).y = (0.5 - r_foot_edge2d.y/2)*render_height;
+	extremas_list[id].at<cv::Point>(23).x = (0.5 + l_foot_edge2d.x/2)*render_width;
+	extremas_list[id].at<cv::Point>(23).y = (0.5 - l_foot_edge2d.y/2)*render_height;
 }
 
 cv::Mat* ogre_model::get_depth(const std::vector<particle_position>& particles_list){
