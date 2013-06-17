@@ -355,7 +355,7 @@ inline cv::Mat pose_estimator::get_random_bones_rot(bool velocity)
 		cv::Mat result;
 		result = get_random_19x3_mat(velocity).clone();
 		if(velocity){
-			result = 0.5*(bone_max-bone_min).mul(result.mul(mat_weights/4));
+			result = 0.3*(bone_max-bone_min).mul(result.mul(mat_weights/4));
 			//std::cout<<result<<std::endl;
 			//result = 60*result.mul(mat_weights/4);
 			//result = 40*result;
@@ -398,13 +398,13 @@ inline cv::Point3f pose_estimator::get_random_model_position(bool velocity){
 	cv::Point3f position;
 
 	if(velocity){
-		position.x = rand_gen.gaussian(0.3) * 500 ;	//gaussian distribution
-		position.y = rand_gen.gaussian(0.3) * 500 ;
-		position.z = rand_gen.gaussian(0.3) * 500 ;
+		position.x = rand_gen.gaussian(0.3) * 300 ;	//gaussian distribution
+		position.y = rand_gen.gaussian(0.3) * 300 ;
+		position.z = rand_gen.gaussian(0.3) * 300 ;
 	}else{
-		position.x = human_position.x + rand_gen.uniform(-1.0f,1.0f) * 500 ;	//uniform distribution
-		position.y = human_position.y + rand_gen.uniform(-1.0f,1.0f) * 500 ;
-		position.z = human_position.z + rand_gen.uniform(-1.0f,1.0f) * 500 ;
+		position.x = human_position.x + rand_gen.uniform(-1.0f,1.0f) * 300 ;	//uniform distribution
+		position.y = human_position.y + rand_gen.uniform(-1.0f,1.0f) * 300 ;
+		position.z = human_position.z + rand_gen.uniform(-1.0f,1.0f) * 300 ;
 	}
 	return position;
 }
