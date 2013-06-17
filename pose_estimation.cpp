@@ -778,10 +778,6 @@ inline double pose_estimator::calc_score(const particle& particle_inst){
 	//cv::min(diff_mat,200,diff_mat);
 	cv::bitwise_xor(particle_inst.particle_depth, input_depth,fuzzy_mat);
 
-	double fuzzy_max, diff_max;
-	cv::minMaxLoc(diff_mat,0,&diff_max,0,0,particle_inst.particle_depth);
-	cv::minMaxLoc(fuzzy_mat,0,&fuzzy_max,0,0,particle_inst.particle_depth);
-
 	//	cv::Mat temp, temp2;
 	//	cv::max(particle_inst.particle_depth,input_depth,temp);	//or
 	//	cv::min(particle_inst.particle_depth,input_depth,temp2); //and
@@ -803,12 +799,12 @@ inline double pose_estimator::calc_score(const particle& particle_inst){
 	//cv::bitwise_and(temp2,silhouette,temp2);
 
 	double size_score = (double)(box & user_bounds).area()/(box | user_bounds).area();
-	size_score = (1-pow(1-size_score,2));
+	size_score = (1-pow(1-size_score,1.5));
 
 	//cv::Mat penalty_mask = particle_inst.particle_depth.clone();
 	//cv::rectangle(penalty_mask,user_bounds,cv::Scalar(0),CV_FILLED);
 
-	double final_score = size_score  *(1 - pow(mean(diff_mat, particle_inst.particle_depth).val[0]/diff_max,2))*(1-cv::mean(bones_score).val[0]);
+	double final_score = size_score  *(1 - mean(diff_mat, particle_inst.particle_depth).val[0]/255.);//*(1-cv::mean(bones_score).val[0]);
 	if(found_rhand&&found_lhand&&enable_bones){
 		return final_score * right_dist*left_dist;
 	}else if(found_rhand&&enable_bones){
