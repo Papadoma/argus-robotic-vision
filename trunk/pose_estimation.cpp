@@ -758,14 +758,12 @@ inline double pose_estimator::calc_score(const particle& particle_inst){
 	bool found_rhand=false, found_lhand=false;
 	if(right_hand!=cv::Point(-1,-1)) {
 		right_dist = (1 - (pow((particle_inst.extremas.at<cv::Point>(9).x-right_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(9).y-right_hand.y),2))/90000);
-		right_dist = pow(right_dist,2);
 		if(right_dist>1)right_dist=1;
 		if(right_dist<0)right_dist=0;
 		found_rhand = true;
 	}
 	if(left_hand!=cv::Point(-1,-1)) {
 		left_dist = (1 - (pow((particle_inst.extremas.at<cv::Point>(12).x-left_hand.x),2) + pow((particle_inst.extremas.at<cv::Point>(12).y-left_hand.y),2))/90000);
-		left_dist = pow(left_dist,2);
 		if(left_dist>1)left_dist=1;
 		if(left_dist<0)left_dist=0;
 		found_lhand = true;
@@ -783,11 +781,11 @@ inline double pose_estimator::calc_score(const particle& particle_inst){
 	//	cv::min(particle_inst.particle_depth,input_depth,temp2); //and
 
 	cv::Rect box = cv::boundingRect(particle_inst.extremas);
-	box.x -= box.width/6;
-	box.width += box.width/3;
-	box.y -= box.height/6;
-	box.height += box.height/3;
-	box &= cv::Rect(0,0,frame_width, frame_height);
+//	box.x -= box.width/6;
+//	box.width += box.width/3;
+//	box.y -= box.height/6;
+//	box.height += box.height/3;
+//	box &= cv::Rect(0,0,frame_width, frame_height);
 
 	cv::Mat bones_pen= cv::Mat(19,3,CV_32FC1,bones_penalty);
 
@@ -799,12 +797,12 @@ inline double pose_estimator::calc_score(const particle& particle_inst){
 	//cv::bitwise_and(temp2,silhouette,temp2);
 
 	double size_score = (double)(box & user_bounds).area()/(box | user_bounds).area();
-	size_score = (1-pow(1-size_score,1.5));
+	size_score = (1-pow(1-size_score,2));
 
 	//cv::Mat penalty_mask = particle_inst.particle_depth.clone();
 	//cv::rectangle(penalty_mask,user_bounds,cv::Scalar(0),CV_FILLED);
 
-	double final_score = size_score  *(1 - mean(diff_mat, particle_inst.particle_depth).val[0]/255.);//*(1-cv::mean(bones_score).val[0]);
+	double final_score = size_score  *(1 - mean(diff_mat, particle_inst.particle_depth).val[0]/255.)* (1 - mean(fuzzy_mat).val[0]/255.);//*(1-cv::mean(bones_score).val[0]);
 	if(found_rhand&&found_lhand&&enable_bones){
 		return final_score * right_dist*left_dist;
 	}else if(found_rhand&&enable_bones){

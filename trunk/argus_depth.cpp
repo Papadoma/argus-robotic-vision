@@ -10,6 +10,7 @@
 #define USE_SGBM true
 #define FIND_POSE true
 #define SEGMENTATION_CONTOURS_SIZE 0.05
+#define HIST_QUEUE_SIZE 15
 
 #include "module_input.hpp"
 #include "pose_estimation.hpp"
@@ -22,6 +23,7 @@
 #endif
 
 bool trigger = false;
+cv::Mat show_backprojection;
 
 struct human_struct{
 	float propability;				//Propability that a detection is indeed a human
@@ -38,7 +40,6 @@ struct user_struct :public human_struct{
 	cv::Mat point_cloud;			//3D points of user scene, as acquired by reprojectImageto3D
 
 	cv::Mat user_mask;				//The mask which seperates user from background
-	cv::Point mask_mass_center;		//Mass center of mask
 
 	cv::Point left_marker;
 	cv::Point right_marker;
@@ -51,6 +52,7 @@ private:
 
 #if USE_THREADS
 	boost::mutex user_mutex;
+	boost::mutex markers_mutex;
 	boost::thread_group thread_group;
 #endif
 
@@ -63,6 +65,7 @@ private:
 	user_struct user;						//final detected human
 
 	cv::MatND user_hist;
+	std::deque<cv::MatND> hist_qeue;
 
 	cv::Scalar ulimits;
 	cv::Scalar llimits;
@@ -283,7 +286,7 @@ inline void argus_depth::debug_detected_user(){
 	cv::circle(rect_mat_left,user.right_marker,3,cv::Scalar(0,0,255),-2);
 	std::stringstream ss;
 	ss<<user.human_position;
-	cv::putText(rect_mat_left,ss.str(),user.mask_mass_center,1,1,cv::Scalar(255,10,10),2);
+	cv::putText(rect_mat_left,ss.str(),user.human_center,1,1,cv::Scalar(255,10,10),2);
 
 	cv::Mat user_frame = cv::Mat::zeros(rect_mat_left.rows, 2*rect_mat_left.cols, CV_8UC3);
 	//cv::Mat ROI1 = user_frame(user.body_bounding_rect);
@@ -445,7 +448,9 @@ inline void argus_depth::compute_depth(){
 #endif
 
 	local_depth.convertTo(local_depth, CV_32FC1, 1./16);				//Scale down to normal disparity
-	//smooth_depth_map(local_depth);
+
+	refined_human_anchor.x = refined_human_anchor.x+2*numberOfDisparities;
+	refined_human_anchor.width = refined_human_anchor.width-2*numberOfDisparities;
 
 #if USE_THREADS
 	user_mutex.lock();
@@ -453,7 +458,7 @@ inline void argus_depth::compute_depth(){
 	user.disparity = cv::Mat::zeros(rect_mat_left.size(), CV_32FC1);	//Prepare for copying
 #if USE_SGBM
 
-	(local_depth).copyTo(user.disparity(refined_human_anchor));			//Copy disparity
+	(local_depth(cv::Rect(2*numberOfDisparities,0,refined_human_anchor.width,refined_human_anchor.height))).copyTo(user.disparity(refined_human_anchor));			//Copy disparity
 #else
 	local_depth.copyTo(user.disparity);			//Copy disparity
 #endif
@@ -528,7 +533,7 @@ inline void argus_depth::detect_human(){
 		human_struct human_candidate;
 		human_candidate.propability = 0;
 		human_candidate.body_bounding_rect =(clearview_mask) & found_filtered[i];
-		human_candidate.human_center = cv::Point(human_candidate.body_bounding_rect.x + human_candidate.body_bounding_rect.width/2, human_candidate.body_bounding_rect.y + human_candidate.body_bounding_rect.height/2);
+		human_candidate.human_center = (human_candidate.body_bounding_rect.tl() + human_candidate.body_bounding_rect.br())*0.5;
 		for(j = 0; j<(int)faces.size();j++)
 		{
 			cv::Point head_candidate = cv::Point(faces[j].x + faces[j].width/2, faces[j].y + faces[j].height/2);
@@ -581,7 +586,8 @@ inline void argus_depth::detect_human(){
 		user.head_bounding_rect = possible_user.head_bounding_rect;
 		user.human_center = possible_user.human_center;
 		user.propability = possible_user.propability;
-		//user_hist = cv::Mat::zeros(user_hist.size(), CV_8UC1);
+		user_hist = cv::Mat();
+		hist_qeue.clear();
 		user_mutex.unlock();
 #else
 		user.body_bounding_rect = possible_user.body_bounding_rect;
@@ -601,331 +607,344 @@ inline void argus_depth::find_markers(){
 		user_mutex.lock();
 		rect_mat_left(user.body_bounding_rect).copyTo(tracker_cropped(user.body_bounding_rect));
 		user_mutex.unlock();
+
 		cv::Point l_marker = left_tracker->get_marker_center(tracker_cropped);
 		cv::Point r_marker = right_tracker->get_marker_center(tracker_cropped);
-		if(left_tracker->is_visible())user.left_marker = l_marker;
-		else user.left_marker = cv::Point(-1,-1);
-		if(right_tracker->is_visible())user.right_marker = r_marker;
-		else user.right_marker = cv::Point(-1,-1);
+
+		markers_mutex.lock();
+		//		if(left_tracker->is_visible())user.left_marker = l_marker;
+		//		else user.left_marker = cv::Point(-1,-1);
+		//		if(right_tracker->is_visible())user.right_marker = r_marker;
+		//		else user.right_marker = cv::Point(-1,-1);
+		user.left_marker = l_marker;
+		user.right_marker = r_marker;
+		markers_mutex.unlock();
 	}
 }
 
 /**
  * Segments the user from the overall bounding rectangle. Calculates his mask and mass center
  */
-inline void argus_depth::segment_user(){
-#if USE_THREADS
-	user_mutex.lock();
-	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
-	cv::Mat local_point_cloud = user.point_cloud.clone();
-	cv::Mat local_user_disparity = user.disparity.clone();
-	user_mutex.unlock();
-#else
-	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
-	cv::Mat local_point_cloud = user.point_cloud;
-	cv::Mat local_user_disparity = user.disparity;
-#endif
-
-	//ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
-	//llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
-
-	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(local_user_bounding_rect)){
-		user.mask_mass_center = cv::Point(local_user_bounding_rect.x + local_user_bounding_rect.width/2, local_user_bounding_rect.y + local_user_bounding_rect.height/2);
-	}
-
-	cv::Mat floodfill_mask = cv::Mat::zeros(height + 2, width + 2, CV_8U);
-	//if(user.point_cloud.data)floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
-	if(local_point_cloud.data)floodFill(local_point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, cv::Scalar(Xl_value,Yl_value,Zl_value), cv::Scalar(Xu_value,Yu_value,Zu_value), 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
-	cv::Rect crop(1,1,floodfill_mask.cols-2,floodfill_mask.rows-2);
-	floodfill_mask = floodfill_mask(crop).clone();
-	//floodfill_mask.copyTo(user.user_mask);
-
-	//Eliminate small holes
-	morphologyEx(floodfill_mask, floodfill_mask, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 2 );
-	//cv::circle(floodfill_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
-	imshow("human_mask", floodfill_mask);
-
-	//Find edges present in the floodfill's region
-	cv::Mat frame_edge_detection;
-	Canny(BW_rect_mat_left, frame_edge_detection, canny, 3*canny );
-	//imshow("edges", frame_edge_detection);
-
-	//Sometimes, floodfill fails to return a decent mask. In that case, use the previously detected mask
-	cv::Mat pre_mask;
-	if(cv::countNonZero(floodfill_mask) < 0.5*cv::countNonZero(user.user_mask)){
-		//bitwise_and(frame_edge_detection, user.user_mask, frame_edge_detection);
-		user.user_mask.copyTo(pre_mask);
-	}else{
-		//bitwise_and(frame_edge_detection, floodfill_mask, frame_edge_detection);
-		floodfill_mask.copyTo(pre_mask);
-	}
-	bitwise_and(frame_edge_detection, pre_mask, frame_edge_detection);
-	//imshow("edges", frame_edge_detection);
-	//Close the edges
-	morphologyEx(frame_edge_detection, frame_edge_detection, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
-	imshow("edges closed", frame_edge_detection);
-
-	//Eliminate small edge fragments
-	//	std::vector<std::vector<cv::Point> > contours;
-	//	std::vector<cv::Vec4i> hierarchy;
-	//	findContours( frame_edge_detection.clone(), contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE );
-	//	cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
-	//	for( int i = 0; i< (int)contours.size(); i++ )
-	//	{
-	//		if(contourArea(contours[i]) < local_user_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( frame_edge_detection, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
-	//	}
-	//imshow( "Contours", frame_edge_detection );
-
-	//Get scene color information in a different colorspace without luminosity
-	cv::Mat hsv_user;
-	cv::cvtColor(rect_mat_left, hsv_user, CV_BGR2HSV);
-	hsv_user.convertTo(hsv_user,CV_32FC3);
-
-	//Mix depth and color information
-	cv::Mat hsvd(hsv_user.size() ,CV_32FC3);
-	cv::Mat in[]={hsv_user, local_user_disparity};
-	int from_to[] = { 0,0, 1,1, 3,2 };
-	mixChannels( in, 2, &hsvd, 1, from_to, 3 );
-
-	//Prepare for histogram calculation
-	int  hbins = 40, sbins = 40,dbins = 64;
-	int histSize[] = {hbins, sbins, dbins};
-	float hranges[] = { 0, 179 };
-	float sranges[] = { 0, 255 };
-	float dranges[] = { 0, numberOfDisparities };
-	const float* ranges[] = { hranges, sranges, dranges };
-	int channels[] = {0,1, 2};
-
-	//Calculate back projection (if there is a previously calculated histogram)
-	cv::Mat backproj_img;
-	if(cv::countNonZero(user_hist)){
-		calcBackProject(&hsvd, 1, channels, user_hist, backproj_img, ranges, 1, true );
-	}
-
-	cv::Mat user_skin = find_skin(rect_mat_left);
-	cv::Mat user_skin_clear = cv::Mat::zeros(user_skin.size(),CV_8UC1);
-	cv::erode(user_skin,user_skin,cv::Mat(),cv::Point(),1);
-	user_skin.copyTo(user_skin_clear(user.body_bounding_rect));
-	cv::bitwise_or(pre_mask,user_skin,user_skin);
-	imshow("user_skin",user_skin);
-
-	//Calculate histogram
-	calcHist( &hsvd, 1, channels, user_skin, user_hist, 3, histSize, ranges, true, false );
-
-
-
-	if(cv::countNonZero(backproj_img) && local_user_bounding_rect.area()){
-		//Add previous edge mask information
-		//morphologyEx(backproj_img, backproj_img, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
-		//frame_edge_detection.convertTo(frame_edge_detection,CV_32FC1);
-		//cv::bitwise_or(backproj_img, frame_edge_detection, backproj_img);
-
-		//Use camshift algorithm to track the user and adjust his bounding rectangle
-		cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
-		cv::Rect local_rect = local_user_bounding_rect;
-		cv::normalize(backproj_img, backproj_img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-		cv::bitwise_or(backproj_img,user_skin,backproj_img);
-		cv::RotatedRect detection = CamShift(backproj_img, local_rect, criteria);
-
-		imshow("back projection",backproj_img);
-
-		//Shape the detected rectangle a bit
-		cv::Rect new_user_rect=detection.boundingRect();
-		new_user_rect.x -= new_user_rect.width*0.3/2;
-		new_user_rect.y -= new_user_rect.height*0.1/2;
-		new_user_rect.width = new_user_rect.width*1.3;
-		new_user_rect.height = new_user_rect.height*1.1;
-		new_user_rect |= cv::Rect(user.left_marker.x-4,user.left_marker.y-4,9,9);
-		new_user_rect |= cv::Rect(user.right_marker.x-4,user.right_marker.y-4,9,9);
-		new_user_rect &= clearview_mask;
-
-		if(new_user_rect.area()>0.5*user.body_bounding_rect.area()){
-#if USE_THREADS
-			user_mutex.lock();
-			user.body_bounding_rect = new_user_rect;
-			user_mutex.unlock();
-#else
-			user.body_bounding_rect = new_user_rect;
-#endif
-		}
-
-		//Introduce an 80% confidence to create the final user mask
-		cv::threshold(backproj_img,backproj_img,255*0.8,255,cv::THRESH_BINARY);
-
-		//Eliminate small mask fragments
-		//		contours.clear();
-		//		hierarchy.clear();
-		//		findContours( backproj_img.clone(), contours, hierarchy, CV_RETR_LIST , CV_CHAIN_APPROX_SIMPLE );
-		//		cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
-		//		for( int i = 0; i< (int)contours.size(); i++ )
-		//		{
-		//			if(contourArea(contours[i]) < new_user_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( backproj_img, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
-		//		}
-
-		//finally, store the new user mask
-		if(cv::countNonZero(backproj_img)>0.5*cv::countNonZero(user.user_mask)){
-			backproj_img.copyTo(user.user_mask);
-
-			//Find new mass center, used in floodfill
-			//cv::Moments mask_moments = moments(backproj_img, true);
-			cv::Moments mask_moments = moments(user.user_mask, true);
-			user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
-		}
-
-		//cv::bitwise_and(backproj_img,user.disparity_viewable,user.disparity_viewable);
-	}
-}
-
-inline void argus_depth::segment_user2(){
-#if USE_THREADS
-	user_mutex.lock();
-	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
-	user_mutex.unlock();
-#else
-	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
-#endif
-
-	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
-	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
-
-	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(local_user_bounding_rect)){
-		user.mask_mass_center = cv::Point(local_user_bounding_rect.x + local_user_bounding_rect.width/2, local_user_bounding_rect.y + local_user_bounding_rect.height/2);
-	}
-
-	cv::Mat floodfill_mask = cv::Mat::zeros(height + 2, width + 2, CV_8U);
-
-	if(user.point_cloud.data)floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
-
-	cv::Rect crop(1,1,floodfill_mask.cols-2,floodfill_mask.rows-2);
-	floodfill_mask = floodfill_mask(crop).clone();
-	//floodfill_mask.copyTo(user.user_mask);
-
-	//cv::circle(floodfill_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
-	imshow("human_mask", floodfill_mask);
-
-	//Find edges present in the floodfill's region
-	cv::Mat frame_edge_detection;
-	//	blur( BW_rect_mat_left, frame_edge_detection, cv::Size(3,3) );
-	cv::GaussianBlur(BW_rect_mat_left, frame_edge_detection, cv::Size(0, 0), 3);
-	cv::addWeighted(BW_rect_mat_left, 1.9, frame_edge_detection, -0.9, 0, frame_edge_detection);
-	imshow("edges",frame_edge_detection);
-	Canny(frame_edge_detection, frame_edge_detection, canny, 3*canny );
-
-
-	//Sometimes, floodfill fails to return a decent mask. In that case, use the previously detected mask
-	if(cv::countNonZero(floodfill_mask) < 0.7*cv::countNonZero(user.user_mask)){
-		bitwise_and(frame_edge_detection, user.user_mask, frame_edge_detection);
-		//user.user_mask.copyTo(frame_edge_detection);
-	}else{
-		bitwise_and(frame_edge_detection, floodfill_mask, frame_edge_detection);
-		//floodfill_mask.copyTo(frame_edge_detection);
-	}
-
-	//Close the edges
-	//	morphologyEx(frame_edge_detection, frame_edge_detection, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
-	//	imshow("edges closed", frame_edge_detection);
-
-	//Eliminate small edge fragments
-	//	std::vector<std::vector<cv::Point> > contours;
-	//	std::vector<cv::Vec4i> hierarchy;
-	//	findContours( frame_edge_detection.clone(), contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE );
-	//	cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
-	//	for( int i = 0; i< (int)contours.size(); i++ )
-	//	{
-	//		if(contourArea(contours[i]) < local_user_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( frame_edge_detection, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
-	//	}
-	//	imshow( "Contours", frame_edge_detection );
-
-	//Prepare for histogram calculation
-	int  Xbins = 100, Ybins = 100, Zbins = 100;
-	int histSize[] = {Xbins, Ybins, Zbins};
-	float Xranges[] = { -2000, 2000 };
-	float Yranges[] = { -2000, 2000 };
-	float Zranges[] = { 1000, 5000 };
-	const float* ranges[] = { Xranges, Yranges, Zranges };
-	int channels[] = {0,1,2};
-
-	//Calculate back projection (if there is a previously calculated histogram)
-	cv::Mat backproj_img;
-	if(cv::countNonZero(user_hist)){
-		calcBackProject(&user.point_cloud, 1, channels, user_hist, backproj_img, ranges, 1, true );
-		//cv::threshold(backproj_img,backproj_img,50,255,cv::THRESH_BINARY);
-		normalize(backproj_img, backproj_img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-		backproj_img.convertTo(backproj_img,CV_8UC1);
-		imshow("back projection",backproj_img);
-	}
-
-	//Calculate histogram
-	if(user.point_cloud.data){
-		if(frame_counter%3){
-			calcHist( &user.point_cloud, 1, channels, frame_edge_detection, user_hist, 3, histSize, ranges, true, true );
-		}else{
-			calcHist( &user.point_cloud, 1, channels, frame_edge_detection, user_hist, 3, histSize, ranges, true, false );
-		}
-	}
-
-	if(cv::countNonZero(backproj_img) && local_user_bounding_rect.area()){
-		//Use camshift algorithm to track the user and adjust his bounding rectangle
-		cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
-		cv::Rect local_rect = local_user_bounding_rect;
-
-		//Add previous edge mask information
-		morphologyEx(backproj_img, backproj_img, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
-		std::cout<<"here"<<std::endl;
-		cv::bitwise_or(backproj_img, frame_edge_detection, backproj_img);
-		std::cout<<"there"<<std::endl;
-		cv::RotatedRect detection = CamShift(backproj_img, local_rect, criteria);
-
-		//Shape the detected rectangle a bit
-		cv::Rect new_user_rect=detection.boundingRect();
-		new_user_rect.x -= new_user_rect.width*0.4/2;
-		new_user_rect.y -= new_user_rect.height*0.1/2;
-		new_user_rect.width = new_user_rect.width*1.4;
-		new_user_rect.height = new_user_rect.height*1.1;
-		new_user_rect &= clearview_mask;
-
-		if(new_user_rect.area()){
-#if USE_THREADS
-			user_mutex.lock();
-			user.body_bounding_rect = new_user_rect;
-			user_mutex.unlock();
-#else
-			user.body_bounding_rect = new_user_rect;
-#endif
-		}
-
-		//Introduce an 80% confidence to create the final user mask
-		cv::threshold(backproj_img,backproj_img,0.8*255,255,cv::THRESH_BINARY);
-
-		//Eliminate small mask fragments
-		std::vector<std::vector<cv::Point> > contours;
-		std::vector<cv::Vec4i> hierarchy;
-		contours.clear();
-		hierarchy.clear();
-		findContours( backproj_img.clone(), contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE );
-		cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
-		for( int i = 0; i< (int)contours.size(); i++ )
-		{
-			if(contourArea(contours[i]) < new_user_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( backproj_img, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
-		}
-
-		//finally, store the new user mask
-		backproj_img.copyTo(user.user_mask);
-
-		//Find new mass center, used in floodfill
-		//cv::Moments mask_moments = moments(backproj_img, true);
-		cv::Moments mask_moments = moments(user.user_mask, true);
-		user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
-		imshow("final mask", user.user_mask);
-		//cv::bitwise_and(backproj_img,user.disparity_viewable,user.disparity_viewable);
-	}
-}
+//inline void argus_depth::segment_user(){
+//#if USE_THREADS
+//	user_mutex.lock();
+//	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
+//	cv::Mat local_point_cloud = user.point_cloud.clone();
+//	cv::Mat local_user_disparity = user.disparity.clone();
+//	user_mutex.unlock();
+//#else
+//	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
+//	cv::Mat local_point_cloud = user.point_cloud;
+//	cv::Mat local_user_disparity = user.disparity;
+//#endif
+//
+//	//ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
+//	//llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
+//
+//	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(local_user_bounding_rect)){
+//		user.mask_mass_center = cv::Point(local_user_bounding_rect.x + local_user_bounding_rect.width/2, local_user_bounding_rect.y + local_user_bounding_rect.height/2);
+//	}
+//
+//	cv::Mat floodfill_mask = cv::Mat::zeros(height + 2, width + 2, CV_8U);
+//	//if(user.point_cloud.data)floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
+//	if(local_point_cloud.data)floodFill(local_point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, cv::Scalar(Xl_value,Yl_value,Zl_value), cv::Scalar(Xu_value,Yu_value,Zu_value), 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
+//	cv::Rect crop(1,1,floodfill_mask.cols-2,floodfill_mask.rows-2);
+//	floodfill_mask = floodfill_mask(crop).clone();
+//	//floodfill_mask.copyTo(user.user_mask);
+//
+//	//Eliminate small holes
+//	morphologyEx(floodfill_mask, floodfill_mask, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 2 );
+//	//cv::circle(floodfill_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
+//	//imshow("human_mask", floodfill_mask);
+//
+//	//Find edges present in the floodfill's region
+//	cv::Mat frame_edge_detection;
+//	Canny(BW_rect_mat_left, frame_edge_detection, canny, 3*canny );
+//	//imshow("edges", frame_edge_detection);
+//
+//	//Sometimes, floodfill fails to return a decent mask. In that case, use the previously detected mask
+//	cv::Mat pre_mask;
+//	if(cv::countNonZero(floodfill_mask) < 0.5*cv::countNonZero(user.user_mask)){
+//		//bitwise_and(frame_edge_detection, user.user_mask, frame_edge_detection);
+//		user.user_mask.copyTo(pre_mask);
+//	}else{
+//		//bitwise_and(frame_edge_detection, floodfill_mask, frame_edge_detection);
+//		floodfill_mask.copyTo(pre_mask);
+//	}
+//	bitwise_and(frame_edge_detection, pre_mask, frame_edge_detection);
+//	//imshow("edges", frame_edge_detection);
+//	//Close the edges
+//	morphologyEx(frame_edge_detection, frame_edge_detection, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
+//	imshow("edges closed", frame_edge_detection);
+//
+//	//Eliminate small edge fragments
+//	//	std::vector<std::vector<cv::Point> > contours;
+//	//	std::vector<cv::Vec4i> hierarchy;
+//	//	findContours( frame_edge_detection.clone(), contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE );
+//	//	cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
+//	//	for( int i = 0; i< (int)contours.size(); i++ )
+//	//	{
+//	//		if(contourArea(contours[i]) < local_user_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( frame_edge_detection, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+//	//	}
+//	//imshow( "Contours", frame_edge_detection );
+//
+//	//Get scene color information in a different colorspace without luminosity
+//	cv::Mat hsv_user;
+//	cv::cvtColor(rect_mat_left, hsv_user, CV_BGR2HSV);
+//	hsv_user.convertTo(hsv_user,CV_32FC3);
+//
+//	//Mix depth and color information
+//	cv::Mat hsvd(hsv_user.size() ,CV_32FC3);
+//	cv::Mat in[]={hsv_user, local_user_disparity};
+//	int from_to[] = { 0,0, 1,1, 3,2 };
+//	mixChannels( in, 2, &hsvd, 1, from_to, 3 );
+//
+//	//Prepare for histogram calculation
+//	int  hbins = 40, sbins = 40,dbins = 64;
+//	int histSize[] = {hbins, sbins, dbins};
+//	float hranges[] = { 0, 179 };
+//	float sranges[] = { 0, 255 };
+//	float dranges[] = { 0, numberOfDisparities };
+//	const float* ranges[] = { hranges, sranges, dranges };
+//	int channels[] = {0,1, 2};
+//
+//	//Calculate back projection (if there is a previously calculated histogram)
+//	cv::Mat backproj_img;
+//	if(user_hist.data){
+//		calcBackProject(&hsvd, 1, channels, user_hist, backproj_img, ranges, 1, true );
+//	}
+//
+//	cv::Mat user_skin = find_skin(rect_mat_left);
+//	cv::Mat user_skin_clear = cv::Mat::zeros(user_skin.size(),CV_8UC1);
+//	cv::erode(user_skin,user_skin,cv::Mat(),cv::Point(),1);
+//	user_skin.copyTo(user_skin_clear(user.body_bounding_rect));
+//	cv::bitwise_or(pre_mask,user_skin,user_skin);
+//	imshow("user_skin",user_skin);
+//
+//	//Calculate histogram
+//	calcHist( &hsvd, 1, channels, user_skin, user_hist, 3, histSize, ranges, true, false );
+//
+//
+//
+//	if(cv::countNonZero(backproj_img) && local_user_bounding_rect.area()){
+//		//Add previous edge mask information
+//		//morphologyEx(backproj_img, backproj_img, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
+//		//frame_edge_detection.convertTo(frame_edge_detection,CV_32FC1);
+//		//cv::bitwise_or(backproj_img, frame_edge_detection, backproj_img);
+//
+//		//Use camshift algorithm to track the user and adjust his bounding rectangle
+//		cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
+//		cv::Rect local_rect = local_user_bounding_rect;
+//		cv::normalize(backproj_img, backproj_img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+//		cv::bitwise_or(backproj_img,user_skin,backproj_img);
+//		cv::RotatedRect detection = CamShift(backproj_img, local_rect, criteria);
+//
+//		imshow("back projection",backproj_img);
+//
+//		//Shape the detected rectangle a bit
+//		cv::Rect new_user_rect=detection.boundingRect();
+//		new_user_rect.x -= new_user_rect.width*0.3/2;
+//		new_user_rect.y -= new_user_rect.height*0.1/2;
+//		new_user_rect.width = new_user_rect.width*1.3;
+//		new_user_rect.height = new_user_rect.height*1.1;
+//		new_user_rect |= cv::Rect(user.left_marker.x-4,user.left_marker.y-4,9,9);
+//		new_user_rect |= cv::Rect(user.right_marker.x-4,user.right_marker.y-4,9,9);
+//		new_user_rect &= clearview_mask;
+//
+//		if(new_user_rect.area()>0.5*user.body_bounding_rect.area()){
+//#if USE_THREADS
+//			user_mutex.lock();
+//			user.body_bounding_rect = new_user_rect;
+//			user_mutex.unlock();
+//#else
+//			user.body_bounding_rect = new_user_rect;
+//#endif
+//		}
+//
+//		//Introduce an 80% confidence to create the final user mask
+//		cv::threshold(backproj_img,backproj_img,255*0.8,255,cv::THRESH_BINARY);
+//
+//		//Eliminate small mask fragments
+//		//		contours.clear();
+//		//		hierarchy.clear();
+//		//		findContours( backproj_img.clone(), contours, hierarchy, CV_RETR_LIST , CV_CHAIN_APPROX_SIMPLE );
+//		//		cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
+//		//		for( int i = 0; i< (int)contours.size(); i++ )
+//		//		{
+//		//			if(contourArea(contours[i]) < new_user_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( backproj_img, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+//		//		}
+//
+//		//finally, store the new user mask
+//		if(cv::countNonZero(backproj_img)>0.5*cv::countNonZero(user.user_mask)){
+//			backproj_img.copyTo(user.user_mask);
+//
+//			//Find new mass center, used in floodfill
+//			//cv::Moments mask_moments = moments(backproj_img, true);
+//			cv::Moments mask_moments = moments(user.user_mask, true);
+//			user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
+//		}
+//
+//		//cv::bitwise_and(backproj_img,user.disparity_viewable,user.disparity_viewable);
+//	}
+//}
+//
+//inline void argus_depth::segment_user2(){
+//#if USE_THREADS
+//	user_mutex.lock();
+//	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
+//	user_mutex.unlock();
+//#else
+//	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
+//#endif
+//
+//	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
+//	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
+//
+//	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(local_user_bounding_rect)){
+//		user.mask_mass_center = cv::Point(local_user_bounding_rect.x + local_user_bounding_rect.width/2, local_user_bounding_rect.y + local_user_bounding_rect.height/2);
+//	}
+//
+//	cv::Mat floodfill_mask = cv::Mat::zeros(height + 2, width + 2, CV_8U);
+//
+//	if(user.point_cloud.data)floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
+//
+//	cv::Rect crop(1,1,floodfill_mask.cols-2,floodfill_mask.rows-2);
+//	floodfill_mask = floodfill_mask(crop).clone();
+//	//floodfill_mask.copyTo(user.user_mask);
+//
+//	//cv::circle(floodfill_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
+//	imshow("human_mask", floodfill_mask);
+//
+//	//Find edges present in the floodfill's region
+//	cv::Mat frame_edge_detection;
+//	//	blur( BW_rect_mat_left, frame_edge_detection, cv::Size(3,3) );
+//	cv::GaussianBlur(BW_rect_mat_left, frame_edge_detection, cv::Size(0, 0), 3);
+//	cv::addWeighted(BW_rect_mat_left, 1.9, frame_edge_detection, -0.9, 0, frame_edge_detection);
+//	imshow("edges",frame_edge_detection);
+//	Canny(frame_edge_detection, frame_edge_detection, canny, 3*canny );
+//
+//
+//	//Sometimes, floodfill fails to return a decent mask. In that case, use the previously detected mask
+//	if(cv::countNonZero(floodfill_mask) < 0.7*cv::countNonZero(user.user_mask)){
+//		bitwise_and(frame_edge_detection, user.user_mask, frame_edge_detection);
+//		//user.user_mask.copyTo(frame_edge_detection);
+//	}else{
+//		bitwise_and(frame_edge_detection, floodfill_mask, frame_edge_detection);
+//		//floodfill_mask.copyTo(frame_edge_detection);
+//	}
+//
+//	//Close the edges
+//	//	morphologyEx(frame_edge_detection, frame_edge_detection, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
+//	//	imshow("edges closed", frame_edge_detection);
+//
+//	//Eliminate small edge fragments
+//	//	std::vector<std::vector<cv::Point> > contours;
+//	//	std::vector<cv::Vec4i> hierarchy;
+//	//	findContours( frame_edge_detection.clone(), contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE );
+//	//	cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
+//	//	for( int i = 0; i< (int)contours.size(); i++ )
+//	//	{
+//	//		if(contourArea(contours[i]) < local_user_bounding_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( frame_edge_detection, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+//	//	}
+//	//	imshow( "Contours", frame_edge_detection );
+//
+//	//Prepare for histogram calculation
+//	int  Xbins = 100, Ybins = 100, Zbins = 100;
+//	int histSize[] = {Xbins, Ybins, Zbins};
+//	float Xranges[] = { -2000, 2000 };
+//	float Yranges[] = { -2000, 2000 };
+//	float Zranges[] = { 1000, 5000 };
+//	const float* ranges[] = { Xranges, Yranges, Zranges };
+//	int channels[] = {0,1,2};
+//
+//	//Calculate back projection (if there is a previously calculated histogram)
+//	cv::Mat backproj_img;
+//	if(cv::countNonZero(user_hist)){
+//		calcBackProject(&user.point_cloud, 1, channels, user_hist, backproj_img, ranges, 1, true );
+//		//cv::threshold(backproj_img,backproj_img,50,255,cv::THRESH_BINARY);
+//		normalize(backproj_img, backproj_img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
+//		backproj_img.convertTo(backproj_img,CV_8UC1);
+//		imshow("back projection",backproj_img);
+//	}
+//
+//	//Calculate histogram
+//	if(user.point_cloud.data){
+//		if(frame_counter%3){
+//			calcHist( &user.point_cloud, 1, channels, frame_edge_detection, user_hist, 3, histSize, ranges, true, true );
+//		}else{
+//			calcHist( &user.point_cloud, 1, channels, frame_edge_detection, user_hist, 3, histSize, ranges, true, false );
+//		}
+//	}
+//
+//	if(cv::countNonZero(backproj_img) && local_user_bounding_rect.area()){
+//		//Use camshift algorithm to track the user and adjust his bounding rectangle
+//		cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
+//		cv::Rect local_rect = local_user_bounding_rect;
+//
+//		//Add previous edge mask information
+//		morphologyEx(backproj_img, backproj_img, cv::MORPH_CLOSE, cv::Mat(), cv::Point(), 3 );
+//		std::cout<<"here"<<std::endl;
+//		cv::bitwise_or(backproj_img, frame_edge_detection, backproj_img);
+//		std::cout<<"there"<<std::endl;
+//		cv::RotatedRect detection = CamShift(backproj_img, local_rect, criteria);
+//
+//		//Shape the detected rectangle a bit
+//		cv::Rect new_user_rect=detection.boundingRect();
+//		new_user_rect.x -= new_user_rect.width*0.4/2;
+//		new_user_rect.y -= new_user_rect.height*0.1/2;
+//		new_user_rect.width = new_user_rect.width*1.4;
+//		new_user_rect.height = new_user_rect.height*1.1;
+//		new_user_rect &= clearview_mask;
+//
+//		if(new_user_rect.area()){
+//#if USE_THREADS
+//			user_mutex.lock();
+//			user.body_bounding_rect = new_user_rect;
+//			user_mutex.unlock();
+//#else
+//			user.body_bounding_rect = new_user_rect;
+//#endif
+//		}
+//
+//		//Introduce an 80% confidence to create the final user mask
+//		cv::threshold(backproj_img,backproj_img,0.8*255,255,cv::THRESH_BINARY);
+//
+//		//Eliminate small mask fragments
+//		std::vector<std::vector<cv::Point> > contours;
+//		std::vector<cv::Vec4i> hierarchy;
+//		contours.clear();
+//		hierarchy.clear();
+//		findContours( backproj_img.clone(), contours, hierarchy, CV_RETR_EXTERNAL , CV_CHAIN_APPROX_SIMPLE );
+//		cv::Mat frame_edge_filled = cv::Mat::zeros( frame_edge_detection.size(), CV_8UC1 );
+//		for( int i = 0; i< (int)contours.size(); i++ )
+//		{
+//			if(contourArea(contours[i]) < new_user_rect.area()*SEGMENTATION_CONTOURS_SIZE)drawContours( backproj_img, contours, i, cv::Scalar(0), CV_FILLED, 8, hierarchy, 0, cv::Point() );
+//		}
+//
+//		//finally, store the new user mask
+//		backproj_img.copyTo(user.user_mask);
+//
+//		//Find new mass center, used in floodfill
+//		//cv::Moments mask_moments = moments(backproj_img, true);
+//		cv::Moments mask_moments = moments(user.user_mask, true);
+//		user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
+//		imshow("final mask", user.user_mask);
+//		//cv::bitwise_and(backproj_img,user.disparity_viewable,user.disparity_viewable);
+//	}
+//}
 
 inline void argus_depth::track_user(){
 #if USE_THREADS
 	user_mutex.lock();
 	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
+	cv::Point local_human_center = user.human_center;
+	cv::Mat local_point_cloud,local_disparity_viewable;
+	if(user.point_cloud.data)local_point_cloud = user.point_cloud.clone();
+	if(user.disparity_viewable.data)local_disparity_viewable = user.disparity_viewable.clone();
+	std::deque<cv::MatND> local_hist_qeue = hist_qeue;
+	cv::MatND local_user_hist = user_hist.clone();
 	user_mutex.unlock();
+
 #else
 	cv::Rect local_user_bounding_rect = user.body_bounding_rect;
 #endif
@@ -933,12 +952,12 @@ inline void argus_depth::track_user(){
 	ulimits = cv::Scalar(cv::getTrackbarPos("Xupper", "XYZ floodfill"),cv::getTrackbarPos("Yupper", "XYZ floodfill"),cv::getTrackbarPos("Zupper", "XYZ floodfill"));
 	llimits = cv::Scalar(cv::getTrackbarPos("Xlower", "XYZ floodfill"),cv::getTrackbarPos("Ylower", "XYZ floodfill"),cv::getTrackbarPos("Zlower", "XYZ floodfill"));
 
-	if(user.mask_mass_center ==  cv::Point() || !user.mask_mass_center.inside(local_user_bounding_rect)){
-		user.mask_mass_center = (local_user_bounding_rect.tl() + local_user_bounding_rect.br())*0.5;
+	if(local_human_center ==  cv::Point() || !local_human_center.inside(local_user_bounding_rect)){
+		local_human_center = (local_user_bounding_rect.tl() + local_user_bounding_rect.br())*0.5;
 	}
 
 	cv::Mat floodfill_mask = cv::Mat::zeros(height + 2, width + 2, CV_8U);
-	if(user.point_cloud.data)floodFill(user.point_cloud, floodfill_mask,user.mask_mass_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
+	if(local_point_cloud.data)floodFill(local_point_cloud, floodfill_mask,local_human_center , 255, 0, llimits, ulimits, 4 + (255 << 8) + cv::FLOODFILL_MASK_ONLY /*+cv::FLOODFILL_FIXED_RANGE */ );
 	cv::Rect crop(1,1,floodfill_mask.cols-2,floodfill_mask.rows-2);
 	floodfill_mask = floodfill_mask(crop).clone();
 
@@ -946,17 +965,17 @@ inline void argus_depth::track_user(){
 	//floodfill_mask.copyTo(user.user_mask);
 
 	//cv::circle(floodfill_mask, user.mask_mass_center, 5, cv::Scalar(127), CV_FILLED);
-	imshow("human_mask", floodfill_mask);
+	//imshow("human_mask", floodfill_mask);
 
 	//Sometimes, floodfill fails to return a decent mask. In that case, use the previously detected mask
 	if(cv::countNonZero(floodfill_mask) > 0.7*cv::countNonZero(user.user_mask)){
 		floodfill_mask.copyTo(user.user_mask);
-		cv::Scalar est_pos = cv::mean(user.point_cloud,floodfill_mask);
+		cv::Scalar est_pos = cv::mean(local_point_cloud,floodfill_mask);
 		user.human_position = cv::Point3i(est_pos.val[0],est_pos.val[1],est_pos.val[2]);
 	}
 
 	//Prepare for histogram calculation
-	int  Xbins = 30, Ybins = 30, Zbins = 30;
+	int  Xbins = 60, Ybins = 60, Zbins = 60;
 	int histSize[] = {Xbins, Ybins, Zbins};
 	float Xranges[] = { -2000, 2000 };
 	float Yranges[] = { -2000, 2000 };
@@ -966,20 +985,26 @@ inline void argus_depth::track_user(){
 
 	//Calculate back projection (if there is a previously calculated histogram)
 	cv::Mat backproj_img;
-	if(user_hist.data){
-		calcBackProject(&user.point_cloud, 1, channels, user_hist, backproj_img, ranges, 1, true );
+	if(local_user_hist.data){
+		calcBackProject(&local_point_cloud, 1, channels, local_user_hist, backproj_img, ranges, 2, true );
 		//cv::threshold(backproj_img,backproj_img,50,255,cv::THRESH_BINARY);
 		normalize(backproj_img, backproj_img, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-		backproj_img.convertTo(backproj_img,CV_8UC1);
-		imshow("back projection",backproj_img);
+		backproj_img.convertTo(show_backprojection,CV_8UC1);
 	}
 
 	//Calculate histogram
-	if(user.point_cloud.data){
-		calcHist( &user.point_cloud, 1, channels, user.user_mask, user_hist, 3, histSize, ranges, true, true );
+	if(local_point_cloud.data){
+		cv::MatND new_hist;
+		calcHist( &local_point_cloud, 1, channels, user.user_mask, new_hist, 3, histSize, ranges, true, false );
+		//if(user_hist.data)user_hist = 0.6*user_hist + 0.4*new_hist;
+		//else user_hist = new_hist.clone();
+		local_hist_qeue.push_back(new_hist);
+		if((int)local_hist_qeue.size()>HIST_QUEUE_SIZE)local_hist_qeue.pop_front();
+		local_user_hist = local_hist_qeue[0].clone();
+		for(int i=1;i<(int)local_hist_qeue.size();i++)local_user_hist +=local_hist_qeue[i];
 	}
 
-	if(cv::countNonZero(backproj_img) && local_user_bounding_rect.area()){
+	if(backproj_img.data && local_user_bounding_rect!=cv::Rect()){
 		//Use camshift algorithm to track the user and adjust his bounding rectangle
 		cv::TermCriteria criteria( CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 10, 1 );
 		cv::Rect local_rect = local_user_bounding_rect;
@@ -987,16 +1012,20 @@ inline void argus_depth::track_user(){
 		//Add previous edge mask information
 		cv::RotatedRect detection = CamShift(backproj_img, local_rect, criteria);
 
-		//find_markers();
 		//Shape the detected rectangle a bit
 		cv::Rect new_user_rect=detection.boundingRect();
 		new_user_rect.x -= new_user_rect.width*0.4/2;
 		new_user_rect.y -= new_user_rect.height*0.2/2;
 		new_user_rect.width = new_user_rect.width*1.4;
 		new_user_rect.height = new_user_rect.height*1.2;
-		new_user_rect |= cv::Rect(user.left_marker.x-4,user.left_marker.y-4,9,9);
-		new_user_rect |= cv::Rect(user.right_marker.x-4,user.right_marker.y-4,9,9);
+
+		markers_mutex.lock();
+		if(user.left_marker!=cv::Point(-1,-1))new_user_rect |= cv::Rect(user.left_marker.x-4,user.left_marker.y-4,9,9);
+		if(user.right_marker!=cv::Point(-1,-1))new_user_rect |= cv::Rect(user.right_marker.x-4,user.right_marker.y-4,9,9);
+		markers_mutex.unlock();
+
 		new_user_rect &= clearview_mask;
+		//std::cout<<new_user_rect<<std::endl;
 
 		if(new_user_rect.area()){
 #if USE_THREADS
@@ -1009,9 +1038,17 @@ inline void argus_depth::track_user(){
 		}
 
 		//Find new mass center, used in floodfill
-		cv::Moments mask_moments = moments(backproj_img, false);
-		user.mask_mass_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
+		//cv::Moments mask_moments = moments(backproj_img, false);
+		if(local_disparity_viewable.data){
+			cv::Moments mask_moments = moments(local_disparity_viewable, false);
+			local_human_center = cv::Point(mask_moments.m10/mask_moments.m00, mask_moments.m01/mask_moments.m00);
+		}
 	}
+	user_mutex.lock();
+	hist_qeue = local_hist_qeue;
+	user.human_center = local_human_center;
+	user_hist = local_user_hist.clone();
+	user_mutex.unlock();
 }
 
 void argus_depth::take_snapshot(){
@@ -1193,12 +1230,13 @@ inline void argus_depth::start(){
 		cv::inRange(user.disparity_viewable,min_val,max_val,silhouette);
 		cv::imshow("silhouette",silhouette);
 
-	}else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
+	};//else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 
 #if USE_THREADS
 	thread_group.join_all();
 #endif
 	imshow("floodfill mask", user.user_mask);
+	if(show_backprojection.data)imshow("backprojection",show_backprojection);
 	t = (double)cv::getTickCount() - t;
 	std::cout<<"fps"<< 1/(t/cv::getTickFrequency())<<std::endl;//for fps
 	//eye_stereo->fps = t*1000./cv::getTickFrequency();//for ms

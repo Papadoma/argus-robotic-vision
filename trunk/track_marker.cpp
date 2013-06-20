@@ -15,6 +15,8 @@ marker_tracker::marker_tracker(std::string filename)
 	//Kalman filter part
 	KF = new cv::KalmanFilter(4, 2, 0);
 	KF->transitionMatrix = *(cv::Mat_<float>(4, 4) << 1,0,1,0,   0,1,0,1,  0,0,1,0,  0,0,0,1);
+	//KF = new cv::KalmanFilter(6, 2, 0);
+	//KF->transitionMatrix = *(cv::Mat_<float>(6, 6) << 1,0,1,0,0.5,0,   0,1,0,1,0,0.5,  0,0,1,0,1,0,  0,0,0,1,0,1, 0,0,0,0,1,0, 0,0,0,0,0,1);
 	//	measurement = cv::Mat_<float>(2,1);
 	//	measurement.setTo(cv::Scalar(0));
 
@@ -23,6 +25,8 @@ marker_tracker::marker_tracker(std::string filename)
 	KF->statePre.at<float>(1) = -1;
 	KF->statePre.at<float>(2) = 0;
 	KF->statePre.at<float>(3) = 0;
+	//KF->statePre.at<float>(4) = 0;		//////////////////
+	//KF->statePre.at<float>(5) = 0;		//////////////////
 	setIdentity(KF->measurementMatrix);
 	setIdentity(KF->processNoiseCov, cv::Scalar::all(0.0001));
 	setIdentity(KF->measurementNoiseCov, cv::Scalar::all(0.01));
@@ -121,13 +125,7 @@ void marker_tracker::track_marker(){
 	cv::Mat prediction = KF->predict();
 	filtered_center = cv::Point(prediction.at<float>(0),prediction.at<float>(1));
 
-
-	if(filtered_center.x<0)filtered_center=measured_center;
-	if(filtered_center.y<0)filtered_center=measured_center;
-	if(filtered_center.x>color_frame.cols)filtered_center=measured_center;
-	if(filtered_center.y>color_frame.rows)filtered_center=measured_center;
-
-	if(marker_visible || marker_bounding_rect.contains(filtered_center)){
+	if(marker_visible){
 		//measured_center = cv::Point(marker_bounding_rect.x+marker_bounding_rect.width/2,marker_bounding_rect.y+marker_bounding_rect.height/2);
 		measured_center = detection.center;
 
@@ -140,13 +138,17 @@ void marker_tracker::track_marker(){
 		// The "correct" phase that is going to use the predicted value and our measurement
 		cv::Mat estimated = KF->correct(measurement);
 		filtered_center = cv::Point(estimated.at<float>(0),estimated.at<float>(1));
+	}else if(given_center != cv::Point()){
+		// Get mouse point
+		cv::Mat_<float> measurement(2,1);
+		//measurement = cv::Mat_<float>(2,1);
+		measurement(0) = given_center.x;
+		measurement(1) = given_center.y;
+		cv::Mat estimated = KF->correct(measurement);
+		filtered_center = cv::Point(estimated.at<float>(0),estimated.at<float>(1));
 	}
 
-	if(filtered_center.x<0)filtered_center.x=0;
-	if(filtered_center.y<0)filtered_center.y=0;
-	if(filtered_center.x>color_frame.cols)filtered_center.x=color_frame.cols;
-	if(filtered_center.y>color_frame.rows)filtered_center.y=color_frame.rows;
-
+	if(filtered_center.x<0 || filtered_center.y<0 || filtered_center.x>color_frame.cols || filtered_center.y>color_frame.rows)filtered_center = cv::Point(-1,-1);
 }
 
 /**
@@ -210,8 +212,8 @@ cv::Point marker_tracker::get_marker_center(cv::Mat input_frame){
 #if DEBUG_COUT
 		debug_view();
 #endif
-		return filtered_center;
-		//return cv::Point(-1,-1);
+		//return filtered_center;
+		return cv::Point(-1,-1);
 	}
 }
 

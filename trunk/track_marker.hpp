@@ -22,7 +22,7 @@ private:
 
 	cv::KalmanFilter* KF;
 
-	cv::Point measured_center, filtered_center;
+	cv::Point measured_center, filtered_center, given_center;
 
 
 	void filter_image();
@@ -36,6 +36,7 @@ public:
 	cv::Point get_marker_center(cv::Mat);
 	float get_density(){return marker_density;};
 	bool is_visible(){return marker_visible;};
+	void set_center(cv::Point center){given_center = center;};
 };
 
 #endif
