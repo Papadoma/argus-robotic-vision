@@ -610,12 +610,10 @@ inline void argus_depth::find_markers(){
 
 		cv::Point l_marker = left_tracker->get_marker_center(tracker_cropped);
 		cv::Point r_marker = right_tracker->get_marker_center(tracker_cropped);
+		if(!l_marker.inside(clearview_mask))l_marker=cv::Point(-1,-1);
+		if(!r_marker.inside(clearview_mask))r_marker=cv::Point(-1,-1);
 
 		markers_mutex.lock();
-		//		if(left_tracker->is_visible())user.left_marker = l_marker;
-		//		else user.left_marker = cv::Point(-1,-1);
-		//		if(right_tracker->is_visible())user.right_marker = r_marker;
-		//		else user.right_marker = cv::Point(-1,-1);
 		user.left_marker = l_marker;
 		user.right_marker = r_marker;
 		markers_mutex.unlock();
@@ -1230,7 +1228,7 @@ inline void argus_depth::start(){
 		cv::inRange(user.disparity_viewable,min_val,max_val,silhouette);
 		cv::imshow("silhouette",silhouette);
 
-	};//else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
+	}else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 
 #if USE_THREADS
 	thread_group.join_all();
