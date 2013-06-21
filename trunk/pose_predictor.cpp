@@ -1,3 +1,14 @@
+/*
+ * module_input.cpp
+ *
+ * This file is part of my final year's project for the Department
+ * of Electrical and Computer Engineering of Aristotle University
+ * of Thessaloniki, 2013.
+ *
+ * Author:	Miltiadis-Alexios Papadopoulos
+ *
+ */
+
 #include "pose_predictor.hpp"
 
 pose_prediction::pose_prediction(int choice){
@@ -19,6 +30,7 @@ pose_prediction::pose_prediction(int choice){
 
 inline ogre_model::particle_position pose_prediction::naive(const ogre_model::particle_position& cur_pos){
 	if(!history_known){
+		//set old pose as current one and return current pose as predicted
 		position_old.model_position = cur_pos.model_position;
 		position_old.model_rotation = cur_pos.model_rotation;
 		position_old.bones_rotation = cur_pos.bones_rotation.clone();
@@ -26,6 +38,7 @@ inline ogre_model::particle_position pose_prediction::naive(const ogre_model::pa
 		history_known = true;
 		return cur_pos;
 	}else{
+		//predict new pose using a naive method
 		ogre_model::particle_position pos_pred;
 		pos_pred.model_position = (cur_pos.model_position - position_old.model_position) + cur_pos.model_position;
 		pos_pred.model_rotation = (cur_pos.model_rotation - position_old.model_rotation) + cur_pos.model_rotation;
@@ -36,31 +49,60 @@ inline ogre_model::particle_position pose_prediction::naive(const ogre_model::pa
 	}
 }
 
-inline ogre_model::particle_position pose_prediction::kalman(const ogre_model::particle_position& new_pos){
+inline ogre_model::particle_position pose_prediction::kalman(const ogre_model::particle_position& cur_pos){
 	cv::Mat input = cv::Mat::zeros(63,1,CV_32FC1);
-	ogre_model::particle_position output;
+	if(!history_known){
+		//Pass current pose as history
+		position_old.model_position = cur_pos.model_position;
+		position_old.model_rotation = cur_pos.model_rotation;
+		position_old.bones_rotation = cur_pos.bones_rotation.clone();
+		position_old.scale = cur_pos.scale;
+		history_known = true;
 
-	input.at<float>(0)=new_pos.model_position.x;
-	input.at<float>(1)=new_pos.model_position.y;
-	input.at<float>(2)=new_pos.model_position.z;
-	input.at<float>(3)=new_pos.model_rotation.x;
-	input.at<float>(4)=new_pos.model_rotation.y;
-	input.at<float>(5)=new_pos.model_rotation.z;
-	cv::Mat bones_array = new_pos.bones_rotation.reshape(1,57).clone();
-	bones_array.copyTo(input(cv::Rect(0,6,1,57)));
+		//Correct kalman's prediction
+		input.at<float>(0)=cur_pos.model_position.x;
+		input.at<float>(1)=cur_pos.model_position.y;
+		input.at<float>(2)=cur_pos.model_position.z;
+		input.at<float>(3)=cur_pos.model_rotation.x;
+		input.at<float>(4)=cur_pos.model_rotation.y;
+		input.at<float>(5)=cur_pos.model_rotation.z;
+		cur_pos.bones_rotation.reshape(1,57).copyTo(input(cv::Rect(0,6,1,57)));
+		KF->correct(input);
 
-	cv::Mat prediction = KF->predict();
-	KF->correct(input);
+		//return current pose, as we have no other prediction
+		return cur_pos;
+	}else{
+		//calculate a posible pose, using the naive method
+		ogre_model::particle_position pos_corr;
+		pos_corr.model_position = (cur_pos.model_position - position_old.model_position) + cur_pos.model_position;
+		pos_corr.model_rotation = (cur_pos.model_rotation - position_old.model_rotation) + cur_pos.model_rotation;
+		pos_corr.bones_rotation = (cur_pos.bones_rotation - position_old.bones_rotation) + cur_pos.bones_rotation;
+		pos_corr.scale = (cur_pos.scale - position_old.scale) + cur_pos.scale;
+		position_old = cur_pos;
 
-	output.model_position.x = prediction.at<float>(0);
-	output.model_position.y = prediction.at<float>(1);
-	output.model_position.z = prediction.at<float>(2);
-	output.model_rotation.x = prediction.at<float>(3);
-	output.model_rotation.y = prediction.at<float>(4);
-	output.model_rotation.z = prediction.at<float>(5);
-	output.bones_rotation = prediction((cv::Rect(0,6,1,57))).clone();
-	output.bones_rotation = output.bones_rotation.reshape(1,19).clone();
-	return output;
+		//Correct kalman filter, after predicting the new pose
+		input.at<float>(0)=pos_corr.model_position.x;
+		input.at<float>(1)=pos_corr.model_position.y;
+		input.at<float>(2)=pos_corr.model_position.z;
+		input.at<float>(3)=pos_corr.model_rotation.x;
+		input.at<float>(4)=pos_corr.model_rotation.y;
+		input.at<float>(5)=pos_corr.model_rotation.z;
+		pos_corr.bones_rotation.reshape(1,57).copyTo(input(cv::Rect(0,6,1,57)));
+
+		KF->predict();								//first predict
+		cv::Mat estimation = KF->correct(input);	//then correct
+
+		//return kalman's pose prediction
+		ogre_model::particle_position output;
+		output.model_position.x = estimation.at<float>(0);
+		output.model_position.y = estimation.at<float>(1);
+		output.model_position.z = estimation.at<float>(2);
+		output.model_rotation.x = estimation.at<float>(3);
+		output.model_rotation.y = estimation.at<float>(4);
+		output.model_rotation.z = estimation.at<float>(5);
+		output.bones_rotation = estimation((cv::Rect(0,6,1,57))).reshape(1,19).clone();
+		return output;
+	}
 }
 
 ogre_model::particle_position pose_prediction::predict(const ogre_model::particle_position& cur_pos){
