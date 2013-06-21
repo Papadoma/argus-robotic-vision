@@ -1,3 +1,14 @@
+/*
+ * module_input.cpp
+ *
+ * This file is part of my final year's project for the Department
+ * of Electrical and Computer Engineering of Aristotle University
+ * of Thessaloniki, 2013.
+ *
+ * Author:	Miltiadis-Alexios Papadopoulos
+ *
+ */
+
 #ifndef POSE_PREDICTOR_HPP
 #define POSE_PREDICTOR_HPP
 

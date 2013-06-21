@@ -1,3 +1,14 @@
+/*
+ * module_input.cpp
+ *
+ * This file is part of my final year's project for the Department
+ * of Electrical and Computer Engineering of Aristotle University
+ * of Thessaloniki, 2013.
+ *
+ * Author:	Miltiadis-Alexios Papadopoulos
+ *
+ */
+
 #pragma once
 #ifndef POSE_ESTIMATION_HPP
 #define POSE_ESTIMATION_HPP
