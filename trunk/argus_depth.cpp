@@ -13,6 +13,9 @@
 #include <stdio.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/ocl/ocl.hpp>
+#include "module_input.hpp"
+#include "pose_estimation.hpp"
+#include "track_marker.hpp"
 
 #define USE_GPU false
 #define DEBUG_MODE true
@@ -22,12 +25,6 @@
 #define FIND_POSE true
 #define SEGMENTATION_CONTOURS_SIZE 0.05
 #define HIST_QUEUE_SIZE 15
-
-#include "module_input.hpp"
-#include "pose_estimation.hpp"
-#include "track_marker.hpp"
-//#include "GeodesicDistMap.h"
-
 #define USE_THREADS		true
 #if USE_THREADS
 #include <boost/thread.hpp>
