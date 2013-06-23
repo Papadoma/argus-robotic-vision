@@ -33,6 +33,10 @@
 bool trigger = false;
 cv::Mat show_backprojection;
 
+cv::Rect manual_marker;
+bool manual_marker_updated = false;
+bool manual_marking_procedure = false;
+
 struct human_struct{
 	float propability;				//Propability that a detection is indeed a human
 	cv::Rect body_bounding_rect;	//Bounding rectagle of the human
@@ -133,8 +137,8 @@ private:
 	void detect_human();
 	cv::Mat find_skin(cv::Mat);
 	void compute_depth();
-	void smooth_depth_map(cv::Mat&);
 	void find_markers();
+	void learn_markers();
 	void segment_user();
 	void segment_user2();
 	void track_user();
@@ -161,15 +165,38 @@ public:
 	void main_loop();
 	void take_snapshot();
 	bool detect_user_flag;
-
+	bool chosen_marker;
 };
 
+static void onMouse( int event, int x, int y, int, void* ptr)
+{
+	switch (event){
+	case CV_EVENT_LBUTTONDOWN:
+	{
+		manual_marking_procedure = true;
+		manual_marker = cv::Rect();
+		manual_marker.x = x;
+		manual_marker.y = y;
+	}
+	break;
+	case CV_EVENT_LBUTTONUP:
+	{
+		manual_marker_updated = true;
+		manual_marking_procedure = false;
+		manual_marker.width = x - manual_marker.x;
+		manual_marker.height = y - manual_marker.y;
+	}
+	break;
+	}
+
+}
 
 //Constructor
 argus_depth::argus_depth()
 :frame_counter(0)
 ,mode(pose_estimator::FIRST_RUN)
 ,detect_user_flag(true)
+,chosen_marker(true)
 {
 	std::cout << "[Argus] Initializing detectors" << std::endl;
 	if(!cas_cla.load("haarcascade_frontalface_alt.xml")){
@@ -182,11 +209,11 @@ argus_depth::argus_depth()
 	hog = cv::ocl::HOGDescriptor(cv::Size(48, 96));
 	hog.setSVMDetector(cv::ocl::HOGDescriptor::getPeopleDetector48x96());//getPeopleDetector48x96, getPeopleDetector64x128 or getDefaultPeopleDetector
 #else
-	hog.winSize = cv::Size(48, 96);
-	hog.setSVMDetector(cv::HOGDescriptor::getDaimlerPeopleDetector());//getPeopleDetector48x96, getPeopleDetector64x128 or getDefaultPeopleDetector
+	//hog.winSize = cv::Size(48, 96);
+	hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());//getDaimlerPeopleDetector, getPeopleDetector48x96, getPeopleDetector64x128 or getDefaultPeopleDetector
 #endif
 
-	input_module = new module_eye("left.mpg","right.mpg");
+	input_module = new module_eye("left1.mpg","right1.mpg");
 	cv::Size framesize = input_module->getSize();
 	height = framesize.height;
 	width = framesize.width;
@@ -261,7 +288,8 @@ argus_depth::argus_depth()
 
 	//	m_distMap = new GeodesicDistMap(GeodesicDistMap::NP_4);
 	//	m_distMap->setMaxZDistThreshold(40);
-
+	cv::namedWindow("Camera");
+	cv::setMouseCallback( "Camera", onMouse, (void *)this );
 }
 
 //Destructor
@@ -432,7 +460,7 @@ inline void argus_depth::compute_depth(){
 	refined_human_anchor.x = refined_human_anchor.x-2*numberOfDisparities;
 	refined_human_anchor.width = refined_human_anchor.width+2*numberOfDisparities;
 	refined_human_anchor = refined_human_anchor & clearview_mask;
-
+	if(refined_human_anchor==cv::Rect())return;
 
 #if DEPTH_COLOR_SRC
 	cv::Mat person_left=(rect_mat_left)(refined_human_anchor).clone();
@@ -475,21 +503,6 @@ inline void argus_depth::compute_depth(){
 #if USE_THREADS
 	user_mutex.unlock();
 #endif
-}
-
-/*
- * Smooth out holes using inpaint technique.
- */
-inline void argus_depth::smooth_depth_map(cv::Mat& depth_map){
-	//	cv::Mat holes;
-	//	threshold(depth_map,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
-	//	inpaint(depth_map, holes, depth_map, 2.0 , cv::INPAINT_NS );
-	//	cv::Mat local = depth_map.clone();
-	//	bilateralFilter(local, depth_map, 3, 30, 30);
-	//cv::medianBlur(depth_map,depth_map,3);
-	cv::Mat holes;
-	threshold(depth_map,holes,1,255,cv::THRESH_BINARY_INV); //keep only the holes
-	imshow("holes",holes);
 }
 
 /*
@@ -553,7 +566,7 @@ inline void argus_depth::detect_human(){
 					human_candidate.head_center = head_candidate;
 				}else if(fast_distance(head_candidate,human_candidate.human_center) > fast_distance(human_candidate.head_center ,human_candidate.human_center)){
 					human_candidate.head_bounding_rect = faces[j];
-					human_candidate.head_center = cv::Point(human_candidate.head_bounding_rect.x + human_candidate.head_bounding_rect.width/2, human_candidate.head_bounding_rect.y + human_candidate.head_bounding_rect.height/2);
+					human_candidate.head_center = (human_candidate.head_bounding_rect.br()+human_candidate.head_bounding_rect.tl())*0.5;
 				}
 				faces.erase(faces.begin()+j);
 			}
@@ -626,6 +639,34 @@ inline void argus_depth::find_markers(){
 		user.right_marker = r_marker;
 		markers_mutex.unlock();
 	}
+}
+
+inline void argus_depth::learn_markers(){
+	if(manual_marker_updated &&	!manual_marking_procedure){
+		cv::Mat local_color_frame;
+		cv::MatND marker_hist;
+		cv::cvtColor(rect_mat_left(manual_marker),local_color_frame,CV_BGR2HSV);
+		int histSize[] = {180, 256};
+		float hue_range[] = { 0, 179 };
+		float sat_range[] = { 0, 255 };
+		int channels[] = {0,1};
+		const float* ranges[] = { hue_range, sat_range };
+
+		switch(chosen_marker){
+		case true:	//left marker
+			calcHist( &local_color_frame, 1, channels, cv::Mat(), marker_hist, 2, histSize, ranges, true, false );
+			left_tracker->reset_hist(marker_hist);
+			std::cout<<"[Argus] Reseted left marker histogram"<<std::endl;
+			break;
+		case false:	//right marker
+			calcHist( &local_color_frame, 1, channels, cv::Mat(), marker_hist, 2, histSize, ranges, true, false );
+			right_tracker->reset_hist(marker_hist);
+			std::cout<<"[Argus] Reseted right marker histogram"<<std::endl;
+			break;
+		}
+		chosen_marker = !chosen_marker;
+		manual_marker_updated=false;
+	}else return;
 }
 
 /**
@@ -1236,7 +1277,7 @@ inline void argus_depth::start(){
 		cv::inRange(user.disparity_viewable,min_val,max_val,silhouette);
 		cv::imshow("silhouette",silhouette);
 
-	}else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
+	};//else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 
 #if USE_THREADS
 	thread_group.join_all();
@@ -1264,6 +1305,7 @@ inline void argus_depth::main_loop(){
 #endif
 	while(1){
 		do{
+			learn_markers();
 			key_pressed = cvWaitKey(1) & 255;
 			if ( key_pressed == 32 )pause=!pause;
 			if ( key_pressed == 27 ) break;

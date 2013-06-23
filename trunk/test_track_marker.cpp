@@ -3,7 +3,7 @@
 
 int main(){
 	//	module_eye input;
-	module_eye input("left.mpg","right.mpg");
+	module_eye input("left1.mpg","right1.mpg");
 
 	cv::Mat input_frame,l;
 
