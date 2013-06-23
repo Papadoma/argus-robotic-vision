@@ -48,6 +48,7 @@ public:
 	float get_density(){return marker_density;};
 	bool is_visible(){return marker_visible;};
 	void set_center(cv::Point center){given_center = center;};
+	void reset_hist(cv::MatND hist){hist.copyTo(marker_hist);};
 };
 
 #endif
