@@ -213,7 +213,7 @@ argus_depth::argus_depth()
 	hog.setSVMDetector(cv::HOGDescriptor::getDefaultPeopleDetector());//getDaimlerPeopleDetector, getPeopleDetector48x96, getPeopleDetector64x128 or getDefaultPeopleDetector
 #endif
 
-	input_module = new module_eye("left1.mpg","right1.mpg");
+	input_module = new module_eye("left.mpg","right.mpg");
 	cv::Size framesize = input_module->getSize();
 	height = framesize.height;
 	width = framesize.width;
@@ -642,7 +642,7 @@ inline void argus_depth::find_markers(){
 }
 
 inline void argus_depth::learn_markers(){
-	if(manual_marker_updated &&	!manual_marking_procedure){
+	if(manual_marker_updated &&	!manual_marking_procedure && manual_marker.area()){
 		cv::Mat local_color_frame;
 		cv::MatND marker_hist;
 		cv::cvtColor(rect_mat_left(manual_marker),local_color_frame,CV_BGR2HSV);
@@ -1277,7 +1277,7 @@ inline void argus_depth::start(){
 		cv::inRange(user.disparity_viewable,min_val,max_val,silhouette);
 		cv::imshow("silhouette",silhouette);
 
-	};//else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
+	}else if(left_tracker->is_visible() && right_tracker->is_visible())detect_user_flag = false;
 
 #if USE_THREADS
 	thread_group.join_all();

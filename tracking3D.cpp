@@ -256,6 +256,7 @@ cv::Point3f tracking::get_center(cv::Rect rect){
 	depth = (depth)(cv::Rect(numberOfDisparities, 0, rect.width, rect.height)).clone();
 	cv::Mat zeropadded_depth = cv::Mat::zeros(rect_mat_left.size(), CV_16SC1);
 	depth.convertTo(viewable_depth, CV_8UC1, 255./(numberOfDisparities*16));
+	//cv::Scalar mean_values = mean(depth);
 	depth.convertTo(depth, CV_32FC1, 1./(16));
 
 	depth.copyTo(zeropadded_depth(rect));
@@ -269,6 +270,7 @@ cv::Point3f tracking::get_center(cv::Rect rect){
 	cv::Mat point_cloud;
 	cv::reprojectImageTo3D(zeropadded_depth,point_cloud,Q);
 	cv::Scalar mean_values = mean(point_cloud,mask);
+
 	result.x = mean_values.val[0];
 	result.y = mean_values.val[1];
 	result.z = mean_values.val[2];
