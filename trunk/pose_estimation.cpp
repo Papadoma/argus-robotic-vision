@@ -285,7 +285,7 @@ inline void pose_estimator::init_single_particle(particle& singleParticle, int t
 
 	if( type==ROTATION || type==ALL ){
 		if(!fine){
-			if(mode==TRACK)singleParticle.current_position.model_rotation = best_global_position_predicted.model_rotation + cv::Point3f(rand_gen.gaussian(0.3)*5,rand_gen.gaussian(0.3)*5,rand_gen.gaussian(0.3)*5);
+			if(mode==TRACK)singleParticle.current_position.model_rotation = best_global_position_predicted.model_rotation;// + cv::Point3f(rand_gen.gaussian(0.3)*5,rand_gen.gaussian(0.3)*5,rand_gen.gaussian(0.3)*5);
 			else singleParticle.current_position.model_rotation = get_random_model_rot(false);
 		}
 		singleParticle.next_position.model_rotation = get_random_model_rot(true);
