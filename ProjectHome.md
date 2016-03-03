@@ -1,0 +1,1 @@
+Argus Panoptes was a promordial giant of the greek mythology. His epithet "Panoptes" is a synonym for the "all-seeing"
